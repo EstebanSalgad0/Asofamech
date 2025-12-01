@@ -1,0 +1,80 @@
+version: "3.1"
+
+intents:
+  - saludo
+  - despedida
+  - agradecer
+  - preguntar_identidad_bot
+  - preguntar_tb_general
+  - preguntar_otras_patologias
+  - preguntar_medicina_general
+  - out_of_scope
+  - nlu_fallback
+
+entities: []
+
+slots:
+  ultima_pregunta:
+    type: text
+    influence_conversation: false
+    mappings:
+      # Este slot lo gestionamos manualmente desde las actions
+      - type: custom
+
+responses:
+  utter_saludo:
+    - text: >
+        Hola, soy un asistente educativo orientado a temas de medicina
+        (especialmente tuberculosis). Puedo ayudarte a comprender conceptos,
+        imágenes y casos clínicos a nivel formativo, pero no reemplazo la
+        evaluación ni el diagnóstico de un profesional de la salud.
+
+  # Alias para compatibilidad con historias/reglas antiguas
+  utter_saludar:
+    - text: >
+        Hola, soy un asistente educativo orientado a temas de medicina
+        (especialmente tuberculosis). Puedo ayudarte a comprender conceptos,
+        imágenes y casos clínicos a nivel formativo, pero no reemplazo la
+        evaluación ni el diagnóstico de un profesional de la salud.
+
+  utter_despedida:
+    - text: >
+        Muchas gracias por tu consulta. Recuerda que siempre debes confirmar
+        la información con un profesional de la salud. ¡Hasta luego!
+
+  # Alias para reglas/historias que usen 'utter_despedir'
+  utter_despedir:
+    - text: >
+        Muchas gracias por tu consulta. Recuerda que siempre debes confirmar
+        la información con un profesional de la salud. ¡Hasta luego!
+
+  utter_agradecer:
+    - text: >
+        De nada, me alegra poder ayudarte en tu estudio. ¿Hay algo más que quieras revisar?
+
+  utter_quien_eres:
+    - text: >
+        Soy un asistente educativo diseñado para apoyar el aprendizaje en temas
+        de medicina, con foco en tuberculosis. Puedo explicar conceptos, pruebas
+        diagnósticas e ideas generales a nivel docente, pero no realizo
+        diagnósticos ni indico tratamientos para pacientes reales.
+
+  utter_fallback:
+    - text: >
+        No estoy seguro de haber entendido tu pregunta o tal vez se sale de mi
+        alcance. Intenta reformularla, o pregúntame algo sobre tuberculosis u
+        otras patologías respiratorias a nivel educativo.
+
+  utter_out_of_scope:
+    - text: >
+        Ese tema se escapa del objetivo de este asistente. Estoy centrado en
+        contenidos educativos de medicina, especialmente tuberculosis.
+
+actions:
+  - action_guardar_ultima_pregunta
+  - action_consultar_llm_medico
+  - action_analizar_imagen_tb
+
+session_config:
+  session_expiration_time: 60
+  carry_over_slots_to_new_session: true

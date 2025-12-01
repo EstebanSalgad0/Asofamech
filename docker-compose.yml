@@ -1,0 +1,87 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: tb_db
+    environment:
+      - POSTGRES_DB=app_db
+      - POSTGRES_USER=app_user
+      - POSTGRES_PASSWORD=app_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: tb_backend
+    environment:
+      - DATABASE_URL=postgresql://app_user:app_pass@db:5432/app_db
+      - RASA_URL=http://rasa:5005/webhooks/rest/webhook
+    depends_on:
+      - db
+      - rasa
+    ports:
+      - "8001:8001"
+
+  rasa:
+    image: rasa/rasa:3.6.0-full
+    container_name: tb_rasa
+    working_dir: /app
+    volumes:
+      - ./Chatbot:/app
+    command: >
+      run --enable-api --cors "*" --port 5005 --debug
+    ports:
+      - "5005:5005"
+    depends_on:
+      - rasa-actions
+
+  rasa-actions:
+    build: ./Chatbot
+    container_name: tb_rasa_actions
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - LLM_MODEL=llama3:8b
+    ports:
+      - "5055:5055"
+    depends_on:
+      - ollama
+
+  llm-service:
+    build: ./llm_service
+    container_name: tb_llm_service
+    restart: unless-stopped
+    environment:
+      # Host interno de Ollama dentro de la red de Docker
+      - OLLAMA_HOST=http://ollama:11434
+      # Modelo que usará Ollama como backend (puedes cambiarlo si quieres otro)
+      - LLM_MODEL=llama3:8b
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: tb_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  frontend:
+    build: ./frontend
+    container_name: tb_frontend
+    environment:
+      - VITE_API_BASE=http://localhost:8001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
+  ollama_data:
