@@ -1,0 +1,51 @@
+version: "3.1"
+
+rules:
+  - rule: Responder saludo
+    steps:
+      - intent: saludo
+      - action: utter_saludo
+
+  - rule: Responder despedida
+    steps:
+      - intent: despedida
+      - action: utter_despedida
+
+  - rule: Responder agradecimiento
+    steps:
+      - intent: agradecer
+      - action: utter_agradecer
+
+  - rule: Pregunta sobre tuberculosis general -> LLM médico
+    steps:
+      - intent: preguntar_tb_general
+      - action: action_guardar_ultima_pregunta
+      - action: action_consultar_llm_medico
+
+  - rule: Pregunta sobre otras patologías -> LLM médico
+    steps:
+      - intent: preguntar_otras_patologias
+      - action: action_guardar_ultima_pregunta
+      - action: action_consultar_llm_medico
+
+  - rule: Pregunta medicina general -> LLM médico
+    steps:
+      - intent: preguntar_medicina_general
+      - action: action_guardar_ultima_pregunta
+      - action: action_consultar_llm_medico
+
+  - rule: Responder identidad del bot solo cuando preguntan explícitamente
+    steps:
+      - intent: preguntar_identidad_bot
+      - action: utter_quien_eres
+
+  - rule: Manejo de out_of_scope
+    steps:
+      - intent: out_of_scope
+      - action: utter_out_of_scope
+
+  - rule: Fallback NLU - Consultar LLM cuando Rasa no está seguro
+    steps:
+      - intent: nlu_fallback
+      - action: action_guardar_ultima_pregunta
+      - action: action_consultar_llm_medico

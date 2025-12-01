@@ -1,0 +1,90 @@
+version: "3.1"
+
+nlu:
+  - intent: saludo
+    examples: |
+      - hola
+      - hola!
+      - buenos días
+      - buenas tardes
+      - buenas noches
+      - hola asistente
+      - hola, ¿qué tal?
+      - hola, cómo estás
+
+  - intent: despedida
+    examples: |
+      - adiós
+      - chao
+      - nos vemos
+      - hasta luego
+      - gracias, eso sería
+      - muchas gracias, adiós
+
+  - intent: agradecer
+    examples: |
+      - gracias
+      - muchas gracias
+      - te lo agradezco
+      - gracias por la ayuda
+      - gracias por la explicación
+
+  - intent: preguntar_identidad_bot
+    examples: |
+      - ¿quién eres?
+      - quien eres
+      - ¿qué eres?
+      - qué tipo de asistente eres
+      - quién me está respondiendo
+      - ¿eres un médico?
+      - eres un médico real
+      - eres un bot
+      - eres humano
+      - con quien hablo
+      - presentate
+
+  - intent: preguntar_tb_general
+    examples: |
+      - ¿qué es la tuberculosis?
+      - que es la tuberculosis
+      - explícame la tuberculosis
+      - háblame de tuberculosis
+      - ¿cómo se transmite la tuberculosis?
+      - síntomas de la tuberculosis
+      - ¿cuáles son los síntomas de la tuberculosis?
+      - tuberculosis
+      - tb
+      - pregunta sobre tuberculosis
+      - quiero saber de tuberculosis
+
+  - intent: preguntar_otras_patologias
+    examples: |
+      - diferencia entre tuberculosis y neumonía
+      - en qué se parece la tuberculosis a la neumonía
+      - diferencia entre tuberculosis y bronquitis
+      - que otras enfermedades se parecen a la tuberculosis
+      - qué otras patologías respiratorias son importantes
+      - explicame otra enfermedad respiratoria relacionada
+
+  - intent: preguntar_medicina_general
+    examples: |
+      - qué es la prevención médica
+      - explica sobre tratamientos
+      - cómo funcionan los diagnósticos
+      - qué es un examen de laboratorio
+      - háblame de antibióticos
+      - qué son las vacunas
+      - explícame sobre medicamentos
+      - qué es la epidemiología
+      - cómo se hace un diagnóstico
+      - qué es la medicina preventiva
+
+  - intent: out_of_scope
+    examples: |
+      - cuéntame un chiste
+      - háblame de autos
+      - recomendame un juego
+      - dime qué criptomoneda comprar
+      - qué equipo de fútbol es mejor
+      - háblame de política
+      - recomienda una película

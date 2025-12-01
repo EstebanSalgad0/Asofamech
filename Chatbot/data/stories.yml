@@ -1,0 +1,21 @@
+version: "3.1"
+
+stories:
+- story: saludo y pregunta TB general
+  steps:
+    - intent: saludo
+    - action: utter_saludo
+    - intent: preguntar_tb_general
+    - action: action_guardar_ultima_pregunta
+    - action: action_consultar_llm_medico
+
+- story: pregunta otras patologías
+  steps:
+    - intent: preguntar_otras_patologias
+    - action: action_guardar_ultima_pregunta
+    - action: action_consultar_llm_medico
+
+- story: despedida
+  steps:
+    - intent: despedida
+    - action: utter_despedida
