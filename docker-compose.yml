@@ -1,4 +1,4 @@
-version: "3.9"
+﻿version: "3.9"
 
 services:
   db:
@@ -44,22 +44,9 @@ services:
     environment:
       - OLLAMA_HOST=http://ollama:11434
       - LLM_MODEL=llama3:8b
+      - BACKEND_URL=http://backend:8001
     ports:
       - "5055:5055"
-    depends_on:
-      - ollama
-
-  llm-service:
-    build: ./llm_service
-    container_name: tb_llm_service
-    restart: unless-stopped
-    environment:
-      # Host interno de Ollama dentro de la red de Docker
-      - OLLAMA_HOST=http://ollama:11434
-      # Modelo que usará Ollama como backend (puedes cambiarlo si quieres otro)
-      - LLM_MODEL=llama3:8b
-    ports:
-      - "8000:8000"
     depends_on:
       - ollama
 
@@ -71,6 +58,13 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   frontend:
     build: ./frontend

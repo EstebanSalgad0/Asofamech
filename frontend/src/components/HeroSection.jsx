@@ -41,15 +41,15 @@ export default function HeroSection() {
         </div>
 
         <div className="hero-image-card">
-          <div className="hero-status-badge">
-            <span className="status-icon">✓</span>
-            <div>
-              <div className="status-label">Tasa de éxito</div>
-              <div className="status-value">95%</div>
-            </div>
-          </div>
           {/* Imagen ilustrativa: coloca tu propia imagen en /public o /src/assets */}
           <div className="hero-image-placeholder">
+            <div className="hero-status-badge">
+              <span className="status-icon">✓</span>
+              <div>
+                <div className="status-label">Tasa de éxito</div>
+                <div className="status-value">95%</div>
+              </div>
+            </div>
             {/* Si tienes una imagen, por ejemplo /hero-medicina.png:
                 <img src="/hero-medicina.png" alt="Médicos revisando radiografía" />
             */}
