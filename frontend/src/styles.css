@@ -174,20 +174,22 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .hero-status-badge {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: 24px;
+  right: 24px;
   background: #ffffff;
   border-radius: 999px;
-  padding: 8px 14px;
+  padding: 10px 16px;
   display: flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
   font-size: 12px;
+  z-index: 10;
 }
 
 .status-icon {
@@ -218,6 +220,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
 }
 
 /* Muy simplificado, solo para tener algo visual */
