@@ -2,6 +2,7 @@ import React from "react";
 import HeroSection from "./components/HeroSection";
 import FeaturesSection from "./components/FeaturesSection";
 import ChatSection from "./components/ChatSection";
+import SCTSection from "./components/SCTSection";
 import Footer from "./components/Footer";
 
 export default function App() {
@@ -10,6 +11,7 @@ export default function App() {
       <HeroSection />
       <FeaturesSection />
       <ChatSection />
+      <SCTSection />
       <Footer />
     </div>
   );
