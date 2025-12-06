@@ -7,6 +7,7 @@ Sistema de chatbot médico educativo basado en IA para consultas sobre tuberculo
 - **Asistente conversacional** basado en Rasa 3.6
 - **Integración LLaMA 3** (8B) vía Ollama para respuestas médicas
 - **Sistema RAG** con base de datos de casos clínicos
+- **Módulo SCT** (Script Concordance Test) para evaluación del razonamiento clínico
 - **API REST** con FastAPI
 - **Interfaz web moderna** con React + Vite
 - **Arquitectura dockerizada** completa
@@ -83,7 +84,8 @@ chatbot_tb/
 │   │   ├── schemas.py   # Schemas Pydantic
 │   │   └── routers/
 │   │       ├── cases.py # Endpoints casos clínicos
-│   │       └── chat.py  # Endpoints chat
+│   │       ├── chat.py  # Endpoints chat
+│   │       └── sct.py   # Endpoints SCT (Script Concordance Test)
 │   └── Dockerfile
 │
 ├── Chatbot/             # Rasa Bot
@@ -126,6 +128,29 @@ El chatbot puede responder preguntas sobre:
 - "¿Cuáles son los síntomas de la tuberculosis?"
 - "¿Qué es la prevención médica?"
 - "Explica sobre el tratamiento de la TB meníngea"
+
+## 🧪 Módulo SCT (Script Concordance Test)
+
+El sistema incluye un módulo de **evaluación del razonamiento clínico** mediante SCT:
+
+### ¿Qué es el SCT?
+El Script Concordance Test evalúa cómo los estudiantes ajustan sus hipótesis diagnósticas cuando reciben nueva información clínica.
+
+### Características:
+- ✅ **Generación automática** de ítems con LLaMA 3
+- ✅ **Configuración personalizada**: nivel de dificultad y enfoque
+- ✅ **Escala de respuesta** -2 a +2 (descarta ↔ apoya fuertemente)
+- ✅ **Retroalimentación detallada** con explicaciones médicas
+- ✅ **Puntuación automática** y revisión de respuestas
+
+### Uso:
+1. Accede a la sección SCT en http://localhost:3000
+2. Configura número de ítems, dificultad (pregrado/internado/residente) y enfoque
+3. Genera test con IA o carga un ejemplo
+4. Responde cada ítem considerando cómo la nueva información afecta tu hipótesis
+5. Revisa resultados con explicaciones detalladas
+
+Ver documentación completa en [SCT_MODULE.md](SCT_MODULE.md)
 - "¿Cómo se diagnostica la tuberculosis pleural?"
 
 ## 🔄 Sistema RAG

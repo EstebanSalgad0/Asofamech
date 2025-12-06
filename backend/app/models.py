@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON
 from datetime import datetime
 from .db import Base
 
@@ -24,3 +24,14 @@ class ChatLog(Base):
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class SCTTest(Base):
+    __tablename__ = "sct_tests"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)          # Nombre identificador
+    difficulty = Column(String(50), nullable=False)     # pregrado, internado, residente
+    focus = Column(String(200), nullable=False)         # tuberculosis pulmonar, diabetes, etc.
+    num_items = Column(Integer, nullable=False)         # Cantidad de ítems
+    items_json = Column(JSON, nullable=False)           # Array de ítems SCT
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)

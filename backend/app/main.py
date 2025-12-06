@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
 import time
 
-from .routers import chat, cases
+from .routers import chat, cases, sct
 from .db import Base, engine
 
 app = FastAPI(title="Backend TB Educativa")
@@ -57,6 +57,7 @@ def health():
     return {"status": "ok"}
 
 
-# Incluir los routers (endpoints /api/chat y /api/cases)
+# Incluir los routers (endpoints /api/chat, /api/cases y /api/sct)
 app.include_router(chat.router)
 app.include_router(cases.router)
+app.include_router(sct.router)
