@@ -49,10 +49,30 @@ Si dificultad = "internado":
 - Nueva información: Resultados de estudios complementarios (radiografía, ECG, hemograma)
 
 Si dificultad = "residente":
-- Viñeta: MÍNIMO 80 palabras, IDEAL 100-120 palabras - CASOS MUY DETALLADOS
-- Incluir OBLIGATORIAMENTE: edad, género, antecedentes médicos relevantes (mínimo 2), comorbilidades, medicación actual, cuadro clínico completo con evolución temporal, síntomas múltiples, signos vitales completos, hallazgos al examen físico, resultados de laboratorio (hemograma, química, función renal/hepática), resultados de imágenes (Rx, TC, ECO), valores numéricos específicos
-- Hipótesis: Complejas, pueden involucrar complicaciones o diagnósticos poco frecuentes
-- Nueva información: Estudios especializados, evolución del paciente, respuesta a tratamiento
+- **REQUISITO ESTRICTO**: Viñeta de MÍNIMO 150 palabras, IDEAL 180-250 palabras - CASOS EXTREMADAMENTE COMPLEJOS
+- **DESCRIPCIÓN CLÍNICA COMPLETA Y DETALLADA** - No escatimes en detalles:
+  * **Datos demográficos completos**: edad precisa, género, ocupación específica, procedencia
+  * **Antecedentes médicos extensos (MÍNIMO 4-5)**: enfermedades crónicas múltiples con años de evolución, cirugías previas con fechas, hospitalizaciones recientes con motivos, alergias medicamentosas
+  * **Comorbilidades múltiples y relevantes**: diabetes mellitus tipo 2 con complicaciones (nefropatía, retinopatía), hipertensión arterial estadio, EPOC/asma, enfermedad renal crónica con estadio, cirrosis hepática, insuficiencia cardiaca, etc.
+  * **Medicación actual MUY COMPLETA (MÍNIMO 5-7 medicamentos)**: incluir nombres genéricos, dosis exactas, frecuencia, vía de administración, tiempo de uso
+  * **Historia de enfermedad actual EXTREMADAMENTE DETALLADA**: evolución temporal precisa (ej: "inicia hace 3 semanas con..., que progresa a..., agravándose en los últimos 5 días con..."), cronología de síntomas, factores agravantes y atenuantes
+  * **Síntomas múltiples y específicos (MÍNIMO 7-8 síntomas)**: con características SEMIOLÓGICAS detalladas (localización, irradiación, calidad, intensidad en escala 1-10, duración, frecuencia, factores modificadores)
+  * **Signos vitales COMPLETOS con valores numéricos PRECISOS**: FC (lpm), FR (rpm), PA (mmHg - sistólica/diastólica), Temperatura (°C), SatO2 (%), IMC si relevante
+  * **Examen físico EXHAUSTIVO por sistemas** con múltiples hallazgos positivos Y negativos relevantes: aspecto general, piel y mucosas, sistema cardiovascular, respiratorio (inspección, palpación, percusión, auscultación con localizaciones específicas), abdominal, neurológico, extremidades
+  * **Resultados de laboratorio MUY COMPLETOS con valores numéricos ESPECÍFICOS**:
+    - Hemograma completo: Hb (g/dL), Hto (%), leucocitos totales (/mm³) con diferencial completo (neutrófilos, linfocitos, monocitos, eosinófilos, basófilos en porcentaje y absolutos), plaquetas (/mm³)
+    - Química sanguínea: glucosa (mg/dL), creatinina (mg/dL), BUN (mg/dL), electrolitos (Na, K, Cl, Ca en mEq/L o mg/dL), ácido úrico
+    - Función hepática: AST (U/L), ALT (U/L), bilirrubina total y directa (mg/dL), fosfatasa alcalina (U/L), albúmina (g/dL), tiempo de protrombina (segundos, INR)
+    - Marcadores inflamatorios: PCR (mg/L), VSG (mm/h), procalcitonina si relevante
+    - Perfil lipídico si relevante: colesterol total, HDL, LDL, triglicéridos
+    - Otros según patología: gases arteriales completos (pH, pO2, pCO2, HCO3, SatO2), lactato, pruebas de función tiroidea, marcadores tumorales, serologías específicas
+  * **Resultados de imágenes MUY DETALLADOS** con hallazgos específicos y localizaciones anatómicas precisas:
+    - Radiografías: describir campos pulmonares, silueta cardiovascular, diafragmas, ángulos costofrénicos, lesiones con localizaciones (lóbulos, segmentos), tamaños en cm
+    - TC: describir hallazgos por cortes, densidades en unidades Hounsfield si relevante, extensión de lesiones, compromiso de estructuras, presencia/ausencia de contraste
+    - Ecografías: dimensiones de órganos, presencia de colecciones con volumen, características de masas
+  * **Estudios especializados si son pertinentes**: ECG con interpretación completa (ritmo, frecuencia, eje, intervalos, ondas, segmentos), espirometría con valores (FEV1, FVC, FEV1/FVC), ecocardiograma con fracción de eyección
+- **Hipótesis clínicas MUY COMPLEJAS**: deben involucrar complicaciones GRAVES (ej: insuficiencia respiratoria aguda, shock séptico, SDRA, coagulación intravascular diseminada), diagnósticos POCO FRECUENTES o atípicos, co-infecciones múltiples, reacciones adversas graves a medicamentos, resistencia antimicrobiana, enfermedades sistémicas
+- **Nueva información ALTAMENTE ESPECIALIZADA**: resultados de biopsias con histopatología detallada, cultivos especiales con antibiogramas, estudios inmunológicos complejos (complemento, anticuerpos específicos), evolución del paciente con deterioro progresivo o mejoría inesperada, respuesta paradójica a tratamiento, aparición de complicaciones nuevas con datos clínicos y paraclínicos adicionales
 
 **CONTEXTO ESPECÍFICO**:
 - Tema médico: {focus}
@@ -100,6 +120,7 @@ async def generate_sct_items(request: SCTGenerateRequest):
     - **difficulty**: Nivel de dificultad (pregrado, internado, residente)
     - **focus**: Tema específico (default: "tuberculosis pulmonar")
     """
+    print(f"[SCT] Recibida petición: num_items={request.num_items}, difficulty={request.difficulty}, focus={request.focus}")
     try:
         # Construir el prompt con los parámetros
         prompt = SCT_SYSTEM_PROMPT.format(
@@ -109,18 +130,21 @@ async def generate_sct_items(request: SCTGenerateRequest):
         )
         
         # Preparar la petición a Ollama usando /api/chat
+        # Para nivel residente, usar parámetros que permitan mayor complejidad
         ollama_payload = {
             "model": "llama3:8b",
             "messages": [
                 {"role": "system", "content": prompt}
             ],
             "stream": False,
-            "temperature": 0.7,
+            "temperature": 0.8,  # Mayor creatividad para casos complejos
+            "top_p": 0.95,  # Permitir mayor diversidad en respuestas
+            "num_predict": 4096,  # Permitir respuestas más largas
             "format": "json"
         }
         
-        # Llamar a Ollama
-        async with httpx.AsyncClient(timeout=180.0) as client:
+        # Llamar a Ollama con timeout extendido (5 minutos para casos complejos)
+        async with httpx.AsyncClient(timeout=300.0) as client:
             response = await client.post(
                 f"{OLLAMA_URL}/api/chat",
                 json=ollama_payload
