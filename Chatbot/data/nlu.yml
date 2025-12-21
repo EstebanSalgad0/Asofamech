@@ -56,6 +56,16 @@ nlu:
       - tb
       - pregunta sobre tuberculosis
       - quiero saber de tuberculosis
+      - ¿qué es la diabetes?
+      - explícame sobre hipertensión
+      - síntomas de insuficiencia cardíaca
+      - ¿qué es la neumonía?
+      - háblame de la enfermedad renal crónica
+      - ¿cuáles son las causas de la cirrosis?
+      - explícame el síndrome nefrótico
+      - ¿qué es la sepsis?
+      - cuéntame sobre la enfermedad pulmonar obstructiva crónica
+      - ¿cómo se maneja la diabetes tipo 2?
 
   - intent: preguntar_otras_patologias
     examples: |

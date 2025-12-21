@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
 import time
+import os
 
 from .routers import chat, cases, sct
 from .db import Base, engine

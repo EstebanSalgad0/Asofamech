@@ -24,51 +24,83 @@ slots:
 responses:
   utter_saludo:
     - text: >
-        Hola, soy un asistente educativo orientado a temas de medicina
-        (especialmente tuberculosis). Puedo ayudarte a comprender conceptos,
-        imágenes y casos clínicos a nivel formativo, pero no reemplazo la
-        evaluación ni el diagnóstico de un profesional de la salud.
+        Hola, soy un asistente médico educativo especializado en medicina interna y clínica.
+        Puedo ayudarte con información sobre fisiopatología, diagnóstico diferencial, manejo
+        clínico y casos educativos de diversas especialidades médicas.
+        
+        Mi función es exclusivamente formativa y académica. No proporciono diagnósticos ni
+        tratamientos para casos reales. Ante cualquier situación clínica, consulta con un
+        profesional de la salud.
 
   # Alias para compatibilidad con historias/reglas antiguas
   utter_saludar:
     - text: >
-        Hola, soy un asistente educativo orientado a temas de medicina
-        (especialmente tuberculosis). Puedo ayudarte a comprender conceptos,
-        imágenes y casos clínicos a nivel formativo, pero no reemplazo la
-        evaluación ni el diagnóstico de un profesional de la salud.
+        Hola, soy un asistente médico educativo especializado en medicina interna y clínica.
+        Puedo ayudarte con información sobre fisiopatología, diagnóstico diferencial, manejo
+        clínico y casos educativos de diversas especialidades médicas.
+        
+        Mi función es exclusivamente formativa y académica. No proporciono diagnósticos ni
+        tratamientos para casos reales. Ante cualquier situación clínica, consulta con un
+        profesional de la salud.
 
   utter_despedida:
     - text: >
-        Muchas gracias por tu consulta. Recuerda que siempre debes confirmar
-        la información con un profesional de la salud. ¡Hasta luego!
+        Ha sido un placer poder ayudarte con información médica educativa.
+        Recuerda que esta herramienta es para fines académicos. Ante cualquier
+        situación clínica real, consulta siempre con un profesional de la salud.
+        
+        ¡Éxito en tu aprendizaje!
 
   # Alias para reglas/historias que usen 'utter_despedir'
   utter_despedir:
     - text: >
-        Muchas gracias por tu consulta. Recuerda que siempre debes confirmar
-        la información con un profesional de la salud. ¡Hasta luego!
+        Ha sido un placer poder ayudarte con información médica educativa.
+        Recuerda que esta herramienta es para fines académicos. Ante cualquier
+        situación clínica real, consulta siempre con un profesional de la salud.
+        
+        ¡Éxito en tu aprendizaje!
 
   utter_agradecer:
     - text: >
-        De nada, me alegra poder ayudarte en tu estudio. ¿Hay algo más que quieras revisar?
+        Es un placer poder contribuir a tu formación médica. ¿Hay algún otro
+        tema clínico o caso educativo que quieras revisar?
 
   utter_quien_eres:
     - text: >
-        Soy un asistente educativo diseñado para apoyar el aprendizaje en temas
-        de medicina, con foco en tuberculosis. Puedo explicar conceptos, pruebas
-        diagnósticas e ideas generales a nivel docente, pero no realizo
-        diagnósticos ni indico tratamientos para pacientes reales.
+        Soy un asistente médico educativo con conocimientos avanzados en medicina interna,
+        enfermedades infecciosas, neumología, cardiología y otras especialidades clínicas.
+        
+        Puedo explicar:
+        • Fisiopatología y mecanismos de enfermedad
+        • Cuadros clínicos y presentaciones típicas/atípicas
+        • Diagnóstico diferencial estructurado
+        • Interpretación de estudios complementarios
+        • Abordaje terapéutico basado en evidencia
+        • Casos clínicos educativos
+        
+        Es importante destacar que mi función es exclusivamente académica. No proporciono
+        diagnósticos ni tratamientos para pacientes reales.
 
   utter_fallback:
     - text: >
-        No estoy seguro de haber entendido tu pregunta o tal vez se sale de mi
-        alcance. Intenta reformularla, o pregúntame algo sobre tuberculosis u
-        otras patologías respiratorias a nivel educativo.
+        No he comprendido completamente tu consulta. Podrías reformular tu pregunta
+        de manera más específica? Puedo ayudarte con:
+        
+        • Patologías y enfermedades (fisiopatología, clínica, diagnóstico)
+        • Interpretación de estudios (laboratorio, imágenes)
+        • Diagnóstico diferencial
+        • Manejo clínico basado en evidencia
+        • Casos clínicos educativos
+        
+        Recuerda que esta es una herramienta educativa, no para consultas de casos reales.
 
   utter_out_of_scope:
     - text: >
-        Ese tema se escapa del objetivo de este asistente. Estoy centrado en
-        contenidos educativos de medicina, especialmente tuberculosis.
+        Ese tema está fuera de mi ámbito de especialización. Estoy diseñado para
+        proporcionar información médica educativa en áreas como medicina interna,
+        enfermedades infecciosas, neumología, cardiología y otras especialidades clínicas.
+        
+        ¿Tienes alguna consulta médica educativa en la que pueda ayudarte?
 
 actions:
   - action_guardar_ultima_pregunta

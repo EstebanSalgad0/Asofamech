@@ -3,7 +3,7 @@
 services:
   db:
     image: postgres:15
-    container_name: tb_db
+    container_name: asofamech_db
     environment:
       - POSTGRES_DB=app_db
       - POSTGRES_USER=app_user
@@ -15,19 +15,19 @@ services:
 
   backend:
     build: ./backend
-    container_name: tb_backend
+    container_name: asofamech_backend
     environment:
       - DATABASE_URL=postgresql://app_user:app_pass@db:5432/app_db
-      - RASA_URL=http://rasa:5005/webhooks/rest/webhook
-    depends_on:
-      - db
-      - rasa
     ports:
       - "8001:8001"
+    depends_on:
+      - db
+    volumes:
+      - ./backend/app:/app/app
 
   rasa:
     image: rasa/rasa:3.6.0-full
-    container_name: tb_rasa
+    container_name: asofamech_rasa
     working_dir: /app
     volumes:
       - ./Chatbot:/app
@@ -40,7 +40,7 @@ services:
 
   rasa-actions:
     build: ./Chatbot
-    container_name: tb_rasa_actions
+    container_name: asofamech_rasa_actions
     environment:
       - OLLAMA_HOST=http://ollama:11434
       - LLM_MODEL=llama3:8b
@@ -49,10 +49,11 @@ services:
       - "5055:5055"
     depends_on:
       - ollama
+      - backend
 
   ollama:
     image: ollama/ollama:latest
-    container_name: tb_ollama
+    container_name: asofamech_ollama
     restart: unless-stopped
     ports:
       - "11434:11434"
@@ -65,16 +66,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-
-  frontend:
-    build: ./frontend
-    container_name: tb_frontend
-    environment:
-      - VITE_API_BASE=http://localhost:8001
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
 
 volumes:
   db_data:
