@@ -8,6 +8,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "fabric": "^7.1.0",
+    "openseadragon": "^5.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.11.0"
