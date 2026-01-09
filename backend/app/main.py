@@ -4,7 +4,7 @@ from sqlalchemy.exc import OperationalError
 import time
 import os
 
-from .routers import chat, cases, sct
+from .routers import chat, cases, sct, medical_images
 from .db import Base, engine
 
 app = FastAPI(title="Backend TB Educativa")
@@ -62,3 +62,12 @@ def health():
 app.include_router(chat.router)
 app.include_router(cases.router)
 app.include_router(sct.router)
+app.include_router(medical_images.router)
+
+# Servir archivos estáticos para imágenes
+from fastapi.staticfiles import StaticFiles
+import os
+
+# Crear directorio de uploads si no existe
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")

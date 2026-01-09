@@ -1,6 +1,36 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON, ForeignKey
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from .db import Base
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(200), unique=True, nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    password_hash = Column(String(200), nullable=False)
+    role = Column(String(50), default="estudiante")  # estudiante, docente, administrador
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    uploaded_images = relationship("MedicalImage", back_populates="uploader")
+
+class MedicalImage(Base):
+    __tablename__ = "medical_images"
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String(200), unique=True, nullable=False)
+    original_filename = Column(String(200), nullable=False)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    pathology_type = Column(String(200), nullable=True)  # Necrosis, Células de Langerhans, etc.
+    file_type = Column(String(20), nullable=False)  # svs, jpg, png, etc.
+    file_size = Column(Integer, nullable=True)  # tamaño en bytes
+    file_path = Column(String(500), nullable=False)
+    dzi_path = Column(String(500), nullable=True)  # ruta al DZI si fue procesado
+    uploaded_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    
+    uploader = relationship("User", back_populates="uploaded_images")
 
 class Case(Base):
     __tablename__ = "cases"
