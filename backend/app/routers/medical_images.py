@@ -275,6 +275,66 @@ async def delete_medical_image(
     
     return {"message": "Imagen eliminada exitosamente"}
 
+@router.get("/dzi/{image_id}.dzi")
+async def get_dzi_manifest(
+    image_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Servir el manifiesto DZI de una imagen (para OpenSeadragon)
+    """
+    from fastapi.responses import Response
+    image = db.query(MedicalImage).filter(
+        MedicalImage.id == image_id,
+        MedicalImage.is_active == True
+    ).first()
+
+    if not image:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
+
+    # Construir ruta esperada del DZI
+    dzi_filename = f"{os.path.splitext(image.filename)[0]}.dzi"
+    dzi_path = os.path.join(DZI_DIR, dzi_filename)
+
+    if not os.path.exists(dzi_path):
+        raise HTTPException(status_code=404, detail="DZI no generado para esta imagen")
+
+    with open(dzi_path, "r") as f:
+        content = f.read()
+
+    return Response(content=content, media_type="application/xml")
+
+
+@router.get("/dzi/{image_id}_files/{level}/{col}_{row}.{fmt}")
+async def get_dzi_tile(
+    image_id: int,
+    level: int,
+    col: int,
+    row: int,
+    fmt: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Servir un tile DZI de una imagen (para OpenSeadragon)
+    """
+    image = db.query(MedicalImage).filter(
+        MedicalImage.id == image_id,
+        MedicalImage.is_active == True
+    ).first()
+
+    if not image:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
+
+    base_name = os.path.splitext(image.filename)[0]
+    tile_path = os.path.join(DZI_DIR, f"{base_name}_files", str(level), f"{col}_{row}.{fmt}")
+
+    if not os.path.exists(tile_path):
+        raise HTTPException(status_code=404, detail=f"Tile no encontrado: {tile_path}")
+
+    media_type = "image/jpeg" if fmt in ("jpg", "jpeg") else f"image/{fmt}"
+    return FileResponse(tile_path, media_type=media_type)
+
+
 @router.get("/info/{image_id}")
 async def get_image_info(
     image_id: int,

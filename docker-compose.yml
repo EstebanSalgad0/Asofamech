@@ -24,6 +24,7 @@ services:
       - db
     volumes:
       - ./backend/app:/app/app
+      - ./backend/uploads:/app/uploads
 
   rasa:
     image: rasa/rasa:3.6.0-full
