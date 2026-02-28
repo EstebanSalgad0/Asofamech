@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { OpenSeadragonViewer } from "../components/OpenSeadragonViewer";
 import { MedicalImageViewer } from "../components/MedicalImageViewer";
 
 export function ImagesPage() {
@@ -227,7 +228,9 @@ export function ImagesPage() {
           {/* Visor de imágenes */}
           <div className="images-viewer-container">
             {selectedImage ? (
-              <MedicalImageViewer imageData={selectedImage} />
+              selectedImage.has_dzi
+                ? <OpenSeadragonViewer imageData={selectedImage} />
+                : <MedicalImageViewer imageData={selectedImage} />
             ) : (
               <div className="empty-viewer">
                 <div className="empty-icon">🖼️</div>

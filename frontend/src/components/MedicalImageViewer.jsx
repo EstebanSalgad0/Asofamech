@@ -24,46 +24,58 @@ export function MedicalImageViewer({ imageData }) {
     
     // Usar Image estándar primero para verificar que la imagen carga
     const imgElement = new Image();
-    imgElement.crossOrigin = 'anonymous';
+    
+    // Solo usar crossOrigin para URLs remotas, no para data URLs o archivos locales
+    if (!imageUrl.startsWith('data:') && !imageUrl.startsWith('blob:')) {
+      imgElement.crossOrigin = 'anonymous';
+    }
     
     imgElement.onload = () => {
       console.log("Imagen HTML cargada:", imgElement.width, "x", imgElement.height);
       
-      // Ahora crear objeto fabric desde el elemento HTML
-      const fabricImg = new fabric.FabricImage(imgElement);
-      
-      console.log("FabricImage creada, dimensiones:", fabricImg.width, "x", fabricImg.height);
-      console.log("Tamaño del canvas:", canvasInstance.width, "x", canvasInstance.height);
-      
-      // Escalar imagen para que quepa en el canvas
-      const scale = Math.min(
-        canvasInstance.width / fabricImg.width,
-        canvasInstance.height / fabricImg.height
-      ) * 0.9;
-
-      console.log("Factor de escala:", scale);
-
       // Limpiar canvas completamente antes de agregar la imagen
       canvasInstance.clear();
       canvasInstance.backgroundColor = '#1a1a1a';
-
-      // Configurar imagen
-      fabricImg.scale(scale);
-      fabricImg.set({
-        left: canvasInstance.width / 2,
-        top: canvasInstance.height / 2,
-        originX: 'center',
-        originY: 'center',
+      
+      // Resetear zoom y transform
+      canvasInstance.setZoom(1);
+      canvasInstance.setViewportTransform([1, 0, 0, 1, 0, 0]);
+      
+      // Crear objeto fabric desde el elemento HTML
+      const fabricImg = new fabric.FabricImage(imgElement, {
         selectable: false,
         evented: false,
         opacity: 1,
       });
       
+      console.log("FabricImage creada, dimensiones:", fabricImg.width, "x", fabricImg.height);
+      console.log("Tamaño del canvas:", canvasInstance.width, "x", canvasInstance.height);
+      
+      // Escalar imagen para que quepa en el canvas
+      const scaleX = (canvasInstance.width / fabricImg.width) * 0.9;
+      const scaleY = (canvasInstance.height / fabricImg.height) * 0.9;
+      const scale = Math.min(scaleX, scaleY);
+
+      console.log("Factor de escala:", scale);
+
+      // Configurar imagen con escala
+      fabricImg.set({
+        scaleX: scale,
+        scaleY: scale,
+        left: canvasInstance.width / 2,
+        top: canvasInstance.height / 2,
+        originX: 'center',
+        originY: 'center',
+      });
+      
       // Agregar imagen como objeto del canvas
       canvasInstance.add(fabricImg);
+      canvasInstance.sendToBack(fabricImg); // Asegurar que la imagen esté atrás
       
       console.log("Imagen agregada al canvas. Objetos en canvas:", canvasInstance.getObjects().length);
       console.log("Imagen visible:", fabricImg.visible, "Opacidad:", fabricImg.opacity);
+      console.log("Posición:", fabricImg.left, fabricImg.top);
+      console.log("Escala:", fabricImg.scaleX, fabricImg.scaleY);
       
       // Forzar renderizado
       canvasInstance.requestRenderAll();
@@ -74,7 +86,6 @@ export function MedicalImageViewer({ imageData }) {
       
       setAnnotations([]);
       setZoom(1);
-      canvasInstance.setZoom(1);
       setImageLoaded(true);
     };
     
@@ -316,16 +327,16 @@ export function MedicalImageViewer({ imageData }) {
   const handleZoomIn = () => {
     if (!canvas) return;
     const newZoom = Math.min(zoom + 0.2, 5);
-    const center = canvas.getCenter();
-    canvas.zoomToPoint({ x: center.left, y: center.top }, newZoom);
+    const center = canvas.getCenterPoint();
+    canvas.zoomToPoint({ x: center.x, y: center.y }, newZoom);
     setZoom(newZoom);
   };
 
   const handleZoomOut = () => {
     if (!canvas) return;
     const newZoom = Math.max(zoom - 0.2, 0.5);
-    const center = canvas.getCenter();
-    canvas.zoomToPoint({ x: center.left, y: center.top }, newZoom);
+    const center = canvas.getCenterPoint();
+    canvas.zoomToPoint({ x: center.x, y: center.y }, newZoom);
     setZoom(newZoom);
   };
 
