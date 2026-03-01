@@ -1,82 +1,230 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { sendChatMessage } from "../api";
+import { startSession, flushSession, trackConsultation, pushActivity } from "../tracker";
+
+const STORAGE_KEY = "asofamech_chat_history";
+const BOT_WELCOME = "¡Hola! Soy tu asistente educativo médico. Puedo ayudarte con preguntas sobre enfermedades, síntomas, diagnósticos, tratamientos y casos de estudio. ¿En qué puedo ayudarte hoy?";
+
+function getTimestamp() {
+  return new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+}
+
+function timeAgo(dateStr) {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now - date;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Ahora";
+  if (mins < 60) return `Hace ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Hace ${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "Ayer";
+  return `Hace ${days} días`;
+}
+
+// Persist helpers
+function loadConversations() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveConversations(conversations) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+}
+
+function createNewConversation() {
+  return {
+    id: Date.now(),
+    title: "Nueva conversación",
+    saved: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    messages: [
+      { sender: "bot", text: BOT_WELCOME, time: getTimestamp() },
+    ],
+  };
+}
 
 export function ChatbotPage() {
   const navigate = useNavigate();
   const messagesEndRef = useRef(null);
   const [user, setUser] = useState(null);
   const [role, setRole] = useState("Estudiante");
-  const [conversations, setConversations] = useState([
-    { id: 1, title: "Diabetes mellitus", time: "Hace 1 días" },
-    { id: 2, title: "Hipertensión arterial", time: "Hace 2 días" },
-    { id: 3, title: "Síndrome coronario", time: "Hace 3 días" }
-  ]);
-  const [currentConversation, setCurrentConversation] = useState(1);
-  const [messages, setMessages] = useState([
-    {
-      sender: "bot",
-      text: "¡Hola! Soy tu asistente educativo médico. Puedo ayudarte con preguntas sobre enfermedades, síntomas, diagnósticos, tratamientos y casos de estudio. ¿En qué puedo ayudarte hoy?",
-      time: "05:52 p. m."
-    }
-  ]);
+
+  const [conversations, setConversations] = useState([]);
+  const [currentId, setCurrentId] = useState(null);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [toast, setToast] = useState(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading]);
-
+  // ── Init ──
   useEffect(() => {
     const userData = localStorage.getItem("user");
-    if (!userData) {
-      navigate("/auth");
-    } else {
-      setUser(JSON.parse(userData));
+    if (!userData) { navigate("/auth"); return; }
+    setUser(JSON.parse(userData));
+    const savedRole = localStorage.getItem("role");
+    if (savedRole) setRole(savedRole);
+
+    // Start session timer
+    startSession();
+
+    // Load persisted chats
+    let stored = loadConversations();
+    if (stored.length === 0) {
+      const fresh = createNewConversation();
+      stored = [fresh];
+      saveConversations(stored);
     }
+    setConversations(stored);
+    setCurrentId(stored[0].id);
+
+    // Flush session time on unload
+    const handleUnload = () => flushSession();
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      flushSession();
+      window.removeEventListener("beforeunload", handleUnload);
+    };
   }, [navigate]);
 
-  const suggestedQuestions = [
-    "¿Cuáles son los síntomas de la diabetes tipo 2?",
-    "Explica el mecanismo de acción de los betabloqueadores",
-    "¿Qué es la insuficiencia cardíaca congestiva?",
-    "Diferencias entre artritis reumatoide y osteoartritis"
-  ];
+  // ── Current conversation ──
+  const current = conversations.find((c) => c.id === currentId) || null;
 
+  // ── Persist whenever conversations change ──
+  const persist = useCallback((updated) => {
+    setConversations(updated);
+    saveConversations(updated);
+  }, []);
+
+  // ── Scroll ──
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [current?.messages?.length, isLoading]);
+
+  // ── Toast ──
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // ── New conversation ──
+  const handleNewConversation = () => {
+    const fresh = createNewConversation();
+    const updated = [fresh, ...conversations];
+    persist(updated);
+    setCurrentId(fresh.id);
+    setShowSavedOnly(false);
+  };
+
+  // ── Switch conversation ──
+  const handleSelectConversation = (id) => {
+    setCurrentId(id);
+  };
+
+  // ── Delete conversation ──
+  const handleDeleteConversation = (e, id) => {
+    e.stopPropagation();
+    const updated = conversations.filter((c) => c.id !== id);
+    persist(updated);
+    if (currentId === id) {
+      if (updated.length > 0) {
+        setCurrentId(updated[0].id);
+      } else {
+        const fresh = createNewConversation();
+        persist([fresh]);
+        setCurrentId(fresh.id);
+      }
+    }
+  };
+
+  // ── Toggle save/bookmark ──
+  const handleToggleSave = (e, id) => {
+    e.stopPropagation();
+    const updated = conversations.map((c) =>
+      c.id === id ? { ...c, saved: !c.saved } : c
+    );
+    persist(updated);
+    const conv = updated.find((c) => c.id === id);
+    showToast(
+      conv.saved ? `"${conv.title}" guardada` : `"${conv.title}" removida de guardados`,
+      "success"
+    );
+  };
+
+  // ── Save current conversation ──
+  const handleSaveCurrentConversation = () => {
+    if (!current) return;
+    const updated = conversations.map((c) =>
+      c.id === currentId ? { ...c, saved: true } : c
+    );
+    persist(updated);
+    showToast(`"${current.title}" guardada`, "success");
+  };
+
+  // ── Send message ──
   const handleSend = async () => {
-    if (!inputText.trim() || isLoading) return;
+    if (!inputText.trim() || isLoading || !current) return;
 
-    const userMessage = {
-      sender: "user",
-      text: inputText,
-      time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+    const userMsg = { sender: "user", text: inputText, time: getTimestamp() };
+    const isFirstUserMessage = !current.messages.some((m) => m.sender === "user");
+
+    // Auto-title from first user message
+    const newTitle = isFirstUserMessage
+      ? inputText.length > 40
+        ? inputText.slice(0, 40) + "..."
+        : inputText
+      : current.title;
+
+    const updatedConv = {
+      ...current,
+      title: newTitle,
+      updatedAt: new Date().toISOString(),
+      messages: [...current.messages, userMsg],
     };
-    
-    setMessages(prev => [...prev, userMessage]);
+
+    const updated = conversations.map((c) => (c.id === currentId ? updatedConv : c));
+    persist(updated);
     setInputText("");
     setIsLoading(true);
 
     try {
       const data = await sendChatMessage(inputText);
-      const botMessages = (data.messages || []).map((m) => ({
+      const botMsgs = (data.messages || []).map((m) => ({
         sender: "bot",
         text: m.text || "",
-        time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        time: getTimestamp(),
       }));
-      setMessages(prev => [...prev, ...botMessages]);
-    } catch (e) {
-      setMessages(prev => [
-        ...prev,
-        { 
-          sender: "bot", 
-          text: "Lo siento, ha ocurrido un error al procesar tu consulta. Por favor, intenta nuevamente.",
-          time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
+
+      // Track consultation & activity
+      trackConsultation();
+      pushActivity("chat", newTitle);
+
+      const withResponse = {
+        ...updatedConv,
+        updatedAt: new Date().toISOString(),
+        messages: [...updatedConv.messages, ...botMsgs],
+      };
+      const updated2 = updated.map((c) => (c.id === currentId ? withResponse : c));
+      persist(updated2);
+    } catch {
+      const errorMsg = {
+        sender: "bot",
+        text: "Lo siento, ha ocurrido un error al procesar tu consulta. Por favor, intenta nuevamente.",
+        time: getTimestamp(),
+      };
+      const withError = {
+        ...updatedConv,
+        messages: [...updatedConv.messages, errorMsg],
+      };
+      const updated2 = updated.map((c) => (c.id === currentId ? withError : c));
+      persist(updated2);
     } finally {
       setIsLoading(false);
     }
@@ -89,32 +237,17 @@ export function ChatbotPage() {
     }
   };
 
-  const handleSuggestedQuestion = (question) => {
-    setInputText(question);
-  };
-
-  const handleNewConversation = () => {
-    const newId = Math.max(...conversations.map(c => c.id)) + 1;
-    setConversations([
-      { id: newId, title: "Nueva Conversación", time: "Ahora" },
-      ...conversations
-    ]);
-    setCurrentConversation(newId);
-    setMessages([
-      {
-        sender: "bot",
-        text: "¡Hola! Soy tu asistente educativo médico. Puedo ayudarte con preguntas sobre enfermedades, síntomas, diagnósticos, tratamientos y casos de estudio. ¿En qué puedo ayudarte hoy?",
-        time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-      }
-    ]);
-  };
-
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/");
   };
 
   if (!user) return null;
+
+  // ── Filtered conversations ──
+  const displayedConversations = showSavedOnly
+    ? conversations.filter((c) => c.saved)
+    : conversations;
 
   return (
     <div className="dashboard-page">
@@ -141,15 +274,18 @@ export function ChatbotPage() {
           <Link to="/dashboard/images" className="nav-item">
             <span className="nav-icon">🖼️</span>
             <span>Imágenes IA</span>
-            <span className="nav-badge">Próximamente</span>
           </Link>
+          {(role === "Administrador" || role === "Profesor") && (
+            <Link to="/dashboard/config" className="nav-item">
+              <span className="nav-icon">⚙️</span>
+              <span>Configuración</span>
+            </Link>
+          )}
         </nav>
         
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            <div className="user-avatar">
-              {user.name.charAt(0)}
-            </div>
+            <div className="user-avatar">{user.name.charAt(0)}</div>
             <div className="user-info">
               <div className="user-name">{user.name}</div>
               <div className="user-role">{role}</div>
@@ -158,7 +294,10 @@ export function ChatbotPage() {
           <select 
             className="sidebar-role-selector"
             value={role}
-            onChange={(e) => setRole(e.target.value)}
+            onChange={(e) => {
+              setRole(e.target.value);
+              localStorage.setItem("role", e.target.value);
+            }}
           >
             <option value="Estudiante">Estudiante</option>
             <option value="Administrador">Administrador</option>
@@ -179,27 +318,62 @@ export function ChatbotPage() {
           </button>
           
           <div className="chat-history-header">
-            <span>HISTORIAL RECIENTE</span>
+            <span>{showSavedOnly ? "CONVERSACIONES GUARDADAS" : "HISTORIAL RECIENTE"}</span>
           </div>
           
           <div className="chat-conversations">
-            {conversations.map(conv => (
-              <div 
-                key={conv.id}
-                className={`conversation-item ${currentConversation === conv.id ? 'active' : ''}`}
-                onClick={() => setCurrentConversation(conv.id)}
-              >
-                <div className="conversation-icon">🕐</div>
-                <div className="conversation-content">
-                  <div className="conversation-title">{conv.title}</div>
-                  <div className="conversation-time">{conv.time}</div>
-                </div>
+            {displayedConversations.length === 0 ? (
+              <div className="chat-empty-history">
+                <span className="chat-empty-icon">{showSavedOnly ? "📌" : "💬"}</span>
+                <p>{showSavedOnly ? "No tienes conversaciones guardadas" : "Sin conversaciones aún"}</p>
               </div>
-            ))}
+            ) : (
+              displayedConversations.map((conv) => (
+                <div 
+                  key={conv.id}
+                  className={`conversation-item ${currentId === conv.id ? "active" : ""}`}
+                  onClick={() => handleSelectConversation(conv.id)}
+                >
+                  <div className="conversation-icon">
+                    {conv.saved ? "📌" : "💬"}
+                  </div>
+                  <div className="conversation-content">
+                    <div className="conversation-title">{conv.title}</div>
+                    <div className="conversation-time">
+                      {timeAgo(conv.updatedAt)}
+                      {conv.messages && (
+                        <span className="conversation-msg-count">
+                           · {conv.messages.filter((m) => m.sender === "user").length} msgs
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="conversation-actions">
+                    <button
+                      className={`btn-conv-save ${conv.saved ? "saved" : ""}`}
+                      onClick={(e) => handleToggleSave(e, conv.id)}
+                      title={conv.saved ? "Quitar de guardados" : "Guardar conversación"}
+                    >
+                      {conv.saved ? "★" : "☆"}
+                    </button>
+                    <button
+                      className="btn-conv-delete"
+                      onClick={(e) => handleDeleteConversation(e, conv.id)}
+                      title="Eliminar conversación"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
           
-          <button className="btn-view-saved">
-            <span>📌</span> Ver guardados
+          <button
+            className={`btn-view-saved ${showSavedOnly ? "active" : ""}`}
+            onClick={() => setShowSavedOnly(!showSavedOnly)}
+          >
+            <span>📌</span> {showSavedOnly ? "Ver todas" : "Ver guardados"}
           </button>
         </aside>
 
@@ -213,6 +387,15 @@ export function ChatbotPage() {
                 <p className="chat-subtitle">Asistente Educativo Médico</p>
               </div>
             </div>
+            {current && current.messages.some((m) => m.sender === "user") && (
+              <button
+                className={`btn-save-chat ${current.saved ? "saved" : ""}`}
+                onClick={current.saved ? undefined : handleSaveCurrentConversation}
+                title={current.saved ? "Conversación guardada" : "Guardar conversación"}
+              >
+                {current.saved ? "★ Guardada" : "☆ Guardar"}
+              </button>
+            )}
           </div>
 
           <div className="chat-disclaimer">
@@ -223,7 +406,7 @@ export function ChatbotPage() {
           </div>
 
           <div className="chat-messages">
-            {messages.map((msg, idx) => (
+            {current && current.messages.map((msg, idx) => (
               <div key={idx} className={`chat-message ${msg.sender}`}>
                 {msg.sender === "bot" && (
                   <div className="message-avatar bot-avatar">🤖</div>
@@ -254,23 +437,6 @@ export function ChatbotPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {messages.length === 1 && (
-            <div className="suggested-container">
-              <div className="suggested-header">⚡ Preguntas sugeridas</div>
-              <div className="suggested-list">
-                {suggestedQuestions.map((q, idx) => (
-                  <button
-                    key={idx}
-                    className="suggested-question"
-                    onClick={() => handleSuggestedQuestion(q)}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="chat-input-container">
             <div className="chat-input-wrapper">
               <input
@@ -293,6 +459,17 @@ export function ChatbotPage() {
           </div>
         </main>
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className={`toast-notification toast-${toast.type}`}>
+          <span className="toast-icon">
+            {toast.type === "success" ? "✅" : "ℹ️"}
+          </span>
+          <span className="toast-message">{toast.message}</span>
+          <button className="toast-close" onClick={() => setToast(null)}>✕</button>
+        </div>
+      )}
     </div>
   );
 }

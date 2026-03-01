@@ -82,4 +82,16 @@ export async function getSCTTest(testId) {
   return res.json();
 }
 
+export async function deleteSCTTest(testId) {
+  const res = await fetch(`${API_BASE}/api/sct/${testId}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error API SCT Delete: ${res.status}`);
+  }
+
+  return res.json();
+}
+
 

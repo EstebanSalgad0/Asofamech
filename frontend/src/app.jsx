@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ChatbotPage } from "./pages/ChatbotPage";
 import { SCTPage } from "./pages/SCTPage";
 import { ImagesPage } from "./pages/ImagesPage";
+import { ConfigPage } from "./pages/ConfigPage";
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/dashboard/chat" element={<ChatbotPage />} />
         <Route path="/dashboard/sct" element={<SCTPage />} />
         <Route path="/dashboard/images" element={<ImagesPage />} />
+        <Route path="/dashboard/config" element={<ConfigPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

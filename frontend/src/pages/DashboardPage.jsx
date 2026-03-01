@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { startSession, flushSession, getMetrics, formatStudyTime, getRecentActivity, timeAgo } from "../tracker";
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [role, setRole] = useState("Estudiante");
+  const [metrics, setMetrics] = useState({ consultations: 0, studyMs: 0, testsTotal: 0, testsPassed: 0 });
+  const [activity, setActivity] = useState([]);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -12,15 +15,51 @@ export function DashboardPage() {
       navigate("/auth");
     } else {
       setUser(JSON.parse(userData));
+      const savedRole = localStorage.getItem("role");
+      if (savedRole) setRole(savedRole);
     }
+
+    // Start session timer for study time
+    startSession();
+
+    // Load real metrics & activity
+    setMetrics(getMetrics());
+    setActivity(getRecentActivity(10));
+
+    // Flush session time when leaving
+    const handleUnload = () => flushSession();
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      flushSession();
+      window.removeEventListener("beforeunload", handleUnload);
+    };
   }, [navigate]);
 
+  // Refresh metrics when page becomes visible again (tab switch back)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setMetrics(getMetrics());
+        setActivity(getRecentActivity(10));
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
   const handleLogout = () => {
+    flushSession();
     localStorage.removeItem("user");
     navigate("/");
   };
 
   if (!user) return null;
+
+  const testsPassedPct = metrics.testsTotal > 0
+    ? Math.round((metrics.testsPassed / metrics.testsTotal) * 100)
+    : 0;
+
+  const activityIcon = { chat: "💬", sct: "📋", images: "🖼️" };
 
   return (
     <div className="dashboard-page">
@@ -47,8 +86,13 @@ export function DashboardPage() {
           <Link to="/dashboard/images" className="nav-item">
             <span className="nav-icon">🖼️</span>
             <span>Imágenes IA</span>
-            <span className="nav-badge">Próximamente</span>
           </Link>
+          {(role === "Administrador" || role === "Profesor") && (
+            <Link to="/dashboard/config" className="nav-item">
+              <span className="nav-icon">⚙️</span>
+              <span>Configuración</span>
+            </Link>
+          )}
         </nav>
         
         <div className="sidebar-footer">
@@ -64,7 +108,10 @@ export function DashboardPage() {
           <select 
             className="sidebar-role-selector"
             value={role}
-            onChange={(e) => setRole(e.target.value)}
+            onChange={(e) => {
+              setRole(e.target.value);
+              localStorage.setItem("role", e.target.value);
+            }}
           >
             <option value="Estudiante">Estudiante</option>
             <option value="Administrador">Administrador</option>
@@ -90,8 +137,8 @@ export function DashboardPage() {
           <div className="stat-card">
             <div className="stat-icon">📈</div>
             <div className="stat-content">
-              <div className="stat-label">Consultas este mes</div>
-              <div className="stat-value">128</div>
+              <div className="stat-label">Consultas realizadas</div>
+              <div className="stat-value">{metrics.consultations}</div>
             </div>
           </div>
           
@@ -99,7 +146,7 @@ export function DashboardPage() {
             <div className="stat-icon">⏱️</div>
             <div className="stat-content">
               <div className="stat-label">Tiempo de estudio</div>
-              <div className="stat-value">12.5h</div>
+              <div className="stat-value">{formatStudyTime(metrics.studyMs)}</div>
             </div>
           </div>
           
@@ -107,7 +154,16 @@ export function DashboardPage() {
             <div className="stat-icon">⭐</div>
             <div className="stat-content">
               <div className="stat-label">Tests aprobados</div>
-              <div className="stat-value">89%</div>
+              <div className="stat-value">
+                {metrics.testsTotal > 0
+                  ? `${testsPassedPct}%`
+                  : "—"}
+              </div>
+              {metrics.testsTotal > 0 && (
+                <div className="stat-detail">
+                  {metrics.testsPassed}/{metrics.testsTotal} tests
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -123,7 +179,11 @@ export function DashboardPage() {
               <p className="module-description">
                 Consulta educativa 24/7 sobre temas de salud
               </p>
-              <div className="module-stats">1.234 consultas</div>
+              <div className="module-stats">
+                {metrics.consultations > 0
+                  ? `${metrics.consultations} consultas`
+                  : "Empieza a consultar"}
+              </div>
             </Link>
             
             <Link to="/dashboard/sct" className="module-card">
@@ -132,17 +192,25 @@ export function DashboardPage() {
               <p className="module-description">
                 Evalúa tu razonamiento clínico
               </p>
-              <div className="module-stats">45 tests completados</div>
+              <div className="module-stats">
+                {metrics.testsTotal > 0
+                  ? `${metrics.testsTotal} tests completados`
+                  : "Realiza tu primer test"}
+              </div>
             </Link>
             
-            <div className="module-card disabled">
+            <Link to="/dashboard/images" className="module-card">
               <div className="module-icon cyan">🖼️</div>
               <h3 className="module-title">Análisis de Imágenes</h3>
               <p className="module-description">
-                Próximamente disponible
+                Visualiza imágenes histológicas de alta resolución
               </p>
-              <div className="module-stats">Próximamente</div>
-            </div>
+              <div className="module-stats">
+                {activity.filter(a => a.type === "images").length > 0
+                  ? `${activity.filter(a => a.type === "images").length} visualizaciones`
+                  : "Explora las imágenes"}
+              </div>
+            </Link>
           </div>
         </section>
 
@@ -151,29 +219,22 @@ export function DashboardPage() {
           <h2 className="section-title">Actividad Reciente</h2>
           
           <div className="activity-list">
-            <div className="activity-item">
-              <div className="activity-icon">💬</div>
-              <div className="activity-content">
-                <div className="activity-title">Consulta sobre diabetes mellitus tipo 2</div>
-                <div className="activity-time">Hace 2 horas</div>
+            {activity.length === 0 ? (
+              <div className="activity-empty">
+                <span className="activity-empty-icon">📭</span>
+                <p>Aún no hay actividad registrada. Comienza usando el chatbot o realizando un test SCT.</p>
               </div>
-            </div>
-            
-            <div className="activity-item">
-              <div className="activity-icon">📋</div>
-              <div className="activity-content">
-                <div className="activity-title">Test SCT - Cardiología</div>
-                <div className="activity-time">Ayer</div>
-              </div>
-            </div>
-            
-            <div className="activity-item">
-              <div className="activity-icon">💬</div>
-              <div className="activity-content">
-                <div className="activity-title">Síntomas de hipertensión arterial</div>
-                <div className="activity-time">Hace 2 días</div>
-              </div>
-            </div>
+            ) : (
+              activity.map((item, idx) => (
+                <div key={idx} className="activity-item">
+                  <div className="activity-icon">{activityIcon[item.type] || "📌"}</div>
+                  <div className="activity-content">
+                    <div className="activity-title">{item.title}</div>
+                    <div className="activity-time">{timeAgo(item.timestamp)}</div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </section>
 
