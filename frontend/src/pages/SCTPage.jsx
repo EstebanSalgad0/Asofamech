@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { generateSCT, saveSCTTest, listSCTTests, getSCTTest } from "../api";
+import { startSession, flushSession, trackTestCompleted, pushActivity } from "../tracker";
 
 export function SCTPage() {
   const navigate = useNavigate();
@@ -23,10 +24,23 @@ export function SCTPage() {
       navigate("/auth");
     } else {
       setUser(JSON.parse(userData));
+      const savedRole = localStorage.getItem("role");
+      if (savedRole) setRole(savedRole);
     }
     
+    // Start session timer
+    startSession();
+
     // Cargar tests guardados
     loadSavedTests();
+
+    // Flush session time on unload
+    const handleUnload = () => flushSession();
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      flushSession();
+      window.removeEventListener("beforeunload", handleUnload);
+    };
   }, [navigate]);
 
   const loadSavedTests = async () => {
@@ -154,6 +168,11 @@ export function SCTPage() {
     });
     
     setViewMode('results');
+
+    // Track test completion + activity
+    const passed = score >= 60;
+    trackTestCompleted(passed);
+    pushActivity("sct", `${currentTest.title} — ${score}%`);
   };
 
   const handleBackToConfig = () => {
@@ -286,8 +305,13 @@ export function SCTPage() {
           <Link to="/dashboard/images" className="nav-item">
             <span className="nav-icon">🖼️</span>
             <span>Imágenes IA</span>
-            <span className="nav-badge">Próximamente</span>
           </Link>
+          {(role === "Administrador" || role === "Profesor") && (
+            <Link to="/dashboard/config" className="nav-item">
+              <span className="nav-icon">⚙️</span>
+              <span>Configuración</span>
+            </Link>
+          )}
         </nav>
         
         <div className="sidebar-footer">
@@ -303,7 +327,10 @@ export function SCTPage() {
           <select 
             className="sidebar-role-selector"
             value={role}
-            onChange={(e) => setRole(e.target.value)}
+            onChange={(e) => {
+              setRole(e.target.value);
+              localStorage.setItem("role", e.target.value);
+            }}
           >
             <option value="Estudiante">Estudiante</option>
             <option value="Administrador">Administrador</option>

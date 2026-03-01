@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { OpenSeadragonViewer } from "../components/OpenSeadragonViewer";
 import { MedicalImageViewer } from "../components/MedicalImageViewer";
+import { startSession, flushSession, pushActivity } from "../tracker";
 
 export function ImagesPage() {
   const navigate = useNavigate();
@@ -9,7 +10,6 @@ export function ImagesPage() {
   const [role, setRole] = useState("Estudiante");
   const [imageLibrary, setImageLibrary] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,8 +18,18 @@ export function ImagesPage() {
       navigate("/auth");
     } else {
       setUser(JSON.parse(userData));
+      const savedRole = localStorage.getItem("role");
+      if (savedRole) setRole(savedRole);
+      startSession();
       loadImageLibrary();
     }
+
+    const handleUnload = () => flushSession();
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      flushSession();
+      window.removeEventListener("beforeunload", handleUnload);
+    };
   }, [navigate]);
 
   const loadImageLibrary = async () => {
@@ -38,6 +48,9 @@ export function ImagesPage() {
   };
 
   const handleImageSelect = (image) => {
+    // Track image view activity
+    pushActivity("images", `Visualización: ${image.title}`);
+
     // Usar el endpoint /view que procesa SVS automáticamente
     setSelectedImage({
       url: `http://localhost:8001/api/medical-images/view/${image.id}`,
@@ -57,27 +70,6 @@ export function ImagesPage() {
         });
       };
       reader.readAsDataURL(file);
-    }
-  };
-
-  const handleDeleteImage = async (imageId) => {
-    if (!confirm("¿Estás seguro de eliminar esta imagen?")) return;
-    
-    try {
-      const response = await fetch(`http://localhost:8001/api/medical-images/${imageId}`, {
-        method: "DELETE"
-      });
-      
-      if (response.ok) {
-        alert("Imagen eliminada exitosamente");
-        loadImageLibrary();
-        if (selectedImage && selectedImage.id === imageId) {
-          setSelectedImage(null);
-        }
-      }
-    } catch (error) {
-      console.error("Error eliminando imagen:", error);
-      alert("Error al eliminar la imagen");
     }
   };
 
@@ -114,6 +106,12 @@ export function ImagesPage() {
             <span className="nav-icon">🖼️</span>
             <span>Imágenes IA</span>
           </Link>
+          {(role === "Administrador" || role === "Profesor") && (
+            <Link to="/dashboard/config" className="nav-item">
+              <span className="nav-icon">⚙️</span>
+              <span>Configuración</span>
+            </Link>
+          )}
         </nav>
         
         <div className="sidebar-footer">
@@ -129,7 +127,10 @@ export function ImagesPage() {
           <select 
             className="sidebar-role-selector"
             value={role}
-            onChange={(e) => setRole(e.target.value)}
+            onChange={(e) => {
+              setRole(e.target.value);
+              localStorage.setItem("role", e.target.value);
+            }}
           >
             <option value="Estudiante">Estudiante</option>
             <option value="Administrador">Administrador</option>
@@ -157,15 +158,6 @@ export function ImagesPage() {
           <div className="images-sidebar">
             <div className="sidebar-header">
               <h3>📚 Biblioteca de Imágenes</h3>
-              {(role === "Administrador" || role === "Profesor") && (
-                <button
-                  onClick={() => setShowUploadModal(true)}
-                  className="btn-upload-small"
-                  title="Subir nueva imagen"
-                >
-                  ➕
-                </button>
-              )}
             </div>
 
             <div className="sidebar-section">
@@ -206,18 +198,6 @@ export function ImagesPage() {
                           </div>
                         </div>
                       </div>
-                      {(role === "Administrador" || role === "Profesor") && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteImage(img.id);
-                          }}
-                          className="btn-delete-image"
-                          title="Eliminar"
-                        >
-                          🗑️
-                        </button>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -241,131 +221,7 @@ export function ImagesPage() {
           </div>
         </div>
 
-        {/* Modal de subida */}
-        {showUploadModal && (
-          <UploadModal
-            onClose={() => setShowUploadModal(false)}
-            onSuccess={() => {
-              setShowUploadModal(false);
-              loadImageLibrary();
-            }}
-          />
-        )}
       </main>
-    </div>
-  );
-}
-
-function UploadModal({ onClose, onSuccess }) {
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    pathology_type: ""
-  });
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!file) {
-      alert("Selecciona un archivo");
-      return;
-    }
-
-    setUploading(true);
-
-    const uploadData = new FormData();
-    uploadData.append("file", file);
-    uploadData.append("title", formData.title);
-    uploadData.append("description", formData.description);
-    uploadData.append("pathology_type", formData.pathology_type);
-
-    try {
-      const response = await fetch("http://localhost:8001/api/medical-images/upload", {
-        method: "POST",
-        body: uploadData
-      });
-
-      if (response.ok) {
-        alert("Imagen subida exitosamente");
-        onSuccess();
-      } else {
-        const error = await response.json();
-        alert(error.detail || "Error al subir la imagen");
-      }
-    } catch (error) {
-      console.error("Error:", error);
-      alert("Error al subir la imagen: " + (error.message || "Error desconocido"));
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">📤 Subir Imagen Médica</h2>
-        <form onSubmit={handleSubmit} className="upload-form">
-          <div className="form-group">
-            <label>Archivo *</label>
-            <input
-              type="file"
-              accept="image/*,.svs"
-              onChange={(e) => setFile(e.target.files[0])}
-              required
-              className="file-input"
-            />
-            <p className="hint-text">
-              📌 Recomendado: JPG, PNG, TIFF<br/>
-              ⚠️ Archivos SVS requieren OpenSlide instalado en el servidor
-            </p>
-          </div>
-
-          <div className="form-group">
-            <label>Título *</label>
-            <input
-              type="text"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="Ej: Tejido pulmonar con necrosis"
-              required
-              className="text-input"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Tipo de Patología</label>
-            <input
-              type="text"
-              value={formData.pathology_type}
-              onChange={(e) => setFormData({ ...formData, pathology_type: e.target.value })}
-              placeholder="Ej: Necrosis, Células de Langerhans"
-              className="text-input"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Descripción</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Descripción detallada de la imagen..."
-              rows="3"
-              className="textarea-input"
-            />
-          </div>
-
-          <div className="modal-actions">
-            <button type="button" onClick={onClose} className="btn-cancel">
-              Cancelar
-            </button>
-            <button type="submit" disabled={uploading} className="btn-submit">
-              {uploading ? "Subiendo..." : "Subir Imagen"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }

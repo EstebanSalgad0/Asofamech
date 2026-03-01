@@ -310,6 +310,25 @@ async def list_sct_tests(db: Session = Depends(get_db)):
             detail=f"Error al listar tests SCT: {str(e)}"
         )
 
+@router.delete("/{test_id}")
+async def delete_sct_test(test_id: int, db: Session = Depends(get_db)):
+    """
+    Elimina (soft-delete) un test SCT por ID.
+    """
+    try:
+        test = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True).first()
+        if not test:
+            raise HTTPException(status_code=404, detail="Test SCT no encontrado")
+        
+        test.is_active = False
+        db.commit()
+        return {"message": f"Test SCT '{test.name}' eliminado exitosamente", "id": test_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al eliminar test SCT: {str(e)}")
+
 @router.get("/{test_id}", response_model=SCTTestDetail)
 async def get_sct_test(test_id: int, db: Session = Depends(get_db)):
     """
