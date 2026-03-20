@@ -51,6 +51,82 @@ function createNewConversation() {
   };
 }
 
+// Función para renderizar markdown a HTML
+function renderMarkdown(text) {
+  if (!text) return "";
+  
+  let html = text;
+  
+  // Convertir enlaces markdown a HTML
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="message-link">$1</a>');
+  
+  // Convertir URLs directas a enlaces
+  html = html.replace(/<(https?:\/\/[^>]+)>/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="message-link">$1</a>');
+  
+  // Dividir en líneas para procesar
+  const lines = html.split('\n');
+  const processed = [];
+  let inList = false;
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    
+    // Saltar líneas vacías múltiples
+    if (line.trim() === '' && processed.length > 0 && processed[processed.length - 1] === '<br/>') {
+      continue;
+    }
+    
+    // Títulos con **
+    if (line.match(/^\*\*[^*]+\*\*:?\s*$/)) {
+      if (inList) {
+        processed.push('</ul>');
+        inList = false;
+      }
+      line = line.replace(/^\*\*([^*]+)\*\*:?\s*$/, '<h3 class="message-heading">$1</h3>');
+      processed.push(line);
+      continue;
+    }
+    
+    // Listas con * o -
+    const listMatch = line.match(/^[\s]*[\*\-]\s+(.+)$/);
+    if (listMatch) {
+      if (!inList) {
+        processed.push('<ul class="message-list">');
+        inList = true;
+      }
+      let itemContent = listMatch[1];
+      // Convertir negrita dentro de items
+      itemContent = itemContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      processed.push(`<li>${itemContent}</li>`);
+      continue;
+    } else if (inList) {
+      processed.push('</ul>');
+      inList = false;
+    }
+    
+    // Líneas vacías como separadores
+    if (line.trim() === '') {
+      processed.push('<br/>');
+      continue;
+    }
+    
+    // Convertir negrita en texto normal
+    line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    
+    // Líneas normales como párrafos
+    if (line.trim() !== '') {
+      processed.push(`<p class="message-paragraph">${line}</p>`);
+    }
+  }
+  
+  // Cerrar lista si quedó abierta
+  if (inList) {
+    processed.push('</ul>');
+  }
+  
+  return processed.join('');
+}
+
 export function ChatbotPage() {
   const navigate = useNavigate();
   const messagesEndRef = useRef(null);
@@ -196,11 +272,17 @@ export function ChatbotPage() {
 
     try {
       const data = await sendChatMessage(inputText);
-      const botMsgs = (data.messages || []).map((m) => ({
+      
+      // Combinar todos los mensajes del bot en uno solo
+      const allBotTexts = (data.messages || [])
+        .map((m) => m.text || "")
+        .join("\n\n");
+      
+      const botMsg = {
         sender: "bot",
-        text: m.text || "",
+        text: allBotTexts,
         time: getTimestamp(),
-      }));
+      };
 
       // Track consultation & activity
       trackConsultation();
@@ -209,7 +291,7 @@ export function ChatbotPage() {
       const withResponse = {
         ...updatedConv,
         updatedAt: new Date().toISOString(),
-        messages: [...updatedConv.messages, ...botMsgs],
+        messages: [...updatedConv.messages, botMsg],
       };
       const updated2 = updated.map((c) => (c.id === currentId ? withResponse : c));
       persist(updated2);
@@ -412,7 +494,10 @@ export function ChatbotPage() {
                   <div className="message-avatar bot-avatar">🤖</div>
                 )}
                 <div className="message-bubble">
-                  <div className="message-text">{msg.text}</div>
+                  <div 
+                    className="message-text"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
+                  />
                   <div className="message-time">{msg.time}</div>
                 </div>
                 {msg.sender === "user" && (

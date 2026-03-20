@@ -14,8 +14,17 @@ export function AuthPage() {
     e.preventDefault();
     // Aquí iría la lógica de autenticación
     // Por ahora simulamos login exitoso
+    
+    // Si no hay nombre ingresado, extraer del correo
+    let displayName = name;
+    if (!displayName && email) {
+      // Extraer la parte antes del @ y capitalizar
+      const emailName = email.split('@')[0];
+      displayName = emailName.charAt(0).toUpperCase() + emailName.slice(1);
+    }
+    
     localStorage.setItem("user", JSON.stringify({ 
-      name: name || "Dr. María García",
+      name: displayName || "Usuario",
       email: email,
       role: "Estudiante"
     }));
@@ -48,20 +57,20 @@ export function AuthPage() {
             </p>
             
             <form onSubmit={handleSubmit} className="auth-form">
-              {isRegister && (
-                <div className="form-group">
-                  <label htmlFor="name" className="form-label">Nombre completo</label>
-                  <input
-                    type="text"
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Dr. Juan Pérez"
-                    className="form-input"
-                    required={isRegister}
-                  />
-                </div>
-              )}
+              <div className="form-group">
+                <label htmlFor="name" className="form-label">
+                  Nombre completo {!isRegister && <span style={{opacity: 0.6, fontSize: '0.85em'}}>(opcional)</span>}
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={isRegister ? "Dr. Juan Pérez" : "Tu nombre"}
+                  className="form-input"
+                  required={isRegister}
+                />
+              </div>
               
               <div className="form-group">
                 <label htmlFor="email" className="form-label">Correo electrónico</label>
