@@ -20,10 +20,6 @@ yarn-error.log*
 dist/
 .vite/
 
-# Rasa
-models/*.tar.gz
-.rasa/
-
 # Docker
 *.log
 

@@ -1,10 +1,10 @@
 # 🏥 MediChat - Chatbot Educativo de Tuberculosis
 
-Sistema de chatbot médico educativo basado en IA para consultas sobre tuberculosis y otras patologías. Integra Rasa, LLaMA 3 y sistema RAG (Retrieval-Augmented Generation) con casos clínicos.
+Sistema de chatbot médico educativo basado en IA para consultas sobre tuberculosis y otras patologías. Integra FastAPI, LLaMA 3 vía Ollama y sistema RAG (Retrieval-Augmented Generation) con casos clínicos.
 
 ## 🚀 Características
 
-- **Asistente conversacional** basado en Rasa 3.6
+- **Asistente conversacional** con Ollama (LLaMA 3)
 - **Integración LLaMA 3** (8B) vía Ollama para respuestas médicas
 - **Sistema RAG** con base de datos de casos clínicos
 - **Módulo SCT** (Script Concordance Test) para evaluación del razonamiento clínico
@@ -19,12 +19,6 @@ Sistema de chatbot médico educativo basado en IA para consultas sobre tuberculo
 │   Frontend  │─────▶│   Backend    │─────▶│  PostgreSQL │
 │  React+Vite │      │   FastAPI    │      │     DB      │
 └─────────────┘      └──────────────┘      └─────────────┘
-                            │
-                            ▼
-                     ┌──────────────┐
-                     │     Rasa     │
-                     │   + Actions  │
-                     └──────────────┘
                             │
                             ▼
                      ┌──────────────┐
@@ -43,8 +37,8 @@ Sistema de chatbot médico educativo basado en IA para consultas sobre tuberculo
 
 1. **Clonar el repositorio**
 ```bash
-git clone https://github.com/EstebanSalgad0/chatbot_tb.git
-cd chatbot_tb
+git clone https://github.com/EstebanSalgad0/asofamech.git
+cd asofamech
 ```
 
 2. **Iniciar los servicios con Docker Compose**
@@ -68,14 +62,13 @@ docker ps
 |----------|-----|-------------|
 | Frontend | http://localhost:3000 | Interfaz web del chatbot |
 | Backend API | http://localhost:8001 | API REST FastAPI |
-| Rasa | http://localhost:5005 | Servidor Rasa |
 | Ollama | http://localhost:11434 | Servicio LLaMA 3 |
 | PostgreSQL | localhost:5432 | Base de datos |
 
 ## 📚 Estructura del Proyecto
 
 ```
-chatbot_tb/
+asofamech/
 ├── backend/              # API FastAPI
 │   ├── app/
 │   │   ├── main.py      # Punto de entrada
@@ -84,22 +77,11 @@ chatbot_tb/
 │   │   ├── schemas.py   # Schemas Pydantic
 │   │   └── routers/
 │   │       ├── cases.py # Endpoints casos clínicos
-│   │       ├── chat.py  # Endpoints chat
-│   │       └── sct.py   # Endpoints SCT (Script Concordance Test)
+│   │       ├── chat.py  # Endpoints chat (Ollama)
+│   │       └── sct.py   # Endpoints SCT
 │   └── Dockerfile
 │
-├── Chatbot/             # Rasa Bot
-│   ├── actions/
-│   │   └── actions.py   # Custom actions + RAG
-│   ├── data/
-│   │   ├── nlu.yml      # Datos de entrenamiento
-│   │   ├── rules.yml    # Reglas de conversación
-│   │   └── stories.yml  # Historias de ejemplo
-│   ├── domain.yml       # Dominio del bot
-│   ├── config.yml       # Configuración Rasa
-│   └── endpoints.yml    # Endpoints externos
-│
-├── frontend/            # React App
+├── frontend/             # React App
 │   ├── src/
 │   │   ├── components/  # Componentes React
 │   │   ├── pages/       # Páginas
@@ -108,11 +90,8 @@ chatbot_tb/
 │   │   └── styles.css   # Estilos globales
 │   └── Dockerfile
 │
-├── llm_service/         # Servicio Ollama
-│   ├── main.py          # Servidor LLaMA 3
-│   └── Dockerfile
-│
-└── docker-compose.yml   # Orquestación servicios
+├── uploads/              # Archivos subidos y tiles generados
+└── docker-compose.yml    # Orquestación servicios
 ```
 
 ## 💬 Uso del Chatbot
@@ -159,7 +138,7 @@ El sistema RAG (Retrieval-Augmented Generation) funciona:
 
 1. Usuario hace pregunta
 2. Backend busca casos clínicos relevantes en PostgreSQL
-3. Rasa consulta el backend por casos relacionados
+3. Backend construye contexto clínico con los casos encontrados
 4. LLaMA 3 genera respuesta enriquecida con contexto de casos
 5. Respuesta se muestra al usuario
 
@@ -169,7 +148,7 @@ El sistema RAG (Retrieval-Augmented Generation) funciona:
 ```bash
 docker logs -f tb_frontend
 docker logs -f tb_backend
-docker logs -f tb_rasa
+docker logs -f tb_ollama
 ```
 
 ### Reiniciar un servicio
@@ -183,14 +162,14 @@ docker-compose restart backend
 docker-compose up -d --build frontend
 ```
 
-### Entrenar modelo Rasa
+### Descargar modelo en Ollama
 ```bash
-docker exec -it tb_rasa rasa train
+docker exec -it asofamech_ollama ollama pull llama3:8b
 ```
 
 ### Acceder a la DB
 ```bash
-docker exec -it tb_db psql -U postgres -d chatbot_tb
+docker exec -it asofamech_db psql -U app_user -d app_db
 ```
 
 ## 🧪 Testing
@@ -225,16 +204,17 @@ El proyecto usa estas variables (configuradas en `docker-compose.yml`):
 
 ```yaml
 # PostgreSQL
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=chatbot_tb
+POSTGRES_USER=app_user
+POSTGRES_PASSWORD=app_pass
+POSTGRES_DB=app_db
 
 # Backend
-DATABASE_URL=postgresql://postgres:postgres@db:5432/chatbot_tb
-RASA_URL=http://rasa:5005
-
-# LLM Service
+DATABASE_URL=postgresql://app_user:app_pass@db:5432/app_db
 OLLAMA_URL=http://ollama:11434
+LLM_MODEL=llama3:8b
+
+# Frontend
+VITE_API_BASE=http://localhost:8001
 ```
 
 ## 🤝 Contribuir
@@ -255,7 +235,6 @@ Esteban Salgado
 
 ## 🙏 Agradecimientos
 
-- Rasa Open Source
 - Meta AI (LLaMA 3)
 - Ollama
 - FastAPI

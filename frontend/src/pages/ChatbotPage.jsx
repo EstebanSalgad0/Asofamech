@@ -347,7 +347,7 @@ export function ChatbotPage() {
           </Link>
           <Link to="/dashboard/chat" className="nav-item active">
             <span className="nav-icon">💬</span>
-            <span>Chatbot IA</span>
+            <span>Asistente IA</span>
           </Link>
           <Link to="/dashboard/sct" className="nav-item">
             <span className="nav-icon">📋</span>

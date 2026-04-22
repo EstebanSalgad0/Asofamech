@@ -4,7 +4,7 @@
 
 ## 🚀 Inicio Rápido
 
-### 1. Iniciar Servicios Docker (DB, Rasa, Ollama)
+### 1. Iniciar Servicios Docker (DB y Ollama)
 ```bash
 docker-compose up -d
 ```
@@ -49,7 +49,6 @@ Para detener frontend/backend, simplemente presiona `Ctrl+C` en cada terminal.
 | Frontend | 3000 | Interfaz React (desarrollo local) |
 | Backend | 8001 | API FastAPI (desarrollo local) |
 | PostgreSQL | 5432 | Base de datos (Docker) |
-| Rasa | 5005 | Chatbot engine (Docker) |
 | Ollama | 11434 | Modelo AI (Docker) |
 
 ## 🔧 Configuración
@@ -62,8 +61,8 @@ VITE_API_BASE=http://localhost:8001
 ### Backend (.env)
 ```
 DATABASE_URL=postgresql://app_user:app_pass@localhost:5432/app_db
-RASA_URL=http://localhost:5005/webhooks/rest/webhook
-OLLAMA_HOST=http://localhost:11434
+OLLAMA_URL=http://localhost:11434
+LLM_MODEL=llama3:8b
 ```
 
 ## ✅ Ventajas del Desarrollo Local

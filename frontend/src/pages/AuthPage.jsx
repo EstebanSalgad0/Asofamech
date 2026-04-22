@@ -138,7 +138,7 @@ export function AuthPage() {
             <ul className="auth-info-features">
               <li>
                 <span className="feature-check">✓</span>
-                Chatbot médico educativo 24/7
+                Asistente médico educativo 24/7
               </li>
               <li>
                 <span className="feature-check">✓</span>

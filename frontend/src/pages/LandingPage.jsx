@@ -202,7 +202,7 @@ export function LandingPage() {
             <details className="faq-item">
               <summary className="faq-question">¿Qué es el Proyecto ASOFAMECH?</summary>
               <div className="faq-answer">
-                ASOFAMECH es una plataforma educativa que integra inteligencia artificial para ofrecer herramientas innovadoras de aprendizaje médico, incluyendo un chatbot educativo, generación de casos clínicos y tests de razonamiento.
+                ASOFAMECH es una plataforma educativa que integra inteligencia artificial para ofrecer herramientas innovadoras de aprendizaje médico, incluyendo un asistente educativo con IA, generación de casos clínicos y tests de razonamiento.
               </div>
             </details>
             
@@ -255,7 +255,7 @@ export function LandingPage() {
           <div className="cta-modules">
             <div className="cta-module-card">
               <div className="cta-module-icon">💬</div>
-              <h3 className="cta-module-title">Chatbot Médico</h3>
+              <h3 className="cta-module-title">Asistente Médico</h3>
               <p className="cta-module-subtitle">Consultas educativas 24/7</p>
               <p className="cta-module-description">
                 Realiza preguntas sobre síntomas, enfermedades, tratamientos y más. Obtén explicaciones claras y referencias educativas.
@@ -307,7 +307,7 @@ export function LandingPage() {
             
             <div className="footer-links">
               <h4 className="footer-links-title">Módulos</h4>
-              <Link to="/dashboard">Chatbot Médico IA</Link>
+              <Link to="/dashboard">Asistente Médico IA</Link>
               <Link to="/dashboard">Test SCT</Link>
               <Link to="/dashboard">Análisis de Imágenes</Link>
             </div>
