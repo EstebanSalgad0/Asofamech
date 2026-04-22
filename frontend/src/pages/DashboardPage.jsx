@@ -77,7 +77,7 @@ export function DashboardPage() {
           </Link>
           <Link to="/dashboard/chat" className="nav-item">
             <span className="nav-icon">💬</span>
-            <span>Chatbot IA</span>
+            <span>Asistente IA</span>
           </Link>
           <Link to="/dashboard/sct" className="nav-item">
             <span className="nav-icon">📋</span>
@@ -175,7 +175,7 @@ export function DashboardPage() {
           <div className="modules-grid">
             <Link to="/dashboard/chat" className="module-card">
               <div className="module-icon blue">💬</div>
-              <h3 className="module-title">Chatbot Médico IA</h3>
+              <h3 className="module-title">Asistente Médico IA</h3>
               <p className="module-description">
                 Consulta educativa 24/7 sobre temas de salud
               </p>
@@ -222,7 +222,7 @@ export function DashboardPage() {
             {activity.length === 0 ? (
               <div className="activity-empty">
                 <span className="activity-empty-icon">📭</span>
-                <p>Aún no hay actividad registrada. Comienza usando el chatbot o realizando un test SCT.</p>
+                <p>Aún no hay actividad registrada. Comienza usando el asistente o realizando un test SCT.</p>
               </div>
             ) : (
               activity.map((item, idx) => (

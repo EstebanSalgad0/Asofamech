@@ -11,7 +11,7 @@ export async function sendChatMessage(text) {
     throw new Error(`Error API: ${res.status}`);
   }
 
-  return res.json(); // { messages: [...] } desde FastAPI → Rasa
+  return res.json(); // { messages: [...] } desde FastAPI → Ollama
 }
 
 export async function generateSCT(numItems = 5, difficulty = "pregrado", focus = "tuberculosis pulmonar") {

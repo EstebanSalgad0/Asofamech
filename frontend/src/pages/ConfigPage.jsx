@@ -190,7 +190,7 @@ export function ConfigPage() {
           </Link>
           <Link to="/dashboard/chat" className="nav-item">
             <span className="nav-icon">💬</span>
-            <span>Chatbot IA</span>
+            <span>Asistente IA</span>
           </Link>
           <Link to="/dashboard/sct" className="nav-item">
             <span className="nav-icon">📋</span>
@@ -391,7 +391,7 @@ export function ConfigPage() {
                   </h2>
                   <p className="config-section-desc">
                     Selecciona y configura el modelo de lenguaje utilizado por el
-                    chatbot educativo.
+                    asistente educativo.
                   </p>
                 </div>
               </div>
