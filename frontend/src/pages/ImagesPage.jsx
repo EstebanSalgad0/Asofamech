@@ -149,7 +149,7 @@ export function ImagesPage() {
             Análisis de <span className="gradient-text">Imágenes Histológicas</span>
           </h1>
           <p className="images-subtitle">
-            Visualiza y anota imágenes de tejidos celulares para identificar patologías como necrosis, células de Langerhans y otras estructuras.
+            Visualiza imagenes histopatologicas digitales, delimita ROI 1 y ROI 2, y ejecuta una clasificacion educativa binaria sobre ROI 2.
           </p>
         </div>
 
