@@ -22,17 +22,29 @@ class HistopathologyPrediction(BaseModel):
     predicted_class: str
     confidence: float
     probabilities: Dict[str, float]
+    predicted_index: Optional[int] = None
+    model_predicted_class: Optional[str] = None
+    class_mapping: Optional[Dict[str, str]] = None
+    decision_threshold: Optional[float] = None
 
 
 class HistopathologyAnalyzeResponse(BaseModel):
     trace_id: str
     analyzed_at: str
     image_id: int
+    status: str = "clasificado"
+    clase: Optional[str] = None
+    confidence: Optional[float] = None
+    probabilities: Optional[Dict[str, float]] = None
+    reason: Optional[str] = None
+    recommendation: Optional[str] = None
     roi_1: ROIBox
     roi_2: ROIBox
     prediction: HistopathologyPrediction
     patch_size: Dict[str, Any]
     patch_metadata: Dict[str, Any]
+    roi_quality: Optional[Dict[str, Any]] = None
+    debug_artifacts: Optional[Dict[str, Any]] = None
     model: Dict[str, Any]
     warning: str
     slide_dimensions: Optional[Dict[str, int]] = None
