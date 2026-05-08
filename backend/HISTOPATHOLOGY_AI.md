@@ -149,6 +149,9 @@ Variables y mounts configurados en `docker-compose.yml`:
 - `HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology-pcam-cuda/checkpoints/binary_head_pcam.pt`
 - `HISTO_CONCH_CHECKPOINT_REF=hf_hub:MahmoodLab/conch`
 - `HISTO_AUDIT_LOG_PATH=/app/artifacts/histopathology/audit_log.jsonl`
+- `HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD=0.90`
+- `HISTO_SAVE_DEBUG_PATCHES=true`
+- `HISTO_DEBUG_PATCH_DIR=/app/artifacts/histopathology/debug_patches`
 - `./backend/artifacts:/app/artifacts`
 - `huggingface_cache:/root/.cache/huggingface`
 - GPU NVIDIA reservada para el servicio `backend`
@@ -223,15 +226,54 @@ Cada analisis exitoso devuelve:
 
 - `trace_id`
 - timestamp `analyzed_at`
+- `status`: `clasificado`, `resultado_incierto` o `roi_no_evaluable`
+- `clase`: `metastasico`, `no_metastasico`, `incierto` o `roi_no_evaluable`
 - ROI 1 y ROI 2 usadas
 - prediccion y probabilidades
+- motivo y recomendacion cuando la ROI no es evaluable o la prediccion es incierta
+- metricas simples de control de calidad de ROI
 - metadata del patch extraido
 - dimensiones de la lamina
 - advertencia educativa
 
 Ademas, el backend escribe eventos JSONL en `HISTO_AUDIT_LOG_PATH`.
 
-## 7. Pruebas con SLN-Breast
+## 7. Control de calidad de ROI
+
+El clasificador PCam es binario. Si se le envia una region con fondo blanco,
+tejido adiposo, estroma predominante, artefactos o baja densidad celular, el
+modelo igual tendera a elegir una de las dos clases. Para evitar respuestas
+demasiado tajantes fuera del dominio esperado, el endpoint `/api/histopathology/analyze-roi`
+ejecuta una compuerta previa de calidad:
+
+```text
+ROI 2
+-> guardar patch debug
+-> estimar tejido util, fondo blanco, celularidad y estroma
+-> si no es evaluable: status=roi_no_evaluable
+-> si es evaluable: CONCH + cabeza binaria
+-> si ninguna clase supera el umbral: status=resultado_incierto
+```
+
+Variables configurables:
+
+- `HISTO_QC_MAX_WHITE_FRACTION`: maximo fondo/espacios claros permitido. Default `0.45`.
+- `HISTO_QC_MIN_TISSUE_FRACTION`: minimo tejido util requerido. Default `0.40`.
+- `HISTO_QC_MIN_NUCLEAR_FRACTION`: minimo aproximado de material nuclear/celular. Default `0.035`.
+- `HISTO_QC_MAX_STROMA_FRACTION_WHEN_LOW_NUCLEAR`: maximo estroma permitido cuando hay baja celularidad. Default `0.65`.
+- `HISTO_QC_LOW_NUCLEAR_FOR_STROMA_FRACTION`: umbral de baja celularidad para activar filtro de estroma. Default `0.12`.
+- `HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD`: umbral para emitir clase binaria. Default `0.90`.
+
+Por cada `trace_id`, si `HISTO_SAVE_DEBUG_PATCHES=true`, se guardan:
+
+- `debug_patch_original.png`: recorte RGB exacto de ROI 2.
+- `debug_patch_preprocessed.png`: visualizacion del tensor tras el preprocess de CONCH.
+- `debug_patch_preprocessed.pt`: tensor normalizado exacto que entra al encoder CONCH.
+
+Estos archivos quedan bajo `HISTO_DEBUG_PATCH_DIR` y sirven para auditar que el
+modelo recibio la zona esperada. No se versionan en Git.
+
+## 8. Pruebas con SLN-Breast
 
 SLN-Breast es una coleccion de laminas `.svs` de ganglio linfatico axilar en el
 contexto de cancer de mama. Es util para probar el prototipo con WSI reales,
@@ -263,7 +305,7 @@ Durante las pruebas locales se usaron, entre otras:
 Estas laminas y cualquier muestra `.svs`/PNG generada quedan fuera de Git por
 tamaño y condiciones de distribucion.
 
-## 8. Limites metodologicos
+## 9. Limites metodologicos
 
 El clasificador actual cubre una tarea estrecha:
 

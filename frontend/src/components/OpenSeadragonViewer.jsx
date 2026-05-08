@@ -277,6 +277,29 @@ export function OpenSeadragonViewer({ imageData }) {
     : modelReady
       ? 'Analizar ROI 2'
       : 'Modelo no listo';
+  const resultStatus = prediction?.status || 'clasificado';
+  const resultClass = prediction?.clase || prediction?.['class'] || prediction?.prediction?.predicted_class || 'N/D';
+  const resultConfidence = typeof prediction?.confidence === 'number'
+    ? prediction.confidence
+    : prediction?.prediction?.confidence;
+  const resultProbabilities = prediction?.probabilities || prediction?.prediction?.probabilities || {};
+  const resultMetrics = prediction?.roi_quality?.metrics;
+  const resultIsWarning = resultStatus === 'roi_no_evaluable' || resultStatus === 'resultado_incierto';
+  const resultPalette = resultIsWarning
+    ? {
+        background: 'rgba(69, 26, 3, 0.92)',
+        border: '1px solid rgba(251, 191, 36, 0.42)',
+        heading: '#fde68a',
+        text: '#ffedd5',
+        subtle: '#fed7aa',
+      }
+    : {
+        background: 'rgba(2, 44, 34, 0.9)',
+        border: '1px solid rgba(52, 211, 153, 0.35)',
+        heading: '#a7f3d0',
+        text: '#d1fae5',
+        subtle: '#bbf7d0',
+      };
 
   const analyzeRoi2 = async () => {
     if (!canAnalyze) return;
@@ -491,6 +514,9 @@ export function OpenSeadragonViewer({ imageData }) {
                   {modelStatus.feature_dim && (
                     <div style={{ color: '#cbd5e1' }}>Embedding: {modelStatus.feature_dim} dimensiones</div>
                   )}
+                  {typeof modelStatus.confidence_threshold === 'number' && (
+                    <div style={{ color: '#cbd5e1' }}>Umbral: {formatPercent(modelStatus.confidence_threshold)}</div>
+                  )}
                   {!modelReady && modelStatus.reason && (
                     <div style={{ color: '#fde68a', marginTop: 6 }}>{modelStatus.reason}</div>
                   )}
@@ -557,35 +583,56 @@ export function OpenSeadragonViewer({ imageData }) {
 
             {prediction && (
               <div style={{
-                background: 'rgba(2, 44, 34, 0.9)',
-                border: '1px solid rgba(52, 211, 153, 0.35)',
+                background: resultPalette.background,
+                border: resultPalette.border,
                 borderRadius: 14,
                 padding: 12,
                 backdropFilter: 'blur(8px)',
                 fontSize: 12,
                 lineHeight: 1.5,
               }}>
-                <div style={{ fontWeight: 800, color: '#a7f3d0', marginBottom: 6 }}>Resultado educativo</div>
-                <div style={{ color: '#bbf7d0', marginBottom: 6 }}>Trace: {prediction.trace_id}</div>
-                <div>Clase: <strong>{prediction.prediction.predicted_class}</strong></div>
-                <div>Confianza: {formatPercent(prediction.prediction.confidence)}</div>
-                <div style={{ marginTop: 6, color: '#bbf7d0' }}>
-                  No metastasico: {formatPercent(prediction.prediction.probabilities.no_metastasico)}
-                </div>
-                <div style={{ color: '#bbf7d0' }}>
-                  Metastasico: {formatPercent(prediction.prediction.probabilities.metastasico)}
-                </div>
+                <div style={{ fontWeight: 800, color: resultPalette.heading, marginBottom: 6 }}>Resultado educativo</div>
+                <div style={{ color: resultPalette.subtle, marginBottom: 6 }}>Trace: {prediction.trace_id}</div>
+                <div style={{ color: resultPalette.text }}>Estado: <strong>{resultStatus}</strong></div>
+                <div style={{ color: resultPalette.text }}>Clase: <strong>{resultClass}</strong></div>
+                <div style={{ color: resultPalette.text }}>Confianza: {formatPercent(resultConfidence)}</div>
+                {typeof resultProbabilities.no_metastasico === 'number' && (
+                  <div style={{ marginTop: 6, color: resultPalette.subtle }}>
+                    No metastasico: {formatPercent(resultProbabilities.no_metastasico)}
+                  </div>
+                )}
+                {typeof resultProbabilities.metastasico === 'number' && (
+                  <div style={{ color: resultPalette.subtle }}>
+                    Metastasico: {formatPercent(resultProbabilities.metastasico)}
+                  </div>
+                )}
+                {prediction.reason && (
+                  <div style={{ marginTop: 8, color: resultPalette.text }}>{prediction.reason}</div>
+                )}
+                {prediction.recommendation && (
+                  <div style={{ marginTop: 6, color: resultPalette.subtle }}>{prediction.recommendation}</div>
+                )}
+                {resultMetrics && (
+                  <div style={{ marginTop: 8, color: resultPalette.subtle }}>
+                    QC: tejido {formatPercent(resultMetrics.tissue_fraction)}, fondo {formatPercent(resultMetrics.white_fraction)}, nucleos {formatPercent(resultMetrics.nuclear_fraction)}
+                  </div>
+                )}
                 {prediction.patch_metadata && (
-                  <div style={{ marginTop: 8, color: '#d1fae5' }}>
+                  <div style={{ marginTop: 8, color: resultPalette.text }}>
                     Patch: {prediction.patch_metadata.extracted_width}x{prediction.patch_metadata.extracted_height} px; input {prediction.patch_metadata.model_input}
                   </div>
                 )}
                 {prediction.slide_dimensions && (
-                  <div style={{ color: '#d1fae5' }}>
+                  <div style={{ color: resultPalette.text }}>
                     Lamina: {prediction.slide_dimensions.width}x{prediction.slide_dimensions.height} px
                   </div>
                 )}
-                <div style={{ marginTop: 8, color: '#86efac' }}>
+                {prediction.debug_artifacts?.enabled && (
+                  <div style={{ color: resultPalette.subtle }}>
+                    Debug patch: guardado por trace_id
+                  </div>
+                )}
+                <div style={{ marginTop: 8, color: resultPalette.heading }}>
                   {prediction.warning || 'No diagnostico. Tarea binaria PCam sobre ROI 2.'}
                 </div>
               </div>

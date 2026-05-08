@@ -12,6 +12,21 @@ DEFAULT_LABELS = {
 }
 
 
+def _float_env(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    try:
+        parsed = float(value)
+    except ValueError:
+        return default
+
+    if parsed <= 0.0 or parsed > 1.0:
+        return default
+    return parsed
+
+
 class HistopathologyInferenceService:
     def __init__(self):
         try:
@@ -45,13 +60,25 @@ class HistopathologyInferenceService:
         checkpoint = torch.load(classifier_path, map_location=self.device)
         feature_dim = int(checkpoint["feature_dim"])
         self.feature_dim = feature_dim
-        self.labels = checkpoint.get("labels", DEFAULT_LABELS)
+        checkpoint_labels = checkpoint.get("labels", DEFAULT_LABELS)
+        self.labels = {**DEFAULT_LABELS, **{str(key): str(value) for key, value in checkpoint_labels.items()}}
+        self.class_mapping = {
+            "0": self.labels["0"],
+            "1": self.labels["1"],
+        }
+        self.confidence_threshold = _float_env("HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD", 0.90)
         self.training_mode = checkpoint.get("training_mode", "unknown")
         self.validation = checkpoint.get("validation")
         self.created_at = checkpoint.get("created_at")
         self.head = BinaryClassifierHead(feature_dim).to(self.device)
         self.head.load_state_dict(checkpoint["state_dict"])
         self.head.eval()
+
+    def preprocess_debug_image(self, patch_rgb):
+        return self.extractor.preprocess_debug_image(patch_rgb)
+
+    def preprocess_debug_tensor(self, patch_rgb):
+        return self.extractor.preprocess_tensor(patch_rgb).detach().cpu()
 
     def predict_patch(self, patch_rgb):
         features = self.extractor.encode_pil(patch_rgb)
@@ -65,12 +92,16 @@ class HistopathologyInferenceService:
         confidence = float(probabilities[predicted_index].item())
 
         return {
+            "predicted_index": predicted_index,
             "predicted_class": predicted_class,
+            "model_predicted_class": predicted_class,
             "confidence": confidence,
             "probabilities": {
                 self.labels["0"]: float(probabilities[0].item()),
                 self.labels["1"]: float(probabilities[1].item()),
             },
+            "class_mapping": self.class_mapping,
+            "decision_threshold": self.confidence_threshold,
         }
 
 
