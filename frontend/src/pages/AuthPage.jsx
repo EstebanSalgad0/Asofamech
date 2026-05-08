@@ -41,7 +41,7 @@ export function AuthPage() {
           </Link>
           
           <div className="auth-logo">
-            <div className="logo-icon">A</div>
+            <div className="logo-mark">A</div>
             <span>ASOFAMECH</span>
           </div>
           
