@@ -66,7 +66,7 @@ export function DashboardPage() {
       {/* Sidebar */}
       <aside className="dashboard-sidebar">
         <div className="sidebar-logo">
-          <div className="logo-icon">A</div>
+          <div className="logo-mark">A</div>
           <span>ASOFAMECH</span>
         </div>
         
