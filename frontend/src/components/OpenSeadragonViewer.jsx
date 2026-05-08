@@ -9,6 +9,9 @@ const ROI_COLORS = {
   draft: '#facc15',
 };
 
+const ROI2_MIN_SIZE = 32;
+const ROI2_MAX_SIZE = 4096;
+
 function normalizeRect(start, end) {
   const x = Math.min(start.x, end.x);
   const y = Math.min(start.y, end.y);
@@ -33,6 +36,20 @@ function formatRoi(roi) {
   return `x=${roi.x}, y=${roi.y}, w=${roi.width}, h=${roi.height}`;
 }
 
+function formatPercent(value) {
+  if (typeof value !== 'number') return 'N/D';
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function describeApiError(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail)) {
+    return payload.detail.map((item) => item.msg || item.detail || JSON.stringify(item)).join('; ');
+  }
+  return fallback;
+}
+
 export function OpenSeadragonViewer({ imageData }) {
   const viewerRef = useRef(null);
   const overlayRef = useRef(null);
@@ -47,8 +64,36 @@ export function OpenSeadragonViewer({ imageData }) {
   const [draftRect, setDraftRect] = useState(null);
   const [roiError, setRoiError] = useState(null);
   const [prediction, setPrediction] = useState(null);
+  const [modelStatus, setModelStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [viewportVersion, setViewportVersion] = useState(0);
+
+  const fetchModelStatus = async () => {
+    setStatusLoading(true);
+    setStatusError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/status`);
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+
+      setModelStatus(payload);
+    } catch (err) {
+      setStatusError(err.message);
+      setModelStatus(null);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchModelStatus();
+  }, []);
 
   useEffect(() => {
     if (!imageData || !viewerRef.current) return undefined;
@@ -218,7 +263,20 @@ export function OpenSeadragonViewer({ imageData }) {
     setDraftRect(null);
   };
 
-  const canAnalyze = Boolean(roi1 && roi2 && roiContains(roi1, roi2) && !analyzing);
+  const modelReady = modelStatus?.model_ready === true;
+  const roi2SizeError = roi2 && (
+    roi2.width < ROI2_MIN_SIZE || roi2.height < ROI2_MIN_SIZE
+      ? `ROI 2 debe medir al menos ${ROI2_MIN_SIZE}x${ROI2_MIN_SIZE} pixeles.`
+      : roi2.width > ROI2_MAX_SIZE || roi2.height > ROI2_MAX_SIZE
+        ? `ROI 2 debe medir como maximo ${ROI2_MAX_SIZE}x${ROI2_MAX_SIZE} pixeles.`
+        : null
+  );
+  const canAnalyze = Boolean(roi1 && roi2 && roiContains(roi1, roi2) && !roi2SizeError && modelReady && !analyzing);
+  const analyzeLabel = analyzing
+    ? 'Analizando...'
+    : modelReady
+      ? 'Analizar ROI 2'
+      : 'Modelo no listo';
 
   const analyzeRoi2 = async () => {
     if (!canAnalyze) return;
@@ -238,10 +296,10 @@ export function OpenSeadragonViewer({ imageData }) {
         }),
       });
 
-      const payload = await response.json();
+      const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(payload.detail || `Error HTTP ${response.status}`);
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
       }
 
       setPrediction(payload);
@@ -393,6 +451,66 @@ export function OpenSeadragonViewer({ imageData }) {
 
             <div style={{
               background: 'rgba(15, 23, 42, 0.88)',
+              border: modelReady ? '1px solid rgba(52, 211, 153, 0.35)' : '1px solid rgba(251, 191, 36, 0.35)',
+              borderRadius: 14,
+              padding: 12,
+              backdropFilter: 'blur(8px)',
+              fontSize: 12,
+              lineHeight: 1.45,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                <div style={{ fontWeight: 800, color: modelReady ? '#a7f3d0' : '#fde68a' }}>
+                  Modelo {statusLoading ? 'verificando' : modelReady ? 'listo' : 'no listo'}
+                </div>
+                <button
+                  onClick={fetchModelStatus}
+                  disabled={statusLoading}
+                  style={{
+                    border: '1px solid rgba(148, 163, 184, 0.25)',
+                    background: 'rgba(15, 23, 42, 0.65)',
+                    color: '#cbd5e1',
+                    borderRadius: 8,
+                    padding: '5px 8px',
+                    cursor: statusLoading ? 'wait' : 'pointer',
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  Estado
+                </button>
+              </div>
+
+              {statusError && (
+                <div style={{ color: '#fecaca', marginBottom: 6 }}>{statusError}</div>
+              )}
+
+              {modelStatus && (
+                <>
+                  <div style={{ color: '#cbd5e1' }}>Backbone: {modelStatus.backbone || 'N/D'}</div>
+                  <div style={{ color: '#cbd5e1' }}>Dispositivo: {modelStatus.device || 'N/D'}</div>
+                  {modelStatus.feature_dim && (
+                    <div style={{ color: '#cbd5e1' }}>Embedding: {modelStatus.feature_dim} dimensiones</div>
+                  )}
+                  {!modelReady && modelStatus.reason && (
+                    <div style={{ color: '#fde68a', marginTop: 6 }}>{modelStatus.reason}</div>
+                  )}
+                </>
+              )}
+
+              <div style={{
+                marginTop: 8,
+                color: '#fed7aa',
+                background: 'rgba(124, 45, 18, 0.35)',
+                border: '1px solid rgba(251, 146, 60, 0.28)',
+                borderRadius: 10,
+                padding: 8,
+              }}>
+                Modulo educativo no diagnostico. La prediccion se limita a PCam: metastasico vs no metastasico.
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.88)',
               border: '1px solid rgba(148, 163, 184, 0.25)',
               borderRadius: 14,
               padding: 12,
@@ -405,7 +523,7 @@ export function OpenSeadragonViewer({ imageData }) {
               <div style={{ color: ROI_COLORS.roi2, fontWeight: 700 }}>ROI 2</div>
               <div style={{ color: '#cbd5e1' }}>{formatRoi(roi2)}</div>
 
-              {roiError && (
+              {(roiError || roi2SizeError) && (
                 <div style={{
                   marginTop: 10,
                   color: '#fecaca',
@@ -414,7 +532,7 @@ export function OpenSeadragonViewer({ imageData }) {
                   borderRadius: 10,
                   padding: 8,
                 }}>
-                  {roiError}
+                  {roiError || roi2SizeError}
                 </div>
               )}
 
@@ -433,7 +551,7 @@ export function OpenSeadragonViewer({ imageData }) {
                   fontWeight: 700,
                 }}
               >
-                {analyzing ? 'Analizando...' : 'Analizar ROI 2'}
+                {analyzeLabel}
               </button>
             </div>
 
@@ -448,16 +566,27 @@ export function OpenSeadragonViewer({ imageData }) {
                 lineHeight: 1.5,
               }}>
                 <div style={{ fontWeight: 800, color: '#a7f3d0', marginBottom: 6 }}>Resultado educativo</div>
+                <div style={{ color: '#bbf7d0', marginBottom: 6 }}>Trace: {prediction.trace_id}</div>
                 <div>Clase: <strong>{prediction.prediction.predicted_class}</strong></div>
-                <div>Confianza: {(prediction.prediction.confidence * 100).toFixed(1)}%</div>
+                <div>Confianza: {formatPercent(prediction.prediction.confidence)}</div>
                 <div style={{ marginTop: 6, color: '#bbf7d0' }}>
-                  No metastasico: {(prediction.prediction.probabilities.no_metastasico * 100).toFixed(1)}%
+                  No metastasico: {formatPercent(prediction.prediction.probabilities.no_metastasico)}
                 </div>
                 <div style={{ color: '#bbf7d0' }}>
-                  Metastasico: {(prediction.prediction.probabilities.metastasico * 100).toFixed(1)}%
+                  Metastasico: {formatPercent(prediction.prediction.probabilities.metastasico)}
                 </div>
+                {prediction.patch_metadata && (
+                  <div style={{ marginTop: 8, color: '#d1fae5' }}>
+                    Patch: {prediction.patch_metadata.extracted_width}x{prediction.patch_metadata.extracted_height} px; input {prediction.patch_metadata.model_input}
+                  </div>
+                )}
+                {prediction.slide_dimensions && (
+                  <div style={{ color: '#d1fae5' }}>
+                    Lamina: {prediction.slide_dimensions.width}x{prediction.slide_dimensions.height} px
+                  </div>
+                )}
                 <div style={{ marginTop: 8, color: '#86efac' }}>
-                  No diagnostico. Tarea binaria PCam sobre ROI 2.
+                  {prediction.warning || 'No diagnostico. Tarea binaria PCam sobre ROI 2.'}
                 </div>
               </div>
             )}

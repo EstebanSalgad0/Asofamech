@@ -24,6 +24,8 @@ class PCamDatasetAdapter:
         self._x_path = None
         self._y_path = None
         self._length = None
+        self._source_used = None
+        self._torchvision_error = None
 
         if source in ("auto", "torchvision"):
             try:
@@ -35,10 +37,12 @@ class PCamDatasetAdapter:
                     transform=transform,
                     download=download,
                 )
+                self._source_used = "torchvision"
                 return
-            except Exception:
+            except Exception as exc:
                 if source == "torchvision":
                     raise
+                self._torchvision_error = exc
 
         self._load_hdf5()
 
@@ -61,14 +65,22 @@ class PCamDatasetAdapter:
         y_path = next((path for path in candidates_y if path.exists()), None)
 
         if x_path is None or y_path is None:
+            torchvision_detail = ""
+            if self._torchvision_error is not None:
+                torchvision_detail = (
+                    " Torchvision PCAM fallback also failed with "
+                    f"{type(self._torchvision_error).__name__}: {self._torchvision_error}"
+                )
             raise FileNotFoundError(
                 "PCam HDF5 files were not found. Expected files like "
                 f"camelyonpatch_level_2_split_{self.split}_x.h5 and "
-                f"camelyonpatch_level_2_split_{self.split}_y.h5"
+                f"camelyonpatch_level_2_split_{self.split}_y.h5."
+                f"{torchvision_detail}"
             )
 
         self._x_path = x_path
         self._y_path = y_path
+        self._source_used = "hdf5"
 
         with h5py.File(y_path, "r") as y_file:
             self._length = len(y_file["y"])
@@ -107,3 +119,8 @@ class PCamDatasetAdapter:
             handle = getattr(self, handle_name, None)
             if handle is not None:
                 handle.close()
+                setattr(self, handle_name, None)
+
+    @property
+    def source_used(self) -> str:
+        return self._source_used or self.source

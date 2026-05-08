@@ -7,6 +7,8 @@ __pycache__/
 env/
 venv/
 ENV/
+.venv*/
+backend/.venv*/
 *.egg-info/
 dist/
 build/
@@ -50,3 +52,10 @@ Thumbs.db
 
 # Uploaded files & generated tiles
 backend/uploads/
+
+# Histopathology AI artifacts and datasets
+backend/artifacts/
+backend/data/
+backend/sample_pcam_patches/
+backend/sample_sln_breast/
+backend/sample_wsi/

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 import time
 import os
 
@@ -25,7 +25,7 @@ app.add_middleware(
 )
 
 
-def create_tables_with_retry(max_retries: int = 10, delay_seconds: int = 2) -> None:
+def create_tables_with_retry(max_retries: int = 3, delay_seconds: int = 2) -> None:
     """
     Intenta crear las tablas varias veces hasta que la base de datos
     esté lista para aceptar conexiones.
@@ -37,13 +37,13 @@ def create_tables_with_retry(max_retries: int = 10, delay_seconds: int = 2) -> N
             Base.metadata.create_all(bind=engine)
             print("[backend] Tablas creadas (o ya existían).")
             return
-        except OperationalError as e:
+        except (OperationalError, UnicodeDecodeError, SQLAlchemyError) as e:
             print(f"[backend] Error de conexión a la BD: {e}")
             print(f"[backend] Reintentando en {delay_seconds} segundos...")
             time.sleep(delay_seconds)
             attempt += 1
 
-    print("[backend] No fue posible conectar con la BD después de varios intentos.")
+    print("[backend] No fue posible conectar con la BD despues de varios intentos; el servicio continuara sin inicializar tablas.")
 
 
 @app.on_event("startup")
