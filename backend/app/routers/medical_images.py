@@ -102,6 +102,11 @@ async def upload_medical_image(
                 process_svs_to_dzi(medical_image, db)
             except Exception as e:
                 print(f"Error procesando SVS a DZI: {e}")
+        elif file_extension in [".jpg", ".jpeg", ".png", ".tiff", ".tif"]:
+            try:
+                process_raster_to_dzi(medical_image, db)
+            except Exception as e:
+                print(f"Error procesando imagen raster a DZI: {e}")
                 # No falla la carga, solo no tendrá tiles
         
         return {
@@ -110,6 +115,7 @@ async def upload_medical_image(
             "title": medical_image.title,
             "file_type": medical_image.file_type,
             "file_size": medical_image.file_size,
+            "has_dzi": medical_image.dzi_path is not None,
             "message": "Imagen subida exitosamente"
         }
         
@@ -429,3 +435,61 @@ def process_svs_to_dzi(medical_image: MedicalImage, db: Session):
     except Exception as e:
         print(f"Error procesando SVS: {e}")
         raise
+
+
+def process_raster_to_dzi(medical_image: MedicalImage, db: Session):
+    """
+    Procesar PNG/JPG/TIFF a Deep Zoom Image para usar el mismo visor con ROI.
+    """
+    from math import ceil, log2
+    from PIL import Image
+
+    tile_size = 256
+    overlap = 1
+
+    with Image.open(medical_image.file_path) as source:
+        image = source.convert("RGB")
+        width, height = image.size
+        max_level = int(ceil(log2(max(width, height)))) if max(width, height) > 1 else 0
+
+        base_name = os.path.splitext(medical_image.filename)[0]
+        dzi_path = os.path.join(DZI_DIR, f"{base_name}.dzi")
+        tiles_dir = os.path.join(DZI_DIR, f"{base_name}_files")
+        os.makedirs(tiles_dir, exist_ok=True)
+
+        for level in range(max_level + 1):
+            scale = 2 ** (max_level - level)
+            level_width = max(1, int(ceil(width / scale)))
+            level_height = max(1, int(ceil(height / scale)))
+            level_image = image.resize((level_width, level_height), Image.Resampling.LANCZOS)
+            level_dir = os.path.join(tiles_dir, str(level))
+            os.makedirs(level_dir, exist_ok=True)
+
+            cols = int(ceil(level_width / tile_size))
+            rows = int(ceil(level_height / tile_size))
+
+            for row in range(rows):
+                for col in range(cols):
+                    left = max(0, col * tile_size - overlap)
+                    top = max(0, row * tile_size - overlap)
+                    right = min(level_width, (col + 1) * tile_size + overlap)
+                    bottom = min(level_height, (row + 1) * tile_size + overlap)
+                    tile = level_image.crop((left, top, right, bottom))
+                    tile.save(os.path.join(level_dir, f"{col}_{row}.jpeg"), "JPEG", quality=90)
+
+        dzi_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Image xmlns="http://schemas.microsoft.com/deepzoom/2008"
+  Format="jpeg"
+  Overlap="{overlap}"
+  TileSize="{tile_size}">
+  <Size Height="{height}"
+    Width="{width}"/>
+</Image>'''
+
+        with open(dzi_path, "w", encoding="utf-8") as f:
+            f.write(dzi_xml)
+
+        medical_image.dzi_path = dzi_path
+        db.commit()
+
+        print(f"Raster procesado exitosamente a DZI: {medical_image.title}")

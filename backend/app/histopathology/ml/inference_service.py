@@ -25,6 +25,8 @@ class HistopathologyInferenceService:
         checkpoint_ref = os.getenv("HISTO_CONCH_CHECKPOINT_REF", "hf_hub:MahmoodLab/conch")
         hf_token = os.getenv("HF_TOKEN") or os.getenv("HISTO_HF_TOKEN")
         classifier_path = os.getenv("HISTO_CLASSIFIER_CHECKPOINT")
+        self.checkpoint_ref = checkpoint_ref
+        self.classifier_path = classifier_path
 
         if not classifier_path:
             raise ModelUnavailableError("HISTO_CLASSIFIER_CHECKPOINT is not configured")
@@ -42,7 +44,11 @@ class HistopathologyInferenceService:
 
         checkpoint = torch.load(classifier_path, map_location=self.device)
         feature_dim = int(checkpoint["feature_dim"])
+        self.feature_dim = feature_dim
         self.labels = checkpoint.get("labels", DEFAULT_LABELS)
+        self.training_mode = checkpoint.get("training_mode", "unknown")
+        self.validation = checkpoint.get("validation")
+        self.created_at = checkpoint.get("created_at")
         self.head = BinaryClassifierHead(feature_dim).to(self.device)
         self.head.load_state_dict(checkpoint["state_dict"])
         self.head.eval()
@@ -71,4 +77,3 @@ class HistopathologyInferenceService:
 @lru_cache(maxsize=1)
 def get_inference_service() -> HistopathologyInferenceService:
     return HistopathologyInferenceService()
-

@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -25,12 +25,14 @@ class HistopathologyPrediction(BaseModel):
 
 
 class HistopathologyAnalyzeResponse(BaseModel):
+    trace_id: str
+    analyzed_at: str
     image_id: int
     roi_1: ROIBox
     roi_2: ROIBox
     prediction: HistopathologyPrediction
-    patch_size: Dict[str, int]
-    model: Dict[str, str]
+    patch_size: Dict[str, Any]
+    patch_metadata: Dict[str, Any]
+    model: Dict[str, Any]
     warning: str
     slide_dimensions: Optional[Dict[str, int]] = None
-

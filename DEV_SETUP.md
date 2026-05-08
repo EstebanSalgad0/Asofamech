@@ -65,6 +65,11 @@ OLLAMA_URL=http://localhost:11434
 LLM_MODEL=llama3:8b
 ```
 
+### Histopatologia IA opcional
+
+El flujo CONCH + PCam + cabeza binaria esta documentado en
+[`backend/HISTOPATHOLOGY_AI.md`](backend/HISTOPATHOLOGY_AI.md).
+
 ## ✅ Ventajas del Desarrollo Local
 
 - ✅ Hot reload automático en frontend (cambios instantáneos)

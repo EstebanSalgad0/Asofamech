@@ -1,9 +1,11 @@
 # Optional dependencies for the histopathology AI module.
 # Install these only in environments that will train/evaluate/run the CONCH classifier.
+# Recommended runtime: Python 3.10, 3.11, or 3.12.
 torch
 torchvision
 h5py
+gdown
 scikit-learn
 numpy
+Pillow
 git+https://github.com/Mahmoodlab/CONCH.git
-

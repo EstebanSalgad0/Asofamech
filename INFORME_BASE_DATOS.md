@@ -788,4 +788,3 @@ SCT
         v
 Tests SCT persistidos
 ```
-

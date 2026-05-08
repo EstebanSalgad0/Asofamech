@@ -58,18 +58,46 @@ export function ImagesPage() {
     });
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setSelectedImage({
-          url: event.target.result,
-          title: file.name,
-          isLocal: true
-        });
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("title", file.name.replace(/\.[^.]+$/, ""));
+    formData.append("description", "Imagen de prueba cargada desde el visor");
+    formData.append("pathology_type", "Histopatologia");
+
+    try {
+      setLoading(true);
+      const response = await fetch("http://localhost:8001/api/medical-images/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail || `Error HTTP ${response.status}`);
+      }
+
+      const uploaded = await response.json();
+      await loadImageLibrary();
+      setSelectedImage({
+        id: uploaded.id,
+        filename: uploaded.filename,
+        title: uploaded.title,
+        file_type: uploaded.file_type,
+        file_size: uploaded.file_size,
+        has_dzi: uploaded.has_dzi,
+        pathology_type: "Histopatologia",
+        url: `http://localhost:8001/api/medical-images/view/${uploaded.id}`,
+      });
+    } catch (error) {
+      console.error("Error subiendo imagen:", error);
+      alert(`No se pudo subir la imagen: ${error.message}`);
+    } finally {
+      setLoading(false);
+      e.target.value = "";
     }
   };
 
