@@ -10,6 +10,7 @@ class QualityThresholds:
     max_white_fraction: float = 0.45
     min_tissue_fraction: float = 0.40
     min_nuclear_fraction: float = 0.035
+    max_dominant_stroma_fraction: float = 0.55
     max_stroma_fraction_when_low_nuclear: float = 0.65
     low_nuclear_for_stroma_fraction: float = 0.12
 
@@ -30,6 +31,9 @@ def get_quality_thresholds() -> QualityThresholds:
         max_white_fraction=_float_env("HISTO_QC_MAX_WHITE_FRACTION", 0.45),
         min_tissue_fraction=_float_env("HISTO_QC_MIN_TISSUE_FRACTION", 0.40),
         min_nuclear_fraction=_float_env("HISTO_QC_MIN_NUCLEAR_FRACTION", 0.035),
+        max_dominant_stroma_fraction=_float_env(
+            "HISTO_QC_MAX_DOMINANT_STROMA_FRACTION", 0.55
+        ),
         max_stroma_fraction_when_low_nuclear=_float_env(
             "HISTO_QC_MAX_STROMA_FRACTION_WHEN_LOW_NUCLEAR", 0.65
         ),
@@ -109,6 +113,9 @@ def evaluate_roi_quality(
         "white_fraction_ok": white_fraction <= thresholds.max_white_fraction,
         "tissue_fraction_ok": tissue_fraction >= thresholds.min_tissue_fraction,
         "nuclear_fraction_ok": nuclear_fraction >= thresholds.min_nuclear_fraction,
+        "dominant_stroma_fraction_ok": (
+            stroma_fraction <= thresholds.max_dominant_stroma_fraction
+        ),
         "stroma_fraction_ok": not (
             stroma_fraction > thresholds.max_stroma_fraction_when_low_nuclear
             and nuclear_fraction < thresholds.low_nuclear_for_stroma_fraction
@@ -122,6 +129,8 @@ def evaluate_roi_quality(
         reasons.append("baja proporcion de tejido util")
     if not checks["nuclear_fraction_ok"]:
         reasons.append("baja densidad celular/nuclear")
+    if not checks["dominant_stroma_fraction_ok"]:
+        reasons.append("predominio de estroma")
     if not checks["stroma_fraction_ok"]:
         reasons.append("predominio de estroma con baja celularidad")
 
@@ -153,6 +162,7 @@ def evaluate_roi_quality(
             "max_white_fraction": thresholds.max_white_fraction,
             "min_tissue_fraction": thresholds.min_tissue_fraction,
             "min_nuclear_fraction": thresholds.min_nuclear_fraction,
+            "max_dominant_stroma_fraction": thresholds.max_dominant_stroma_fraction,
             "max_stroma_fraction_when_low_nuclear": thresholds.max_stroma_fraction_when_low_nuclear,
             "low_nuclear_for_stroma_fraction": thresholds.low_nuclear_for_stroma_fraction,
         },

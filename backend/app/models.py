@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, DateTime, Boolean, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .db import Base
@@ -23,7 +23,7 @@ class MedicalImage(Base):
     description = Column(Text, nullable=True)
     pathology_type = Column(String(200), nullable=True)  # Necrosis, Células de Langerhans, etc.
     file_type = Column(String(20), nullable=False)  # svs, jpg, png, etc.
-    file_size = Column(Integer, nullable=True)  # tamaño en bytes
+    file_size = Column(BigInteger, nullable=True)  # tamaño en bytes
     file_path = Column(String(500), nullable=False)
     dzi_path = Column(String(500), nullable=True)  # ruta al DZI si fue procesado
     uploaded_by = Column(Integer, ForeignKey("users.id"))

@@ -19,3 +19,16 @@ class BinaryClassifierHead(nn.Module if nn is not None else object):
     def forward(self, features):
         return self.classifier(features)
 
+
+class TriClassifierHead(nn.Module if nn is not None else object):
+    """3-class linear probe over frozen CONCH embeddings."""
+
+    def __init__(self, feature_dim: int):
+        if nn is None:
+            raise RuntimeError("PyTorch is required to instantiate TriClassifierHead")
+
+        super().__init__()
+        self.classifier = nn.Linear(feature_dim, 3)
+
+    def forward(self, features):
+        return self.classifier(features)

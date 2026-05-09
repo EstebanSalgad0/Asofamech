@@ -29,6 +29,7 @@ class HistopathologyROIQualityTestCase(unittest.TestCase):
             max_white_fraction=0.60,
             min_tissue_fraction=0.30,
             min_nuclear_fraction=0.035,
+            max_dominant_stroma_fraction=0.55,
             max_stroma_fraction_when_low_nuclear=0.65,
             low_nuclear_for_stroma_fraction=0.08,
         )
@@ -39,6 +40,29 @@ class HistopathologyROIQualityTestCase(unittest.TestCase):
         self.assertFalse(quality["checks"]["nuclear_fraction_ok"])
         self.assertFalse(quality["checks"]["stroma_fraction_ok"])
         self.assertIn("estroma", quality["reason"])
+
+    def test_rejects_stroma_dominant_patch_even_with_cellularity(self):
+        patch = Image.new("RGB", (100, 100), (221, 155, 179))
+        pixels = patch.load()
+        for x in range(30):
+            for y in range(100):
+                pixels[x, y] = (92, 54, 128)
+
+        thresholds = QualityThresholds(
+            max_white_fraction=0.60,
+            min_tissue_fraction=0.30,
+            min_nuclear_fraction=0.035,
+            max_dominant_stroma_fraction=0.55,
+            max_stroma_fraction_when_low_nuclear=0.90,
+            low_nuclear_for_stroma_fraction=0.08,
+        )
+
+        quality = evaluate_roi_quality(patch, thresholds=thresholds)
+
+        self.assertFalse(quality["is_evaluable"])
+        self.assertTrue(quality["checks"]["nuclear_fraction_ok"])
+        self.assertFalse(quality["checks"]["dominant_stroma_fraction_ok"])
+        self.assertIn("predominio de estroma", quality["reason"])
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ services:
       - DATABASE_URL=postgresql://app_user:app_pass@db:5432/app_db
       - OLLAMA_URL=http://ollama:11434
       - LLM_MODEL=llama3:8b
-      - HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology-pcam-cuda/checkpoints/binary_head_pcam.pt
+      - HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage6_expanded_stroma.pt
       - HISTO_CONCH_CHECKPOINT_REF=hf_hub:MahmoodLab/conch
       - HISTO_AUDIT_LOG_PATH=/app/artifacts/histopathology/audit_log.jsonl
       - HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD=${HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD:-0.90}
@@ -30,6 +30,7 @@ services:
       - HISTO_QC_MAX_WHITE_FRACTION=${HISTO_QC_MAX_WHITE_FRACTION:-0.45}
       - HISTO_QC_MIN_TISSUE_FRACTION=${HISTO_QC_MIN_TISSUE_FRACTION:-0.40}
       - HISTO_QC_MIN_NUCLEAR_FRACTION=${HISTO_QC_MIN_NUCLEAR_FRACTION:-0.035}
+      - HISTO_QC_MAX_DOMINANT_STROMA_FRACTION=${HISTO_QC_MAX_DOMINANT_STROMA_FRACTION:-0.55}
       - HISTO_QC_MAX_STROMA_FRACTION_WHEN_LOW_NUCLEAR=${HISTO_QC_MAX_STROMA_FRACTION_WHEN_LOW_NUCLEAR:-0.65}
       - HISTO_QC_LOW_NUCLEAR_FOR_STROMA_FRACTION=${HISTO_QC_LOW_NUCLEAR_FOR_STROMA_FRACTION:-0.12}
       - HISTO_HF_TOKEN=${HISTO_HF_TOKEN:-}
@@ -44,6 +45,7 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/artifacts:/app/artifacts
+      - ./backend/data:/app/data
       - ./backend/uploads:/app/uploads
       - huggingface_cache:/root/.cache/huggingface
     deploy:

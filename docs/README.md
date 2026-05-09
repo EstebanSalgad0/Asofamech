@@ -90,6 +90,7 @@ asofamech/
 │   │   └── styles.css   # Estilos globales
 │   └── Dockerfile
 │
+├── docs/                 # Documentación del proyecto
 ├── uploads/              # Archivos subidos y tiles generados
 └── docker-compose.yml    # Orquestación servicios
 ```
