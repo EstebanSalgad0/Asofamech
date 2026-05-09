@@ -41,6 +41,17 @@ function formatPercent(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function formatClassName(value) {
+  const labels = {
+    no_metastasico: 'No metastasico',
+    metastasico: 'Metastasico',
+    estroma: 'Estroma',
+    roi_no_evaluable: 'ROI no evaluable',
+    incierto: 'Incierto',
+  };
+  return labels[value] || value || 'N/D';
+}
+
 function describeApiError(payload, fallback) {
   if (!payload) return fallback;
   if (typeof payload.detail === 'string') return payload.detail;
@@ -283,6 +294,10 @@ export function OpenSeadragonViewer({ imageData }) {
     ? prediction.confidence
     : prediction?.prediction?.confidence;
   const resultProbabilities = prediction?.probabilities || prediction?.prediction?.probabilities || {};
+  const resultProbabilityEntries = Object.entries(resultProbabilities)
+    .filter(([, value]) => typeof value === 'number')
+    .sort(([, a], [, b]) => b - a);
+  const modelPredictedClass = prediction?.prediction?.model_predicted_class;
   const resultMetrics = prediction?.roi_quality?.metrics;
   const resultIsWarning = resultStatus === 'roi_no_evaluable' || resultStatus === 'resultado_incierto';
   const resultPalette = resultIsWarning
@@ -434,10 +449,13 @@ export function OpenSeadragonViewer({ imageData }) {
             left: 12,
             zIndex: 20,
             width: 310,
+            maxHeight: 'calc(100% - 24px)',
             display: 'flex',
             flexDirection: 'column',
             gap: 10,
             color: '#e2e8f0',
+            overflowY: 'auto',
+            paddingRight: 4,
           }}>
             <div style={{
               background: 'rgba(15, 23, 42, 0.88)',
@@ -514,6 +532,9 @@ export function OpenSeadragonViewer({ imageData }) {
                   {modelStatus.feature_dim && (
                     <div style={{ color: '#cbd5e1' }}>Embedding: {modelStatus.feature_dim} dimensiones</div>
                   )}
+                  {modelStatus.num_classes && (
+                    <div style={{ color: '#cbd5e1' }}>Clases: {modelStatus.num_classes} ({modelStatus.classifier_kind || 'N/D'})</div>
+                  )}
                   {typeof modelStatus.confidence_threshold === 'number' && (
                     <div style={{ color: '#cbd5e1' }}>Umbral: {formatPercent(modelStatus.confidence_threshold)}</div>
                   )}
@@ -531,7 +552,7 @@ export function OpenSeadragonViewer({ imageData }) {
                 borderRadius: 10,
                 padding: 8,
               }}>
-                Modulo educativo no diagnostico. La prediccion se limita a PCam: metastasico vs no metastasico.
+                Modulo educativo no diagnostico. El modelo clasifica ROI como no metastasico, metastasico o estroma/no evaluable.
               </div>
             </div>
 
@@ -590,20 +611,25 @@ export function OpenSeadragonViewer({ imageData }) {
                 backdropFilter: 'blur(8px)',
                 fontSize: 12,
                 lineHeight: 1.5,
+                overflowWrap: 'anywhere',
               }}>
                 <div style={{ fontWeight: 800, color: resultPalette.heading, marginBottom: 6 }}>Resultado educativo</div>
                 <div style={{ color: resultPalette.subtle, marginBottom: 6 }}>Trace: {prediction.trace_id}</div>
                 <div style={{ color: resultPalette.text }}>Estado: <strong>{resultStatus}</strong></div>
-                <div style={{ color: resultPalette.text }}>Clase: <strong>{resultClass}</strong></div>
-                <div style={{ color: resultPalette.text }}>Confianza: {formatPercent(resultConfidence)}</div>
-                {typeof resultProbabilities.no_metastasico === 'number' && (
-                  <div style={{ marginTop: 6, color: resultPalette.subtle }}>
-                    No metastasico: {formatPercent(resultProbabilities.no_metastasico)}
+                <div style={{ color: resultPalette.text }}>Clase: <strong>{formatClassName(resultClass)}</strong></div>
+                {modelPredictedClass && modelPredictedClass !== resultClass && (
+                  <div style={{ color: resultPalette.subtle }}>
+                    Clase del modelo: <strong>{formatClassName(modelPredictedClass)}</strong>
                   </div>
                 )}
-                {typeof resultProbabilities.metastasico === 'number' && (
-                  <div style={{ color: resultPalette.subtle }}>
-                    Metastasico: {formatPercent(resultProbabilities.metastasico)}
+                <div style={{ color: resultPalette.text }}>Confianza: {formatPercent(resultConfidence)}</div>
+                {resultProbabilityEntries.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    {resultProbabilityEntries.map(([label, value]) => (
+                      <div key={label} style={{ color: resultPalette.subtle }}>
+                        {formatClassName(label)}: {formatPercent(value)}
+                      </div>
+                    ))}
                   </div>
                 )}
                 {prediction.reason && (
@@ -633,7 +659,7 @@ export function OpenSeadragonViewer({ imageData }) {
                   </div>
                 )}
                 <div style={{ marginTop: 8, color: resultPalette.heading }}>
-                  {prediction.warning || 'No diagnostico. Tarea binaria PCam sobre ROI 2.'}
+                  {prediction.warning || 'No diagnostico. Clasificacion educativa sobre ROI 2.'}
                 </div>
               </div>
             )}

@@ -13,7 +13,7 @@ herramienta diagnostica.
 
 ## Estado actual
 
-Ya existe una primera version funcional:
+Ya existe una version funcional ampliada:
 
 - visor con ROI 1 y ROI 2;
 - validacion geometrica de ROIs;
@@ -21,23 +21,40 @@ Ya existe una primera version funcional:
 - endpoint `/api/histopathology/status`;
 - endpoint `/api/histopathology/analyze-roi`;
 - CONCH como extractor congelado de embeddings;
-- cabeza binaria entrenada con PCam;
+- cabeza 3-class entrenada con CAMELYON17 local ampliado;
+- clases `no_metastasico`, `metastasico` y `estroma`;
 - checkpoint configurado en backend y Docker;
 - inferencia CUDA;
 - trazabilidad con `trace_id`;
 - auditoria JSONL;
 - guardado de patches debug por `trace_id`;
-- control basico de calidad de ROI;
+- control de calidad de ROI con compuerta de stroma dominante;
 - salida `clasificado`, `resultado_incierto` o `roi_no_evaluable`;
-- UI que muestra estado del modelo, umbral, probabilidades, QC y advertencia educativa.
+- UI que muestra estado del modelo, umbral, probabilidades, QC y advertencia educativa;
+- importacion local de laminas CAMELYON17 ya descargadas en servidor;
+- DZI dinamico para WSI `.tif/.svs` grandes sin subir varios GB por navegador.
 
 Limitacion principal actual:
 
 ```text
-CONCH + cabeza PCam funciona como clasificador binario de patch, pero aun no es
-un sistema robusto de lamina completa. Puede fallar en regiones fuera del dominio
-PCam: estroma, adiposo, fondo, fibrosis, inflamacion, artefactos o tejido
-linfoide no representativo.
+CONCH + cabeza 3-class Stage 6 funciona como clasificador educativo de ROI y ya
+detecta metastasis en regiones tumorales anotadas de CAMELYON17, pero aun no es
+un sistema robusto de lamina completa. Puede fallar en regiones mixtas, stroma,
+fibrosis, inflamacion, artefactos o tejido linfoide no representativo.
+```
+
+Resultado practico mas reciente:
+
+```text
+Stage 6 3-class CAMELYON17 ampliado:
+accuracy test=0.836
+macro F1=0.827
+ROC-AUC tumor OVR=0.942
+stroma->tumor=11/50 = 22%
+
+Validacion visual controlada:
+patient_017_node_2.tif, ROI dentro de XML tumoral oficial
+P(metastasico)=99.8%
 ```
 
 ## Objetivo general

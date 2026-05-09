@@ -8,4 +8,5 @@ gdown
 scikit-learn
 numpy
 Pillow
+openslide-bin; platform_system == "Windows"
 git+https://github.com/Mahmoodlab/CONCH.git

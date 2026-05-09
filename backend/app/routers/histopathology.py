@@ -21,8 +21,8 @@ from .medical_images import get_current_user
 router = APIRouter(prefix="/api/histopathology", tags=["histopathology"])
 
 EDUCATIONAL_WARNING = (
-    "Modulo educativo no diagnostico. La prediccion esta limitada a la tarea binaria "
-    "PCam: metastasico vs no metastasico en patches de ganglio linfatico."
+    "Modulo educativo no diagnostico. La prediccion esta limitada a patches de "
+    "ganglio linfatico tipo CAMELYON/PCam y puede abstenerse ante estroma."
 )
 
 
@@ -58,14 +58,16 @@ async def histopathology_status():
         checkpoint_configured = bool(checkpoint_path)
         return {
             "model_ready": True,
-            "task": "binary_pcam_metastatic_vs_non_metastatic",
+            "task": "camelyon_patch_classification_with_stroma_abstention",
             "backbone": "CONCH frozen",
-            "classifier": "binary linear head over CONCH embeddings",
+            "classifier": f"{inference_service.num_classes}-class linear head over CONCH embeddings",
             "checkpoint_configured": checkpoint_configured,
             "classifier_checkpoint": checkpoint_path,
             "checkpoint_ref": inference_service.checkpoint_ref,
             "device": inference_service.device,
             "feature_dim": inference_service.feature_dim,
+            "num_classes": inference_service.num_classes,
+            "classifier_kind": inference_service.classifier_kind,
             "labels": inference_service.labels,
             "class_mapping": inference_service.class_mapping,
             "confidence_threshold": inference_service.confidence_threshold,
@@ -229,13 +231,15 @@ async def analyze_roi2(
         "debug_artifacts": debug_artifacts,
     }
     model_metadata = {
-        "task": "binary_pcam_metastatic_vs_non_metastatic",
+        "task": "camelyon_patch_classification_with_stroma_abstention",
         "backbone": "CONCH frozen",
-        "classifier": "binary linear head over CONCH embeddings",
+        "classifier": f"{inference_service.num_classes}-class linear head over CONCH embeddings",
         "checkpoint_ref": inference_service.checkpoint_ref,
         "classifier_checkpoint": inference_service.classifier_path,
         "device": inference_service.device,
         "feature_dim": inference_service.feature_dim,
+        "num_classes": inference_service.num_classes,
+        "classifier_kind": inference_service.classifier_kind,
         "labels": inference_service.labels,
         "class_mapping": inference_service.class_mapping,
         "confidence_threshold": inference_service.confidence_threshold,
@@ -314,7 +318,24 @@ async def analyze_roi2(
     recommendation = None
     prediction = raw_prediction
 
-    if raw_prediction["confidence"] < inference_service.confidence_threshold:
+    if raw_prediction["predicted_class"] == "estroma":
+        status = "roi_no_evaluable"
+        predicted_class = "roi_no_evaluable"
+        reason = (
+            "ROI no evaluable: el clasificador 3-class detecto predominio de "
+            "patron estromal."
+        )
+        recommendation = (
+            "Seleccione otra ROI con mayor celularidad tumoral o registre esta "
+            "region como estroma/no evaluable."
+        )
+        prediction = {
+            **raw_prediction,
+            "predicted_class": "roi_no_evaluable",
+            "model_predicted_class": raw_prediction["predicted_class"],
+        }
+
+    if status == "clasificado" and raw_prediction["confidence"] < inference_service.confidence_threshold:
         status = "resultado_incierto"
         predicted_class = "incierto"
         reason = (

@@ -13,6 +13,10 @@ export function ConfigPage() {
   const [imageLibrary, setImageLibrary] = useState([]);
   const [loadingImages, setLoadingImages] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [localCamelyonSlides, setLocalCamelyonSlides] = useState([]);
+  const [selectedCamelyonSlide, setSelectedCamelyonSlide] = useState("");
+  const [loadingCamelyonSlides, setLoadingCamelyonSlides] = useState(false);
+  const [importingCamelyonSlide, setImportingCamelyonSlide] = useState(false);
 
   const [sctTests, setSctTests] = useState([]);
   const [loadingSCT, setLoadingSCT] = useState(true);
@@ -40,6 +44,7 @@ export function ConfigPage() {
 
   useEffect(() => {
     loadImageLibrary();
+    loadLocalCamelyonSlides();
     loadSCTTestList();
   }, []);
 
@@ -63,6 +68,50 @@ export function ConfigPage() {
     } catch (error) {
       console.error("Error eliminando imagen:", error);
       showToast("Error al eliminar la imagen", "error");
+    }
+  };
+
+  const loadLocalCamelyonSlides = async () => {
+    try {
+      setLoadingCamelyonSlides(true);
+      const response = await fetch("http://localhost:8001/api/medical-images/local/camelyon17");
+      if (response.ok) {
+        const slides = await response.json();
+        setLocalCamelyonSlides(slides || []);
+        const firstAvailable = (slides || []).find((slide) => !slide.imported) || slides?.[0];
+        if (firstAvailable) setSelectedCamelyonSlide(firstAvailable.filename);
+      }
+    } catch (error) {
+      console.error("Error cargando laminas CAMELYON17:", error);
+    } finally {
+      setLoadingCamelyonSlides(false);
+    }
+  };
+
+  const handleImportCamelyonSlide = async () => {
+    if (!selectedCamelyonSlide) return;
+    setImportingCamelyonSlide(true);
+    try {
+      const form = new FormData();
+      form.append("filename", selectedCamelyonSlide);
+      form.append("title", selectedCamelyonSlide.replace(/\.[^.]+$/, ""));
+      form.append("pathology_type", "CAMELYON17");
+
+      const response = await fetch("http://localhost:8001/api/medical-images/import-local/camelyon17", {
+        method: "POST",
+        body: form,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.detail || "No se pudo importar la lamina local");
+      }
+      showToast(payload?.message || "Lamina CAMELYON17 importada", "success");
+      await loadImageLibrary();
+      await loadLocalCamelyonSlides();
+    } catch (error) {
+      showToast(error.message, "error", 7000);
+    } finally {
+      setImportingCamelyonSlide(false);
     }
   };
 
@@ -135,7 +184,8 @@ export function ConfigPage() {
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
   };
 
   if (!user) return null;
@@ -215,6 +265,39 @@ export function ConfigPage() {
                     {formatFileSize(imageLibrary.reduce((acc, i) => acc + (i.file_size || 0), 0))}
                   </div>
                   <div className="cfg-stat-lbl">Espacio usado</div>
+                </div>
+              </div>
+
+              <div className="cfg-import-local">
+                <div>
+                  <div className="cfg-import-title">Importar CAMELYON17 local</div>
+                  <div className="cfg-import-desc">
+                    Registra una lamina ya descargada en el servidor sin subir varios GB por navegador.
+                  </div>
+                </div>
+                <div className="cfg-import-controls">
+                  <select
+                    className="cfg-modal-input"
+                    value={selectedCamelyonSlide}
+                    onChange={(event) => setSelectedCamelyonSlide(event.target.value)}
+                    disabled={loadingCamelyonSlides || importingCamelyonSlide || localCamelyonSlides.length === 0}
+                  >
+                    {localCamelyonSlides.length === 0 && (
+                      <option value="">Sin laminas locales</option>
+                    )}
+                    {localCamelyonSlides.map((slide) => (
+                      <option key={slide.filename} value={slide.filename}>
+                        {slide.filename} - {formatFileSize(slide.file_size)}{slide.imported ? " - importada" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="cfg-action-btn"
+                    onClick={handleImportCamelyonSlide}
+                    disabled={!selectedCamelyonSlide || importingCamelyonSlide}
+                  >
+                    {importingCamelyonSlide ? "Importando..." : "Importar"}
+                  </button>
                 </div>
               </div>
 
@@ -471,8 +554,11 @@ function UploadModal({ onClose, onSuccess, onError }) {
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
   };
+
+  const isLargeWsi = file && /\.(svs|tif|tiff)$/i.test(file.name) && file.size > 500 * 1024 * 1024;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -494,8 +580,18 @@ function UploadModal({ onClose, onSuccess, onError }) {
     });
     xhr.addEventListener("load", () => {
       if (xhr.status >= 200 && xhr.status < 300) {
+        const payload = JSON.parse(xhr.responseText || "{}");
+        if (!payload.has_dzi) {
+          setUploadPhase("error");
+          onError(
+            `"${formData.title}" se guardo, pero el visor DZI no quedo listo. ` +
+            "No la marques como cargada para histopatologia hasta revisar el servidor."
+          );
+          setUploading(false);
+          return;
+        }
         setUploadPhase("done");
-        setTimeout(() => onSuccess(`"${formData.title}" subida exitosamente (${formatFileSize(file.size)})`), 800);
+        setTimeout(() => onSuccess(`"${formData.title}" subida y lista para visor DZI (${formatFileSize(file.size)})`), 800);
       } else {
         setUploadPhase("error");
         try { const err = JSON.parse(xhr.responseText); onError(err.detail || "Error al subir la imagen"); }
@@ -525,6 +621,8 @@ function UploadModal({ onClose, onSuccess, onError }) {
           <div className="cfg-modal-field">
             <label className="cfg-modal-label">Archivo *</label>
             <input type="file" accept="image/*,.svs" onChange={(e) => setFile(e.target.files[0])} required disabled={uploading} className="cfg-file-input" />
+            {file && (<div className="cfg-field-hint">La barra al 100% solo confirma que el archivo termino de enviarse. Espera hasta que el servidor confirme visor DZI listo.</div>)}
+            {isLargeWsi && (<div className="cfg-field-hint cfg-upload-warning">Archivo WSI pesado: puede tardar varios minutos. SVS/TIF/TIFF se preparan con DZI dinamico.</div>)}
             {file && <div className="cfg-file-selected">📄 {file.name} — {formatFileSize(file.size)}</div>}
             <div className="cfg-field-hint">SVS requiere OpenSlide instalado en el servidor</div>
           </div>
@@ -546,19 +644,18 @@ function UploadModal({ onClose, onSuccess, onError }) {
               <div className="cfg-upload-progress-header">
                 <span>
                   {uploadPhase === "uploading" && "Subiendo archivo…"}
-                  {uploadPhase === "processing" && "Procesando en servidor…"}
+                  {uploadPhase === "processing" && "Archivo recibido; preparando visor DZI..."}
                   {uploadPhase === "done" && "✓ Completado"}
                   {uploadPhase === "error" && "✕ Error"}
                 </span>
-                <span className="cfg-upload-pct">{uploadPhase === "uploading" ? `${uploadProgress}%` : "100%"}</span>
+                <span className="cfg-upload-pct">{uploadPhase === "uploading" ? `${uploadProgress}%` : uploadPhase === "processing" ? "procesando" : "100%"}</span>
               </div>
               <div className="v2-progress-track" style={{ marginBottom: 0 }}>
                 <div className="v2-progress-fill" style={{ width: `${uploadPhase === "uploading" ? uploadProgress : 100}%`, background: uploadPhase === "done" ? "var(--accent)" : undefined }} />
               </div>
               {uploadPhase === "processing" && (
                 <div className="cfg-field-hint" style={{ marginTop: '8px' }}>
-                  Generando tiles DZI si el archivo es SVS…
-                </div>
+                  No cierres esta ventana. Para laminas WSI grandes, el backend prepara el manifiesto DZI y habilita tiles bajo demanda.</div>
               )}
             </div>
           )}
@@ -729,3 +826,5 @@ function SCTGenerateModal({ onClose, onSuccess, onError }) {
     </div>
   );
 }
+
+

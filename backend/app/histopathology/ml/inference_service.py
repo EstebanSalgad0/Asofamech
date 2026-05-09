@@ -2,13 +2,19 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from .classifier_head import BinaryClassifierHead
+from .classifier_head import BinaryClassifierHead, TriClassifierHead
 from .conch_feature_extractor import ConchConfig, ConchFeatureExtractor, ModelUnavailableError
 
 
 DEFAULT_LABELS = {
     "0": "no_metastasico",
     "1": "metastasico",
+}
+
+DEFAULT_TRI_LABELS = {
+    "0": "no_metastasico",
+    "1": "metastasico",
+    "2": "estroma",
 }
 
 
@@ -60,18 +66,34 @@ class HistopathologyInferenceService:
         checkpoint = torch.load(classifier_path, map_location=self.device)
         feature_dim = int(checkpoint["feature_dim"])
         self.feature_dim = feature_dim
-        checkpoint_labels = checkpoint.get("labels", DEFAULT_LABELS)
-        self.labels = {**DEFAULT_LABELS, **{str(key): str(value) for key, value in checkpoint_labels.items()}}
+        state_dict = checkpoint["state_dict"]
+        self.num_classes = int(
+            checkpoint.get("num_classes")
+            or state_dict["classifier.weight"].shape[0]
+        )
+        self.classifier_kind = "tri" if self.num_classes == 3 else "binary"
+        default_labels = DEFAULT_TRI_LABELS if self.num_classes == 3 else DEFAULT_LABELS
+        checkpoint_labels = checkpoint.get("labels") or checkpoint.get("class_names") or {}
+        self.labels = {
+            **default_labels,
+            **{str(key): str(value) for key, value in checkpoint_labels.items()},
+        }
         self.class_mapping = {
-            "0": self.labels["0"],
-            "1": self.labels["1"],
+            str(index): self.labels[str(index)] for index in range(self.num_classes)
         }
         self.confidence_threshold = _float_env("HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD", 0.90)
         self.training_mode = checkpoint.get("training_mode", "unknown")
         self.validation = checkpoint.get("validation")
         self.created_at = checkpoint.get("created_at")
-        self.head = BinaryClassifierHead(feature_dim).to(self.device)
-        self.head.load_state_dict(checkpoint["state_dict"])
+        if self.num_classes == 2:
+            self.head = BinaryClassifierHead(feature_dim).to(self.device)
+        elif self.num_classes == 3:
+            self.head = TriClassifierHead(feature_dim).to(self.device)
+        else:
+            raise ModelUnavailableError(
+                f"Unsupported classifier class count: {self.num_classes}"
+            )
+        self.head.load_state_dict(state_dict)
         self.head.eval()
 
     def preprocess_debug_image(self, patch_rgb):
@@ -97,10 +119,12 @@ class HistopathologyInferenceService:
             "model_predicted_class": predicted_class,
             "confidence": confidence,
             "probabilities": {
-                self.labels["0"]: float(probabilities[0].item()),
-                self.labels["1"]: float(probabilities[1].item()),
+                self.labels[str(index)]: float(probabilities[index].item())
+                for index in range(self.num_classes)
             },
             "class_mapping": self.class_mapping,
+            "num_classes": self.num_classes,
+            "classifier_kind": self.classifier_kind,
             "decision_threshold": self.confidence_threshold,
         }
 
