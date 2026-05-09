@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { generateSCT, saveSCTTest, listSCTTests, getSCTTest } from "../api";
 import { startSession, flushSession, trackTestCompleted, pushActivity } from "../tracker";
+import { AppSidebar } from "../components/AppSidebar";
 
 export function SCTPage() {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ export function SCTPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTest, setCurrentTest] = useState(null);
-  const [viewMode, setViewMode] = useState('config'); // 'config', 'test' o 'results'
+  const [viewMode, setViewMode] = useState('config');
   const [answers, setAnswers] = useState({});
   const [testResults, setTestResults] = useState(null);
 
@@ -27,14 +28,8 @@ export function SCTPage() {
       const savedRole = localStorage.getItem("role");
       if (savedRole) setRole(savedRole);
     }
-    
-    // Start session timer
     startSession();
-
-    // Cargar tests guardados
     loadSavedTests();
-
-    // Flush session time on unload
     const handleUnload = () => flushSession();
     window.addEventListener("beforeunload", handleUnload);
     return () => {
@@ -58,38 +53,22 @@ export function SCTPage() {
       alert("Por favor ingresa un enfoque médico para generar el test");
       return;
     }
-
     setIsGenerating(true);
     setProgress(0);
-    
     try {
-      // Simular progreso mientras se genera
       const progressInterval = setInterval(() => {
         setProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
+          if (prev >= 90) { clearInterval(progressInterval); return 90; }
           return prev + 15;
         });
       }, 800);
-
-      // Llamar a la API real para generar el test
-      const response = await generateSCT(
-        parseInt(numItems), 
-        difficulty.toLowerCase(), 
-        medicalFocus
-      );
-
+      const response = await generateSCT(parseInt(numItems), difficulty.toLowerCase(), medicalFocus);
       clearInterval(progressInterval);
       setProgress(100);
-
       setTimeout(() => {
         setIsGenerating(false);
         setProgress(0);
-        
         if (response && response.items && response.items.length > 0) {
-          // Convertir el formato de la API al formato del componente
           const formattedTest = {
             id: Date.now(),
             title: `Test SCT - ${medicalFocus}`,
@@ -106,7 +85,6 @@ export function SCTPage() {
             focus: medicalFocus,
             date: new Date().toLocaleDateString('es-ES')
           };
-          
           setCurrentTest(formattedTest);
           setViewMode('test');
           setAnswers({});
@@ -114,62 +92,35 @@ export function SCTPage() {
           alert("Error: No se pudieron generar los casos. Intenta nuevamente.");
         }
       }, 500);
-
     } catch (error) {
       console.error("Error generando test:", error);
       setIsGenerating(false);
       setProgress(0);
-      alert("Error al generar el test. Por favor verifica que el backend esté funcionando y que el modelo de IA esté disponible.");
+      alert("Error al generar el test. Por favor verifica que el backend esté funcionando.");
     }
   };
 
   const handleAnswer = (itemId, value) => {
-    setAnswers(prev => ({
-      ...prev,
-      [itemId]: value
-    }));
+    setAnswers(prev => ({ ...prev, [itemId]: value }));
   };
 
   const handleSubmitTest = () => {
     const answeredCount = Object.keys(answers).length;
     const totalItems = currentTest.items.length;
-    
     if (answeredCount < totalItems) {
-      alert(`Has respondido ${answeredCount} de ${totalItems} preguntas. Por favor completa todas antes de enviar.`);
+      alert(`Has respondido ${answeredCount} de ${totalItems} preguntas. Por favor completa todas.`);
       return;
     }
-    
-    // Calcular resultados
     let correctCount = 0;
     const results = currentTest.items.map(item => {
       const userAnswer = answers[item.id];
-      const isCorrect = Math.abs(userAnswer - (item.correctAnswer || 0)) <= 1; // Tolerancia de ±1
+      const isCorrect = Math.abs(userAnswer - (item.correctAnswer || 0)) <= 1;
       if (isCorrect) correctCount++;
-      
-      return {
-        itemId: item.id,
-        userAnswer: userAnswer,
-        correctAnswer: item.correctAnswer || 0,
-        isCorrect: isCorrect,
-        scenario: item.scenario,
-        hypothesis: item.hypothesis,
-        newInfo: item.newInfo,
-        explanation: item.explanation
-      };
+      return { itemId: item.id, userAnswer, correctAnswer: item.correctAnswer || 0, isCorrect, scenario: item.scenario, hypothesis: item.hypothesis, newInfo: item.newInfo, explanation: item.explanation };
     });
-
     const score = Math.round((correctCount / totalItems) * 100);
-    
-    setTestResults({
-      score: score,
-      correctCount: correctCount,
-      totalItems: totalItems,
-      results: results
-    });
-    
+    setTestResults({ score, correctCount, totalItems, results });
     setViewMode('results');
-
-    // Track test completion + activity
     const passed = score >= 60;
     trackTestCompleted(passed);
     pushActivity("sct", `${currentTest.title} — ${score}%`);
@@ -177,60 +128,27 @@ export function SCTPage() {
 
   const handleBackToConfig = () => {
     if (window.confirm('¿Estás seguro? Se perderá el progreso actual del test.')) {
-      setViewMode('config');
-      setCurrentTest(null);
-      setAnswers({});
-      setTestResults(null);
+      setViewMode('config'); setCurrentTest(null); setAnswers({}); setTestResults(null);
     }
   };
 
   const handleNewTest = () => {
-    setViewMode('config');
-    setCurrentTest(null);
-    setAnswers({});
-    setTestResults(null);
+    setViewMode('config'); setCurrentTest(null); setAnswers({}); setTestResults(null);
   };
 
   const handleSaveTest = async () => {
-    if (!currentTest) {
-      alert("No hay test para guardar");
-      return;
-    }
-
+    if (!currentTest) { alert("No hay test para guardar"); return; }
     const testName = prompt("Ingresa un nombre para este test:", `Test SCT - ${currentTest.focus}`);
-    
-    if (!testName) {
-      return; // Usuario canceló
-    }
-
+    if (!testName) return;
     try {
-      // Preparar los ítems en el formato que espera el backend
       const itemsToSave = currentTest.items.map(item => ({
-        id: item.id,
-        vignette: item.scenario,
-        hypothesis: item.hypothesis,
+        id: item.id, vignette: item.scenario, hypothesis: item.hypothesis,
         new_info: item.newInfo,
-        scale_options: [
-          "−2: Descarta completamente",
-          "−1: Menos probable",
-          "0: Sin cambio",
-          "+1: Más probable",
-          "+2: Apoya fuertemente"
-        ],
-        correct_answer: item.correctAnswer,
-        explanation: item.explanation
+        scale_options: ["−2: Descarta completamente", "−1: Menos probable", "0: Sin cambio", "+1: Más probable", "+2: Apoya fuertemente"],
+        correct_answer: item.correctAnswer, explanation: item.explanation
       }));
-
-      await saveSCTTest(
-        testName,
-        currentTest.difficulty.toLowerCase(),
-        currentTest.focus,
-        currentTest.items.length,
-        itemsToSave
-      );
-
+      await saveSCTTest(testName, currentTest.difficulty.toLowerCase(), currentTest.focus, currentTest.items.length, itemsToSave);
       alert("Test guardado exitosamente");
-      // Recargar la lista de tests guardados
       await loadSavedTests();
     } catch (error) {
       console.error("Error guardando test:", error);
@@ -241,470 +159,404 @@ export function SCTPage() {
   const handleLoadTest = async (testId) => {
     try {
       const testData = await getSCTTest(testId);
-      
       if (testData && testData.items && testData.items.length > 0) {
-        // Convertir el formato del backend al formato del componente
         const formattedTest = {
-          id: testData.id,
-          title: testData.name,
+          id: testData.id, title: testData.name,
           items: testData.items.map((item, index) => ({
             id: item.id || index + 1,
-            scenario: item.vignette || "",
-            hypothesis: item.hypothesis || "",
+            scenario: item.vignette || "", hypothesis: item.hypothesis || "",
             newInfo: item.new_info || "",
             question: "Si usted estaba pensando en esta hipótesis y encuentra esta nueva información, esta hipótesis se vuelve:",
-            correctAnswer: item.correct_answer || 0,
-            explanation: item.explanation || ""
+            correctAnswer: item.correct_answer || 0, explanation: item.explanation || ""
           })),
-          difficulty: testData.difficulty,
-          focus: testData.focus,
+          difficulty: testData.difficulty, focus: testData.focus,
           date: new Date(testData.created_at).toLocaleDateString('es-ES')
         };
-        
-        setCurrentTest(formattedTest);
-        setViewMode('test');
-        setAnswers({});
+        setCurrentTest(formattedTest); setViewMode('test'); setAnswers({});
       } else {
         alert("Error: No se pudo cargar el test.");
       }
     } catch (error) {
       console.error("Error cargando test:", error);
-      alert("Error al cargar el test. Por favor intenta nuevamente.");
+      alert("Error al cargar el test.");
     }
   };
 
   const handleLogout = () => {
+    flushSession();
     localStorage.removeItem("user");
     navigate("/");
   };
 
+  const handleRoleChange = (val) => {
+    setRole(val);
+    localStorage.setItem("role", val);
+  };
+
   if (!user) return null;
 
+  const answeredCount = Object.keys(answers).length;
+  const totalItems = currentTest?.items?.length || 0;
+  const progressPct = totalItems > 0 ? Math.round((answeredCount / totalItems) * 100) : 0;
+
   return (
-    <div className="dashboard-page">
-      {/* Sidebar */}
-      <aside className="dashboard-sidebar">
-        <div className="sidebar-logo">
-          <div className="logo-icon">A</div>
-          <span>ASOFAMECH</span>
-        </div>
-        
-        <nav className="sidebar-nav">
-          <Link to="/dashboard" className="nav-item">
-            <span className="nav-icon">🏠</span>
-            <span>Inicio</span>
-          </Link>
-          <Link to="/dashboard/chat" className="nav-item">
-            <span className="nav-icon">💬</span>
-            <span>Asistente IA</span>
-          </Link>
-          <Link to="/dashboard/sct" className="nav-item active">
-            <span className="nav-icon">📋</span>
-            <span>Test SCT</span>
-          </Link>
-          <Link to="/dashboard/images" className="nav-item">
-            <span className="nav-icon">🖼️</span>
-            <span>Imágenes IA</span>
-          </Link>
-          {(role === "Administrador" || role === "Profesor") && (
-            <Link to="/dashboard/config" className="nav-item">
-              <span className="nav-icon">⚙️</span>
-              <span>Configuración</span>
-            </Link>
-          )}
-        </nav>
-        
-        <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div className="user-avatar">
-              {user.name.charAt(0)}
-            </div>
-            <div className="user-info">
-              <div className="user-name">{user.name}</div>
-              <div className="user-role">{role}</div>
-            </div>
-          </div>
-          <select 
-            className="sidebar-role-selector"
-            value={role}
-            onChange={(e) => {
-              setRole(e.target.value);
-              localStorage.setItem("role", e.target.value);
-            }}
-          >
-            <option value="Estudiante">Estudiante</option>
-            <option value="Administrador">Administrador</option>
-            <option value="Profesor">Profesor</option>
-          </select>
-          <button onClick={handleLogout} className="btn-logout">
-            <span>↗</span> Cerrar Sesión
-          </button>
-        </div>
-      </aside>
+    <>
+      <AppSidebar
+        user={user}
+        role={role}
+        activeRoute="sct"
+        onRoleChange={handleRoleChange}
+        onLogout={handleLogout}
+      />
 
-      {/* Main Content */}
-      <main className="dashboard-main sct-page">
-        {viewMode === 'config' ? (
+      <div className="page-scroll">
+        {viewMode === 'config' && (
           <>
-            <div className="sct-header">
-              <h1 className="sct-title">
-                Test de Concordancia de <span className="gradient-text">Scripts (SCT)</span>
+            {/* Hero */}
+            <div className="sct-v2-hero">
+              <div className="sct-v2-hero-tag">Test SCT</div>
+              <h1 className="sct-v2-hero-title">
+                Concordancia de{" "}
+                <span className="serif-it">Scripts</span>
               </h1>
-              <p className="sct-description">
-                Evalúa tu razonamiento clínico resolviendo casos médicos de cualquier especialidad. 
-                El SCT mide cómo ajustas tus hipótesis diagnósticas ante nueva información.
+              <p className="sct-v2-hero-sub">
+                Evalúa tu razonamiento clínico resolviendo casos médicos. El SCT mide cómo ajustas tus hipótesis diagnósticas ante nueva información.
               </p>
             </div>
 
-            {/* Configuration Card */}
-            <div className="sct-config-card">
-          <h2 className="sct-config-title">Configurar Test SCT</h2>
-          
-          <div className="sct-form">
-            <div className="form-group">
-              <label htmlFor="numItems" className="form-label">Número de ítems</label>
-              <input
-                type="number"
-                id="numItems"
-                className="form-input"
-                value={numItems}
-                onChange={(e) => setNumItems(e.target.value)}
-                min="1"
-                max="20"
-              />
-            </div>
+            <div className="sct-v2-body">
+              {/* Config grid */}
+              <div className="sct-v2-grid">
+                <div className="sct-v2-config-card">
+                  <div className="sct-v2-config-title">Configurar Test</div>
 
-            <div className="form-group">
-              <label htmlFor="difficulty" className="form-label">Dificultad</label>
-              <select
-                id="difficulty"
-                className="form-select"
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
-              >
-                <option value="Pregrado">Pregrado</option>
-                <option value="Internado">Internado</option>
-                <option value="Residente">Residente</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="medicalFocus" className="form-label">Enfoque médico</label>
-              <input
-                type="text"
-                id="medicalFocus"
-                className="form-input"
-                placeholder="Ej: VIH/SIDA, diabetes mellitus, insuficiencia cardíaca, etc."
-                value={medicalFocus}
-                onChange={(e) => setMedicalFocus(e.target.value)}
-              />
-            </div>
-
-            <div className="sct-buttons">
-              <button 
-                className="btn-generate-test"
-                onClick={handleGenerateTest}
-              >
-                <span>✨</span> Generar Test con IA
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* What is SCT Section */}
-        <div className="sct-info-card">
-          <div className="sct-info-icon">❓</div>
-          <div className="sct-info-content">
-            <h3 className="sct-info-title">¿Qué es el SCT?</h3>
-            <p className="sct-info-text">
-              El Script Concordance Test evalúa cómo los estudiantes modifican sus hipótesis 
-              clínicas cuando reciben nueva información, simulando el razonamiento de expertos. 
-              Cada ítem presenta un escenario clínico, una hipótesis y nueva información que 
-              puede fortalecer o debilitar dicha hipótesis.
-            </p>
-          </div>
-        </div>
-
-        {/* Saved Tests Section */}
-        <section className="sct-saved-section">
-          <h2 className="section-title">Mis Tests Guardados</h2>
-          
-          {savedTests.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">📄</div>
-              <h3 className="empty-title">No tienes tests guardados</h3>
-              <p className="empty-description">
-                Genera tu primer test SCT y guárdalo para revisar más tarde
-              </p>
-            </div>
-          ) : (
-            <div className="saved-tests-grid">
-              {savedTests.map(test => (
-                <div key={test.id} className="saved-test-card">
-                  <div className="saved-test-header">
-                    <h4>{test.name}</h4>
-                    <span className="saved-test-date">{new Date(test.created_at).toLocaleDateString('es-ES')}</span>
+                  <div className="sct-v2-field">
+                    <label className="sct-v2-label">Número de ítems</label>
+                    <input
+                      type="number"
+                      className="sct-v2-input"
+                      value={numItems}
+                      onChange={(e) => setNumItems(e.target.value)}
+                      min="1" max="20"
+                    />
                   </div>
-                  <div className="saved-test-info">
-                    <span>{test.num_items} ítems</span>
-                    <span>•</span>
-                    <span>{test.difficulty}</span>
-                    <span>•</span>
-                    <span>{test.focus}</span>
+
+                  <div className="sct-v2-field">
+                    <label className="sct-v2-label">Dificultad</label>
+                    <select
+                      className="sct-v2-select"
+                      value={difficulty}
+                      onChange={(e) => setDifficulty(e.target.value)}
+                    >
+                      <option value="Pregrado">Pregrado</option>
+                      <option value="Internado">Internado</option>
+                      <option value="Residente">Residente</option>
+                    </select>
                   </div>
-                  <button 
-                    className="btn-open-test"
-                    onClick={() => handleLoadTest(test.id)}
-                  >
-                    📖 Abrir Test
+
+                  <div className="sct-v2-field">
+                    <label className="sct-v2-label">Enfoque médico</label>
+                    <input
+                      type="text"
+                      className="sct-v2-input"
+                      placeholder="Ej: VIH/SIDA, diabetes mellitus, insuficiencia cardíaca…"
+                      value={medicalFocus}
+                      onChange={(e) => setMedicalFocus(e.target.value)}
+                    />
+                  </div>
+
+                  <button className="sct-v2-generate-btn" onClick={handleGenerateTest}>
+                    ✨ Generar Test con IA
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
-          </>
-        ) : viewMode === 'test' ? (
-          // Test View
-          <div className="test-container">
-            <div className="test-header-bar">
-              <button onClick={handleBackToConfig} className="btn-back">
-                ← Volver a configuración
-              </button>
-              <div className="test-progress-info">
-                <span>{Object.keys(answers).length} / {currentTest.items.length} respondidas</span>
+
+                <div className="sct-v2-info-card">
+                  <div className="sct-v2-info-title">¿Qué es el SCT?</div>
+                  <div className="sct-v2-info-text">
+                    El Script Concordance Test evalúa cómo los estudiantes modifican sus hipótesis clínicas cuando reciben nueva información, simulando el razonamiento de expertos. Cada ítem presenta un escenario clínico, una hipótesis y nueva información.
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', fontFamily: 'JetBrains Mono', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                      Escala de respuesta
+                    </div>
+                    <div className="sct-v2-scale-demo">
+                      {[-2, -1, 0, 1, 2].map(v => (
+                        <div key={v} className={`sct-v2-scale-opt ${v === 1 ? "sel" : ""}`}>
+                          {v > 0 ? `+${v}` : v}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="test-title-section">
-              <h2 className="test-main-title">{currentTest.title}</h2>
-              <div className="test-meta">
-                <span className="test-badge">{currentTest.difficulty}</span>
-                <span className="test-date">{currentTest.date}</span>
-                <span className="test-items">{currentTest.items.length} ítems</span>
-              </div>
-            </div>
-
-            <div className="test-instructions">
-              <h3>📋 Instrucciones</h3>
-              <p>Para cada escenario clínico, evalúa cómo la nueva información afecta la hipótesis diagnóstica presentada. Selecciona una opción en la escala de -2 a +2:</p>
-              <ul>
-                <li><strong>-2:</strong> Descarta casi completamente la hipótesis</li>
-                <li><strong>-1:</strong> Disminuye la probabilidad de la hipótesis</li>
-                <li><strong>0:</strong> No afecta la hipótesis (ni la fortalece ni la debilita)</li>
-                <li><strong>+1:</strong> Aumenta la probabilidad de la hipótesis</li>
-                <li><strong>+2:</strong> Confirma casi completamente la hipótesis</li>
-              </ul>
-            </div>
-
-            {currentTest.items.map((item, index) => (
-              <div key={item.id} className="sct-item-card">
-                <div className="item-number">Caso {index + 1}</div>
-                
-                <div className="item-section">
-                  <h4 className="item-section-title">🏥 Escenario Clínico</h4>
-                  <p className="item-text">{item.scenario}</p>
+              {/* Saved tests */}
+              <div className="sct-v2-saved-section">
+                <div className="sct-v2-saved-head">
+                  <div className="sct-v2-saved-title">Mis Tests Guardados</div>
+                  {savedTests.length > 0 && (
+                    <span style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'JetBrains Mono' }}>
+                      {savedTests.length} test{savedTests.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
                 </div>
 
-                <div className="item-section">
-                  <h4 className="item-section-title">💭 Hipótesis Diagnóstica</h4>
-                  <p className="item-text hypothesis">{item.hypothesis}</p>
-                </div>
-
-                <div className="item-section">
-                  <h4 className="item-section-title">🔍 Nueva Información</h4>
-                  <p className="item-text new-info">{item.newInfo}</p>
-                </div>
-
-                <div className="item-section">
-                  <h4 className="item-section-title">❓ Pregunta</h4>
-                  <p className="item-question">{item.question}</p>
-                </div>
-
-                <div className="item-answers">
-                  <div className="answer-scale">
-                    {[-2, -1, 0, 1, 2].map(value => (
-                      <label 
-                        key={value} 
-                        className={`answer-option ${answers[item.id] === value ? 'selected' : ''}`}
-                      >
-                        <input
-                          type="radio"
-                          name={`item-${item.id}`}
-                          value={value}
-                          checked={answers[item.id] === value}
-                          onChange={() => handleAnswer(item.id, value)}
-                        />
-                        <span className="answer-value">{value > 0 ? `+${value}` : value}</span>
-                        <span className="answer-label">
-                          {value === -2 && 'Descarta'}
-                          {value === -1 && 'Disminuye'}
-                          {value === 0 && 'No afecta'}
-                          {value === 1 && 'Aumenta'}
-                          {value === 2 && 'Confirma'}
-                        </span>
-                      </label>
+                {savedTests.length === 0 ? (
+                  <div className="sct-v2-empty">
+                    <span className="sct-v2-empty-icon">📄</span>
+                    <div className="sct-v2-empty-title">No tienes tests guardados</div>
+                    <div className="sct-v2-empty-desc">Genera tu primer test SCT y guárdalo para revisar más tarde</div>
+                  </div>
+                ) : (
+                  <div className="sct-v2-saved-grid">
+                    {savedTests.map(test => (
+                      <div key={test.id} className="sct-v2-saved-card">
+                        <div className="sct-v2-saved-name">{test.name}</div>
+                        <div className="sct-v2-saved-tags">
+                          <span className="sct-v2-saved-tag">{test.num_items} ítems</span>
+                          <span className="sct-v2-saved-tag">{test.difficulty}</span>
+                          <span className="sct-v2-saved-tag">{new Date(test.created_at).toLocaleDateString('es-ES')}</span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '14px', lineHeight: '1.4' }}>
+                          {test.focus}
+                        </div>
+                        <button className="sct-v2-open-btn" onClick={() => handleLoadTest(test.id)}>
+                          Abrir Test →
+                        </button>
+                      </div>
                     ))}
                   </div>
-                </div>
+                )}
               </div>
-            ))}
+            </div>
+          </>
+        )}
 
-            <div className="test-submit-section">
-              <button 
-                onClick={handleSubmitTest} 
-                className="btn-submit-test"
-              >
-                ✓ Enviar Test para Evaluación
+        {viewMode === 'test' && currentTest && (
+          <>
+            {/* Sticky top bar */}
+            <div className="sct-v2-test-topbar">
+              <button onClick={handleBackToConfig} className="sct-v2-back-btn">
+                ← Volver
               </button>
-              <p className="submit-note">
-                Asegúrate de haber respondido todas las preguntas antes de enviar
-              </p>
-            </div>
-          </div>
-        ) : viewMode === 'results' ? (
-          <div className="results-container">
-            <div className="results-header">
-              <div className="results-score-card">
-                <div className="score-circle">
-                  <svg width="200" height="200" viewBox="0 0 200 200">
-                    <circle cx="100" cy="100" r="90" fill="none" stroke="#e5e7eb" strokeWidth="12"/>
-                    <circle 
-                      cx="100" 
-                      cy="100" 
-                      r="90" 
-                      fill="none" 
-                      stroke={testResults.score >= 70 ? "#10b981" : testResults.score >= 50 ? "#f59e0b" : "#ef4444"}
-                      strokeWidth="12"
-                      strokeDasharray={`${(testResults.score / 100) * 565} 565`}
-                      transform="rotate(-90 100 100)"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="score-text">
-                    <div className="score-number">{testResults.score}%</div>
-                    <div className="score-label">Puntuación</div>
-                  </div>
-                </div>
-                <div className="score-details">
-                  <h2 className="results-title">¡Test Completado!</h2>
-                  <p className="results-summary">
-                    {testResults.correctCount} de {testResults.totalItems} respuestas correctas
-                  </p>
-                  <div className="results-performance">
-                    {testResults.score >= 80 && <span className="performance-badge excellent">🌟 Excelente</span>}
-                    {testResults.score >= 60 && testResults.score < 80 && <span className="performance-badge good">👍 Bien</span>}
-                    {testResults.score >= 40 && testResults.score < 60 && <span className="performance-badge average">📚 Regular</span>}
-                    {testResults.score < 40 && <span className="performance-badge poor">💪 Sigue practicando</span>}
-                  </div>
+              <div className="sct-v2-progress-info">
+                <span className="sct-v2-progress-text">{answeredCount} / {totalItems}</span>
+                <div className="sct-v2-progress-track">
+                  <div className="sct-v2-progress-fill" style={{ width: `${progressPct}%` }} />
                 </div>
               </div>
             </div>
 
-            <div className="results-feedback-section">
-              <h3 className="feedback-title">📊 Retroalimentación Detallada</h3>
-              
+            <div className="sct-v2-test-body">
+              {/* Meta */}
+              <div className="sct-v2-test-meta">
+                <span className="sct-v2-meta-chip">{currentTest.title}</span>
+                <span className="sct-v2-meta-chip">{currentTest.difficulty}</span>
+                <span className="sct-v2-meta-chip">{currentTest.date}</span>
+                <span className="sct-v2-meta-chip">{totalItems} ítems</span>
+              </div>
+
+              {/* Instructions */}
+              <div className="sct-v2-instructions">
+                <div className="sct-v2-instr-title">Instrucciones</div>
+                <div className="sct-v2-instr-text">
+                  Para cada escenario clínico, evalúa cómo la nueva información afecta la hipótesis diagnóstica. Selecciona una opción en la escala:
+                </div>
+                <div className="sct-v2-scale-legend">
+                  {[{v:"-2",l:"Descarta"},{v:"-1",l:"Disminuye"},{v:"0",l:"No afecta"},{v:"+1",l:"Aumenta"},{v:"+2",l:"Confirma"}].map(s => (
+                    <div key={s.v} className="sct-v2-legend-item">
+                      <strong>{s.v}</strong>{s.l}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Items */}
+              {currentTest.items.map((item, index) => (
+                <div key={item.id} className="sct-v2-item">
+                  <div className="sct-v2-item-num">Caso {index + 1}</div>
+
+                  <div className="sct-v2-section">
+                    <div className="sct-v2-section-label lbl-scenario">Escenario Clínico</div>
+                    <div className="sct-v2-section-text">{item.scenario}</div>
+                  </div>
+
+                  <div className="sct-v2-section">
+                    <div className="sct-v2-section-label lbl-hypothesis">Hipótesis Diagnóstica</div>
+                    <div className="sct-v2-section-text txt-hypothesis">{item.hypothesis}</div>
+                  </div>
+
+                  <div className="sct-v2-section">
+                    <div className="sct-v2-section-label lbl-newinfo">Nueva Información</div>
+                    <div className="sct-v2-section-text txt-newinfo">{item.newInfo}</div>
+                  </div>
+
+                  <div className="sct-v2-answer-section">
+                    <div className="sct-v2-answer-label">{item.question}</div>
+                    <div className="sct-v2-answer-row">
+                      {[-2, -1, 0, 1, 2].map(value => (
+                        <label key={value} className="sct-v2-answer-opt">
+                          <input
+                            type="radio"
+                            name={`item-${item.id}`}
+                            value={value}
+                            checked={answers[item.id] === value}
+                            onChange={() => handleAnswer(item.id, value)}
+                          />
+                          <div className="sct-v2-answer-face">
+                            <div className="sct-v2-ans-val">{value > 0 ? `+${value}` : value}</div>
+                            <div className="sct-v2-ans-lbl">
+                              {value === -2 && 'Descarta'}
+                              {value === -1 && 'Disminuye'}
+                              {value === 0 && 'No afecta'}
+                              {value === 1 && 'Aumenta'}
+                              {value === 2 && 'Confirma'}
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="sct-v2-submit-section">
+                <button onClick={handleSubmitTest} className="sct-v2-submit-btn">
+                  ✓ Enviar para Evaluación
+                </button>
+                <div className="sct-v2-submit-note">
+                  Asegúrate de responder todas las preguntas antes de enviar
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {viewMode === 'results' && testResults && (
+          <>
+            {/* Results hero */}
+            <div className="sct-v2-results-hero">
+              <div className="sct-v2-score-ring">
+                <svg width="160" height="160" viewBox="0 0 160 160">
+                  <circle cx="80" cy="80" r="68" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10"/>
+                  <circle
+                    cx="80" cy="80" r="68" fill="none"
+                    stroke={testResults.score >= 70 ? "var(--accent)" : testResults.score >= 50 ? "var(--indigo)" : "var(--coral)"}
+                    strokeWidth="10"
+                    strokeDasharray={`${(testResults.score / 100) * 427} 427`}
+                    transform="rotate(-90 80 80)"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="sct-v2-score-center">
+                  <div className="sct-v2-score-num">{testResults.score}%</div>
+                  <div className="sct-v2-score-lbl">Puntuación</div>
+                </div>
+              </div>
+
+              <div className="sct-v2-results-info">
+                <div className="sct-v2-results-title">¡Test Completado!</div>
+                <div className="sct-v2-results-summary">
+                  {testResults.correctCount} de {testResults.totalItems} respuestas correctas
+                </div>
+                <div>
+                  {testResults.score >= 80 && <span className="sct-v2-perf-badge excellent">🌟 Excelente</span>}
+                  {testResults.score >= 60 && testResults.score < 80 && <span className="sct-v2-perf-badge good">👍 Bien</span>}
+                  {testResults.score >= 40 && testResults.score < 60 && <span className="sct-v2-perf-badge average">📚 Regular</span>}
+                  {testResults.score < 40 && <span className="sct-v2-perf-badge poor">💪 Sigue practicando</span>}
+                </div>
+              </div>
+            </div>
+
+            <div className="sct-v2-results-body">
+              <div className="sct-v2-feedback-title">Retroalimentación Detallada</div>
+
               {testResults.results.map((result, index) => (
-                <div key={result.itemId} className={`feedback-card ${result.isCorrect ? 'correct' : 'incorrect'}`}>
-                  <div className="feedback-header">
-                    <span className="feedback-number">Caso {index + 1}</span>
-                    <span className={`feedback-status ${result.isCorrect ? 'correct' : 'incorrect'}`}>
-                      {result.isCorrect ? '✓ Correcto' : '✗ Incorrecto'}
+                <div key={result.itemId} className={`sct-v2-feedback-card ${result.isCorrect ? "correct" : "incorrect"}`}>
+                  <div className="sct-v2-feedback-top">
+                    <span className="sct-v2-feedback-num">Caso {index + 1}</span>
+                    <span className={`sct-v2-feedback-status ${result.isCorrect ? "correct" : "incorrect"}`}>
+                      {result.isCorrect ? "✓ Correcto" : "✗ Incorrecto"}
                     </span>
                   </div>
 
-                  <div className="feedback-content">
-                    <div className="feedback-scenario">
-                      <strong>Escenario:</strong> {result.scenario}
-                    </div>
-                    <div className="feedback-hypothesis">
-                      <strong>Hipótesis:</strong> {result.hypothesis}
-                    </div>
-                    <div className="feedback-newinfo">
-                      <strong>Nueva información:</strong> {result.newInfo}
-                    </div>
+                  <div className="sct-v2-feedback-field">
+                    <strong>Escenario</strong>{result.scenario}
+                  </div>
+                  <div className="sct-v2-feedback-field">
+                    <strong>Hipótesis</strong>{result.hypothesis}
+                  </div>
+                  <div className="sct-v2-feedback-field">
+                    <strong>Nueva información</strong>{result.newInfo}
                   </div>
 
-                  <div className="feedback-answers">
-                    <div className="answer-comparison">
-                      <div className="user-answer">
-                        <span className="answer-label">Tu respuesta:</span>
-                        <span className="answer-value">{result.userAnswer > 0 ? `+${result.userAnswer}` : result.userAnswer}</span>
+                  <div className="sct-v2-answers-row">
+                    <div className="sct-v2-ans-pill">
+                      <div className="sct-v2-ans-pill-label">Tu respuesta</div>
+                      <div className="sct-v2-ans-pill-val">
+                        {result.userAnswer > 0 ? `+${result.userAnswer}` : result.userAnswer}
                       </div>
-                      <div className="correct-answer">
-                        <span className="answer-label">Respuesta esperada:</span>
-                        <span className="answer-value">{result.correctAnswer > 0 ? `+${result.correctAnswer}` : result.correctAnswer}</span>
+                    </div>
+                    <div className="sct-v2-ans-pill">
+                      <div className="sct-v2-ans-pill-label">Respuesta esperada</div>
+                      <div className="sct-v2-ans-pill-val">
+                        {result.correctAnswer > 0 ? `+${result.correctAnswer}` : result.correctAnswer}
                       </div>
                     </div>
                   </div>
 
                   {result.explanation && (
-                    <div className="feedback-explanation">
-                      <strong>💡 Explicación:</strong>
-                      <p>{result.explanation}</p>
+                    <div className="sct-v2-expl">
+                      <strong>💡 </strong>{result.explanation}
                     </div>
                   )}
                 </div>
               ))}
-            </div>
 
-            <div className="results-actions">
-              <button onClick={handleSaveTest} className="btn-save-test">
-                💾 Guardar Test
-              </button>
-              <button onClick={handleNewTest} className="btn-new-test">
-                🔄 Generar Nuevo Test
-              </button>
-              <button onClick={() => setViewMode('config')} className="btn-back-config">
-                ← Volver a Configuración
-              </button>
+              <div className="sct-v2-results-actions">
+                <button onClick={handleSaveTest} className="sct-v2-res-btn primary">
+                  💾 Guardar Test
+                </button>
+                <button onClick={handleNewTest} className="sct-v2-res-btn secondary">
+                  🔄 Nuevo Test
+                </button>
+                <button onClick={() => setViewMode('config')} className="sct-v2-res-btn secondary">
+                  ← Configuración
+                </button>
+              </div>
             </div>
-          </div>
-        ) : null}
-      </main>
+          </>
+        )}
+      </div>
 
       {/* Loading Modal */}
       {isGenerating && (
-        <div className="loading-overlay">
-          <div className="loading-modal">
-            <div className="loading-icon">
-              <div className="spinner"></div>
+        <div className="v2-loading-overlay">
+          <div className="v2-loading-modal">
+            <div className="v2-loading-spinner" />
+            <div className="v2-loading-title">Generando test con IA…</div>
+            <div className="v2-loading-sub">Creando {numItems} ítems de nivel {difficulty}</div>
+            <div className="v2-progress-track">
+              <div className="v2-progress-fill" style={{ width: `${progress}%` }} />
             </div>
-            <h3 className="loading-title">Generando test con IA...</h3>
-            <p className="loading-subtitle">Creando {numItems} ítems de nivel {difficulty}</p>
-            
-            <div className="progress-container">
-              <div className="progress-bar">
-                <div 
-                  className="progress-fill" 
-                  style={{ width: `${progress}%` }}
-                >
-                  <span className="progress-text">{progress}%</span>
+            <div className="v2-loading-steps">
+              {[
+                { label: "Analizando enfoque médico", threshold: 25 },
+                { label: "Generando escenarios clínicos", threshold: 50 },
+                { label: "Creando hipótesis diagnósticas", threshold: 75 },
+                { label: "Finalizando test", threshold: 100 },
+              ].map((step, i) => (
+                <div key={i} className={`v2-loading-step ${progress >= step.threshold ? "done" : ""}`}>
+                  <div className="v2-loading-step-icon">
+                    {progress >= step.threshold ? "✓" : "○"}
+                  </div>
+                  <span>{step.label}</span>
                 </div>
-              </div>
-            </div>
-            
-            <div className="loading-steps">
-              <div className={`loading-step ${progress >= 25 ? 'active' : ''}`}>
-                <span className="step-icon">{progress >= 25 ? '✓' : '⏳'}</span>
-                <span className="step-text">Analizando enfoque médico</span>
-              </div>
-              <div className={`loading-step ${progress >= 50 ? 'active' : ''}`}>
-                <span className="step-icon">{progress >= 50 ? '✓' : '⏳'}</span>
-                <span className="step-text">Generando escenarios clínicos</span>
-              </div>
-              <div className={`loading-step ${progress >= 75 ? 'active' : ''}`}>
-                <span className="step-icon">{progress >= 75 ? '✓' : '⏳'}</span>
-                <span className="step-text">Creando hipótesis diagnósticas</span>
-              </div>
-              <div className={`loading-step ${progress >= 100 ? 'active' : ''}`}>
-                <span className="step-icon">{progress >= 100 ? '✓' : '⏳'}</span>
-                <span className="step-text">Finalizando test</span>
-              </div>
+              ))}
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
