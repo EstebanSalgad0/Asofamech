@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { startSession, flushSession, getMetrics, formatStudyTime, getRecentActivity, timeAgo } from "../tracker";
+import { AppSidebar } from "../components/AppSidebar";
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Buenos días";
+  if (h < 19) return "Buenas tardes";
+  return "Buenas noches";
+}
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -18,15 +26,10 @@ export function DashboardPage() {
       const savedRole = localStorage.getItem("role");
       if (savedRole) setRole(savedRole);
     }
-
-    // Start session timer for study time
     startSession();
-
-    // Load real metrics & activity
     setMetrics(getMetrics());
     setActivity(getRecentActivity(10));
 
-    // Flush session time when leaving
     const handleUnload = () => flushSession();
     window.addEventListener("beforeunload", handleUnload);
     return () => {
@@ -35,7 +38,6 @@ export function DashboardPage() {
     };
   }, [navigate]);
 
-  // Refresh metrics when page becomes visible again (tab switch back)
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -53,198 +55,144 @@ export function DashboardPage() {
     navigate("/");
   };
 
+  const handleRoleChange = (val) => {
+    setRole(val);
+    localStorage.setItem("role", val);
+  };
+
   if (!user) return null;
 
   const testsPassedPct = metrics.testsTotal > 0
     ? Math.round((metrics.testsPassed / metrics.testsTotal) * 100)
-    : 0;
+    : null;
 
-  const activityIcon = { chat: "💬", sct: "📋", images: "🖼️" };
+  const activityDotClass = { chat: "type-chat", sct: "type-sct", images: "type-images" };
+  const activityEmoji = { chat: "💬", sct: "📋", images: "🔬" };
 
   return (
-    <div className="dashboard-page">
-      {/* Sidebar */}
-      <aside className="dashboard-sidebar">
-        <div className="sidebar-logo">
-          <div className="logo-mark">A</div>
-          <span>ASOFAMECH</span>
-        </div>
-        
-        <nav className="sidebar-nav">
-          <Link to="/dashboard" className="nav-item active">
-            <span className="nav-icon">🏠</span>
-            <span>Inicio</span>
-          </Link>
-          <Link to="/dashboard/chat" className="nav-item">
-            <span className="nav-icon">💬</span>
-            <span>Asistente IA</span>
-          </Link>
-          <Link to="/dashboard/sct" className="nav-item">
-            <span className="nav-icon">📋</span>
-            <span>Test SCT</span>
-          </Link>
-          <Link to="/dashboard/images" className="nav-item">
-            <span className="nav-icon">🖼️</span>
-            <span>Imágenes IA</span>
-          </Link>
-          {(role === "Administrador" || role === "Profesor") && (
-            <Link to="/dashboard/config" className="nav-item">
-              <span className="nav-icon">⚙️</span>
-              <span>Configuración</span>
-            </Link>
-          )}
-        </nav>
-        
-        <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div className="user-avatar">
-              {user.name.charAt(0)}
-            </div>
-            <div className="user-info">
-              <div className="user-name">{user.name}</div>
-              <div className="user-role">{role}</div>
-            </div>
-          </div>
-          <select 
-            className="sidebar-role-selector"
-            value={role}
-            onChange={(e) => {
-              setRole(e.target.value);
-              localStorage.setItem("role", e.target.value);
-            }}
-          >
-            <option value="Estudiante">Estudiante</option>
-            <option value="Administrador">Administrador</option>
-            <option value="Profesor">Profesor</option>
-          </select>
-          <button onClick={handleLogout} className="btn-logout">
-            <span>↗</span> Cerrar Sesión
-          </button>
-        </div>
-      </aside>
+    <>
+      <AppSidebar
+        user={user}
+        role={role}
+        activeRoute="dashboard"
+        onRoleChange={handleRoleChange}
+        onLogout={handleLogout}
+      />
 
-      {/* Main Content */}
-      <main className="dashboard-main">
-        <div className="dashboard-header">
-          <h1 className="dashboard-welcome">Bienvenido de vuelta</h1>
-          <p className="dashboard-subtitle">
-            Continúa tu aprendizaje médico con nuestras herramientas de IA
-          </p>
-        </div>
+      <div className="page-scroll">
+        {/* Hero */}
+        <div className="home-hero">
+          <div className="home-hero-pill">
+            <span className="home-hero-pill-dot" />
+            Plataforma activa
+          </div>
+          <h1 className="home-hero-greeting">
+            {getGreeting()},{" "}
+            <span className="home-hero-name">{user.name.split(" ")[0]}</span>
+          </h1>
+          <p className="home-hero-sub">Continúa tu entrenamiento clínico donde lo dejaste.</p>
 
-        {/* Stats Cards */}
-        <div className="dashboard-stats">
-          <div className="stat-card">
-            <div className="stat-icon">📈</div>
-            <div className="stat-content">
-              <div className="stat-label">Consultas realizadas</div>
-              <div className="stat-value">{metrics.consultations}</div>
+          <div className="home-stats-strip">
+            <div className="home-stat">
+              <div className="home-stat-label">Consultas realizadas</div>
+              <div className={`home-stat-value${metrics.consultations > 0 ? " clr-accent" : ""}`}>
+                {metrics.consultations}
+              </div>
             </div>
-          </div>
-          
-          <div className="stat-card">
-            <div className="stat-icon">⏱️</div>
-            <div className="stat-content">
-              <div className="stat-label">Tiempo de estudio</div>
-              <div className="stat-value">{formatStudyTime(metrics.studyMs)}</div>
+            <div className="home-stat">
+              <div className="home-stat-label">Tiempo de estudio</div>
+              <div className="home-stat-value clr-indigo">
+                {formatStudyTime(metrics.studyMs)}
+              </div>
             </div>
-          </div>
-          
-          <div className="stat-card">
-            <div className="stat-icon">⭐</div>
-            <div className="stat-content">
-              <div className="stat-label">Tests aprobados</div>
-              <div className="stat-value">
-                {metrics.testsTotal > 0
-                  ? `${testsPassedPct}%`
-                  : "—"}
+            <div className="home-stat">
+              <div className="home-stat-label">Tests aprobados</div>
+              <div className={`home-stat-value${testsPassedPct !== null && testsPassedPct >= 60 ? " clr-accent" : testsPassedPct !== null ? " clr-coral" : ""}`}>
+                {testsPassedPct !== null ? `${testsPassedPct}%` : "—"}
               </div>
               {metrics.testsTotal > 0 && (
-                <div className="stat-detail">
-                  {metrics.testsPassed}/{metrics.testsTotal} tests
-                </div>
+                <div className="home-stat-detail">{metrics.testsPassed}/{metrics.testsTotal} tests</div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Modules Section */}
-        <section className="dashboard-section">
-          <h2 className="section-title">Módulos</h2>
-          
-          <div className="modules-grid">
-            <Link to="/dashboard/chat" className="module-card">
-              <div className="module-icon blue">💬</div>
-              <h3 className="module-title">Asistente Médico IA</h3>
-              <p className="module-description">
-                Consulta educativa 24/7 sobre temas de salud
-              </p>
-              <div className="module-stats">
-                {metrics.consultations > 0
-                  ? `${metrics.consultations} consultas`
-                  : "Empieza a consultar"}
+        {/* Body */}
+        <div className="home-body">
+          {/* Modules */}
+          <div className="home-section-head">
+            <h2 className="home-section-title">Módulos</h2>
+            <span className="home-section-meta">3 herramientas</span>
+          </div>
+
+          <div className="home-modules-grid">
+            <a href="/dashboard/chat" className="home-module-card chat-card" onClick={e => { e.preventDefault(); navigate("/dashboard/chat"); }}>
+              <div className="home-module-tag">01 — Asistente</div>
+              <div className="home-module-icon">🤖</div>
+              <h3 className="home-module-title">Asistente Médico IA</h3>
+              <p className="home-module-desc">Consulta educativa 24/7 sobre temas de salud, diagnósticos y tratamientos.</p>
+              <div className="home-module-stat">
+                {metrics.consultations > 0 ? `${metrics.consultations} consultas` : "Empieza a consultar →"}
               </div>
-            </Link>
-            
-            <Link to="/dashboard/sct" className="module-card">
-              <div className="module-icon green">📋</div>
-              <h3 className="module-title">Test SCT</h3>
-              <p className="module-description">
-                Evalúa tu razonamiento clínico
-              </p>
-              <div className="module-stats">
-                {metrics.testsTotal > 0
-                  ? `${metrics.testsTotal} tests completados`
-                  : "Realiza tu primer test"}
+            </a>
+
+            <a href="/dashboard/sct" className="home-module-card sct-card" onClick={e => { e.preventDefault(); navigate("/dashboard/sct"); }}>
+              <div className="home-module-tag">02 — Test</div>
+              <div className="home-module-icon">📋</div>
+              <h3 className="home-module-title">Test SCT</h3>
+              <p className="home-module-desc">Evalúa tu razonamiento clínico con casos médicos generados por IA.</p>
+              <div className="home-module-stat">
+                {metrics.testsTotal > 0 ? `${metrics.testsTotal} tests completados` : "Realiza tu primer test →"}
               </div>
-            </Link>
-            
-            <Link to="/dashboard/images" className="module-card">
-              <div className="module-icon cyan">🖼️</div>
-              <h3 className="module-title">Análisis de Imágenes</h3>
-              <p className="module-description">
-                Visualiza imágenes histológicas de alta resolución
-              </p>
-              <div className="module-stats">
+            </a>
+
+            <a href="/dashboard/images" className="home-module-card images-card" onClick={e => { e.preventDefault(); navigate("/dashboard/images"); }}>
+              <div className="home-module-tag">03 — Análisis</div>
+              <div className="home-module-icon">🔬</div>
+              <h3 className="home-module-title">Imágenes IA</h3>
+              <p className="home-module-desc">Visualiza y analiza imágenes histológicas de alta resolución.</p>
+              <div className="home-module-stat">
                 {activity.filter(a => a.type === "images").length > 0
                   ? `${activity.filter(a => a.type === "images").length} visualizaciones`
-                  : "Explora las imágenes"}
+                  : "Explora las imágenes →"}
               </div>
-            </Link>
+            </a>
           </div>
-        </section>
 
-        {/* Recent Activity */}
-        <section className="dashboard-section">
-          <h2 className="section-title">Actividad Reciente</h2>
-          
-          <div className="activity-list">
+          {/* Activity */}
+          <div className="home-section-head">
+            <h2 className="home-section-title">Actividad Reciente</h2>
+            {activity.length > 0 && (
+              <span className="home-section-meta">{activity.length} registros</span>
+            )}
+          </div>
+
+          <div className="home-activity-list">
             {activity.length === 0 ? (
-              <div className="activity-empty">
-                <span className="activity-empty-icon">📭</span>
+              <div className="home-activity-empty">
+                <span className="home-activity-empty-icon">📭</span>
                 <p>Aún no hay actividad registrada. Comienza usando el asistente o realizando un test SCT.</p>
               </div>
             ) : (
               activity.map((item, idx) => (
-                <div key={idx} className="activity-item">
-                  <div className="activity-icon">{activityIcon[item.type] || "📌"}</div>
-                  <div className="activity-content">
-                    <div className="activity-title">{item.title}</div>
-                    <div className="activity-time">{timeAgo(item.timestamp)}</div>
+                <div key={idx} className="home-activity-item">
+                  <div className={`home-activity-dot ${activityDotClass[item.type] || "type-other"}`}>
+                    {activityEmoji[item.type] || "📌"}
+                  </div>
+                  <div className="home-activity-text">
+                    <div className="home-activity-title">{item.title}</div>
+                    <div className="home-activity-time">{timeAgo(item.timestamp)}</div>
                   </div>
                 </div>
               ))
             )}
           </div>
-        </section>
 
-        {/* Disclaimer */}
-        <div className="dashboard-disclaimer">
-          <p>
+          <div className="home-disclaimer">
             <strong>Recordatorio:</strong> Esta plataforma es exclusivamente educativa. La información no reemplaza la consulta con un profesional de la salud.
-          </p>
+          </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

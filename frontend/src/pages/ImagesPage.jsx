@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { OpenSeadragonViewer } from "../components/OpenSeadragonViewer";
 import { MedicalImageViewer } from "../components/MedicalImageViewer";
 import { startSession, flushSession, pushActivity } from "../tracker";
+import { AppSidebar } from "../components/AppSidebar";
 
 export function ImagesPage() {
   const navigate = useNavigate();
@@ -23,7 +24,6 @@ export function ImagesPage() {
       startSession();
       loadImageLibrary();
     }
-
     const handleUnload = () => flushSession();
     window.addEventListener("beforeunload", handleUnload);
     return () => {
@@ -48,10 +48,7 @@ export function ImagesPage() {
   };
 
   const handleImageSelect = (image) => {
-    // Track image view activity
     pushActivity("images", `Visualización: ${image.title}`);
-
-    // Usar el endpoint /view que procesa SVS automáticamente
     setSelectedImage({
       url: `http://localhost:8001/api/medical-images/view/${image.id}`,
       ...image
@@ -61,34 +58,27 @@ export function ImagesPage() {
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const formData = new FormData();
     formData.append("file", file);
     formData.append("title", file.name.replace(/\.[^.]+$/, ""));
     formData.append("description", "Imagen de prueba cargada desde el visor");
     formData.append("pathology_type", "Histopatologia");
-
     try {
       setLoading(true);
       const response = await fetch("http://localhost:8001/api/medical-images/upload", {
         method: "POST",
         body: formData,
       });
-
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.detail || `Error HTTP ${response.status}`);
       }
-
       const uploaded = await response.json();
       await loadImageLibrary();
       setSelectedImage({
-        id: uploaded.id,
-        filename: uploaded.filename,
-        title: uploaded.title,
-        file_type: uploaded.file_type,
-        file_size: uploaded.file_size,
-        has_dzi: uploaded.has_dzi,
+        id: uploaded.id, filename: uploaded.filename,
+        title: uploaded.title, file_type: uploaded.file_type,
+        file_size: uploaded.file_size, has_dzi: uploaded.has_dzi,
         pathology_type: "Histopatologia",
         url: `http://localhost:8001/api/medical-images/view/${uploaded.id}`,
       });
@@ -102,154 +92,115 @@ export function ImagesPage() {
   };
 
   const handleLogout = () => {
+    flushSession();
     localStorage.removeItem("user");
     navigate("/");
+  };
+
+  const handleRoleChange = (val) => {
+    setRole(val);
+    localStorage.setItem("role", val);
   };
 
   if (!user) return null;
 
   return (
-    <div className="dashboard-page">
-      {/* Sidebar */}
-      <aside className="dashboard-sidebar">
-        <div className="sidebar-logo">
-          <div className="logo-icon">A</div>
-          <span>ASOFAMECH</span>
-        </div>
-        
-        <nav className="sidebar-nav">
-          <Link to="/dashboard" className="nav-item">
-            <span className="nav-icon">🏠</span>
-            <span>Inicio</span>
-          </Link>
-          <Link to="/dashboard/chat" className="nav-item">
-            <span className="nav-icon">💬</span>
-            <span>Asistente IA</span>
-          </Link>
-          <Link to="/dashboard/sct" className="nav-item">
-            <span className="nav-icon">📋</span>
-            <span>Test SCT</span>
-          </Link>
-          <Link to="/dashboard/images" className="nav-item active">
-            <span className="nav-icon">🖼️</span>
-            <span>Imágenes IA</span>
-          </Link>
-          {(role === "Administrador" || role === "Profesor") && (
-            <Link to="/dashboard/config" className="nav-item">
-              <span className="nav-icon">⚙️</span>
-              <span>Configuración</span>
-            </Link>
-          )}
-        </nav>
-        
-        <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div className="user-avatar">
-              {user.name.charAt(0)}
-            </div>
-            <div className="user-info">
-              <div className="user-name">{user.name}</div>
-              <div className="user-role">{role}</div>
-            </div>
-          </div>
-          <select 
-            className="sidebar-role-selector"
-            value={role}
-            onChange={(e) => {
-              setRole(e.target.value);
-              localStorage.setItem("role", e.target.value);
-            }}
-          >
-            <option value="Estudiante">Estudiante</option>
-            <option value="Administrador">Administrador</option>
-            <option value="Profesor">Profesor</option>
-          </select>
-          <button onClick={handleLogout} className="btn-logout">
-            <span>↗</span> Cerrar Sesión
-          </button>
-        </div>
-      </aside>
+    <>
+      <AppSidebar
+        user={user}
+        role={role}
+        activeRoute="images"
+        onRoleChange={handleRoleChange}
+        onLogout={handleLogout}
+      />
 
-      {/* Main Content */}
-      <main className="dashboard-main images-page">
-        <div className="images-header-compact">
-          <h1 className="images-title-compact">
-            Análisis de <span className="gradient-text">Imágenes Histológicas</span>
+      <div className="page-fixed-col">
+        {/* Header */}
+        <div className="images-v2-header">
+          <span className="images-v2-header-tag">Histopatología · IA</span>
+          <h1 className="images-v2-title">
+            Análisis de <span className="serif-it">Imágenes</span>
           </h1>
-          <p className="images-subtitle">
-            Visualiza imagenes histopatologicas digitales, delimita ROI 1 y ROI 2, y ejecuta una clasificacion educativa binaria sobre ROI 2.
+          <p className="images-v2-subtitle">
+            Visualiza láminas histopatológicas digitales, delimita ROI y ejecuta clasificación educativa por IA.
           </p>
         </div>
 
-        <div className="images-container">
-          {/* Sidebar con biblioteca */}
-          <div className="images-sidebar">
-            <div className="sidebar-header">
-              <h3>📚 Biblioteca de Imágenes</h3>
+        {/* Body */}
+        <div className="images-v2-body">
+          {/* Sidebar */}
+          <div className="images-v2-sidebar">
+            <div className="images-v2-sidebar-section">
+              <div className="images-v2-sidebar-title">Cargar imagen</div>
+              <div className="images-v2-upload-zone">
+                <span className="images-v2-upload-icon">📤</span>
+                <div className="images-v2-upload-text">Arrastra o selecciona</div>
+                <div className="images-v2-upload-hint">SVS · JPG · PNG · TIFF</div>
+                <input
+                  type="file"
+                  accept="image/*,.svs"
+                  onChange={handleFileUpload}
+                  className="images-v2-upload-input"
+                />
+              </div>
             </div>
 
-            <div className="sidebar-section">
-              <h4>Cargar desde tu dispositivo:</h4>
-              <input
-                type="file"
-                accept="image/*,.svs"
-                onChange={handleFileUpload}
-                className="file-input"
-              />
-              <p className="hint-text">Formatos: SVS, JPG, PNG, TIFF</p>
+            <div className="images-v2-sidebar-section" style={{ borderBottom: 'none' }}>
+              <div className="images-v2-sidebar-title">Biblioteca</div>
             </div>
 
-            <div className="sidebar-section">
-              <h4>Imágenes disponibles:</h4>
+            <div className="images-v2-list">
               {loading ? (
-                <p className="loading-text">Cargando...</p>
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                  <span className="images-v2-loading">Cargando…</span>
+                </div>
               ) : imageLibrary.length === 0 ? (
-                <p className="empty-text">No hay imágenes disponibles</p>
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                  <span style={{ fontSize: '28px', display: 'block', marginBottom: '8px', opacity: 0.3 }}>🔬</span>
+                  <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Sin imágenes disponibles</span>
+                </div>
               ) : (
-                <div className="images-list">
-                  {imageLibrary.map((img) => (
-                    <div
-                      key={img.id}
-                      className={`image-item ${selectedImage?.id === img.id ? 'selected' : ''}`}
-                      onClick={() => handleImageSelect(img)}
-                    >
-                      <div className="image-item-content">
-                        <div className="image-item-icon">🔬</div>
-                        <div className="image-item-info">
-                          <div className="image-item-title">{img.title}</div>
-                          {img.pathology_type && (
-                            <div className="image-item-tag">{img.pathology_type}</div>
-                          )}
-                          <div className="image-item-meta">
-                            <span>{img.file_type.toUpperCase()}</span>
-                            <span>{(img.file_size / 1024 / 1024).toFixed(1)} MB</span>
-                          </div>
-                        </div>
+                imageLibrary.map((img) => (
+                  <div
+                    key={img.id}
+                    className={`images-v2-img-item ${selectedImage?.id === img.id ? "selected" : ""}`}
+                    onClick={() => handleImageSelect(img)}
+                  >
+                    <div className="images-v2-img-thumb">🔬</div>
+                    <div className="images-v2-img-info">
+                      <div className="images-v2-img-name">{img.title}</div>
+                      <div className="images-v2-img-meta">
+                        {img.pathology_type && (
+                          <span className="images-v2-img-tag">{img.pathology_type}</span>
+                        )}
+                        <span>{img.file_type?.toUpperCase()}</span>
+                        <span>{(img.file_size / 1024 / 1024).toFixed(1)} MB</span>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
 
-          {/* Visor de imágenes */}
-          <div className="images-viewer-container">
+          {/* Viewer */}
+          <div className="images-v2-viewer">
             {selectedImage ? (
               selectedImage.has_dzi
                 ? <OpenSeadragonViewer imageData={selectedImage} />
                 : <MedicalImageViewer imageData={selectedImage} />
             ) : (
-              <div className="empty-viewer">
-                <div className="empty-icon">🖼️</div>
-                <h3>No hay imagen seleccionada</h3>
-                <p>Selecciona una imagen de la biblioteca o carga una desde tu dispositivo</p>
+              <div className="images-v2-empty-viewer">
+                <span className="images-v2-empty-icon">🔬</span>
+                <div className="images-v2-empty-title">Ninguna imagen seleccionada</div>
+                <p className="images-v2-empty-text">
+                  Selecciona una imagen de la biblioteca o carga una desde tu dispositivo
+                </p>
               </div>
             )}
           </div>
         </div>
-
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

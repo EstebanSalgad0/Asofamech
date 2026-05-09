@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, deleteSCTTest } from "../api";
+import { AppSidebar } from "../components/AppSidebar";
 
 export function ConfigPage() {
   const navigate = useNavigate();
@@ -9,12 +10,10 @@ export function ConfigPage() {
   const [activeTab, setActiveTab] = useState("images");
   const [toast, setToast] = useState(null);
 
-  // Image management state
   const [imageLibrary, setImageLibrary] = useState([]);
   const [loadingImages, setLoadingImages] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
-  // SCT management state
   const [sctTests, setSctTests] = useState([]);
   const [loadingSCT, setLoadingSCT] = useState(true);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -29,16 +28,10 @@ export function ConfigPage() {
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
-    if (!userData) {
-      navigate("/auth");
-      return;
-    }
+    if (!userData) { navigate("/auth"); return; }
     setUser(JSON.parse(userData));
-
     const savedRole = localStorage.getItem("role");
     if (savedRole) setRole(savedRole);
-
-    // Guard: only admins/professors can access this page
     const effectiveRole = savedRole || role;
     if (effectiveRole !== "Administrador" && effectiveRole !== "Profesor") {
       navigate("/dashboard");
@@ -54,10 +47,7 @@ export function ConfigPage() {
     try {
       setLoadingImages(true);
       const response = await fetch("http://localhost:8001/api/medical-images/list");
-      if (response.ok) {
-        const data = await response.json();
-        setImageLibrary(data);
-      }
+      if (response.ok) setImageLibrary(await response.json());
     } catch (error) {
       console.error("Error cargando biblioteca:", error);
     } finally {
@@ -67,23 +57,15 @@ export function ConfigPage() {
 
   const handleDeleteImage = async (imageId) => {
     if (!confirm("¿Estás seguro de eliminar esta imagen?")) return;
-
     try {
-      const response = await fetch(`http://localhost:8001/api/medical-images/${imageId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        showToast("Imagen eliminada exitosamente", "success");
-        loadImageLibrary();
-      }
+      const response = await fetch(`http://localhost:8001/api/medical-images/${imageId}`, { method: "DELETE" });
+      if (response.ok) { showToast("Imagen eliminada exitosamente", "success"); loadImageLibrary(); }
     } catch (error) {
       console.error("Error eliminando imagen:", error);
       showToast("Error al eliminar la imagen", "error");
     }
   };
 
-  // ── SCT Management Functions ──
   const loadSCTTestList = async () => {
     try {
       setLoadingSCT(true);
@@ -99,15 +81,11 @@ export function ConfigPage() {
 
   const handleDeleteSCTTest = async (testId, testName) => {
     if (!confirm(`¿Estás seguro de eliminar el test "${testName}"?`)) return;
-
     try {
       await deleteSCTTest(testId);
-      showToast(`Test "${testName}" eliminado exitosamente`, "success");
+      showToast(`Test "${testName}" eliminado`, "success");
       setSctTests((prev) => prev.filter((t) => t.id !== testId));
-      if (expandedTest === testId) {
-        setExpandedTest(null);
-        setExpandedTestData(null);
-      }
+      if (expandedTest === testId) { setExpandedTest(null); setExpandedTestData(null); }
     } catch (error) {
       console.error("Error eliminando test SCT:", error);
       showToast("Error al eliminar el test", "error");
@@ -115,12 +93,7 @@ export function ConfigPage() {
   };
 
   const handleToggleTestDetail = async (testId) => {
-    if (expandedTest === testId) {
-      setExpandedTest(null);
-      setExpandedTestData(null);
-      return;
-    }
-
+    if (expandedTest === testId) { setExpandedTest(null); setExpandedTestData(null); return; }
     setExpandedTest(testId);
     setLoadingTestDetail(true);
     try {
@@ -137,27 +110,26 @@ export function ConfigPage() {
 
   const getDifficultyColor = (diff) => {
     switch (diff?.toLowerCase()) {
-      case "pregrado": return "config-badge-blue";
-      case "internado": return "config-badge-yellow";
-      case "residente": return "config-badge-red";
-      default: return "config-badge-gray";
+      case "pregrado": return "cfg-badge-blue";
+      case "internado": return "cfg-badge-yellow";
+      case "residente": return "cfg-badge-red";
+      default: return "cfg-badge-gray";
     }
   };
 
   const getAnswerLabel = (val) => {
-    switch (val) {
-      case -2: return "Descarta completamente";
-      case -1: return "Menos probable";
-      case 0: return "Sin cambio";
-      case 1: return "Más probable";
-      case 2: return "Apoya fuertemente";
-      default: return "—";
-    }
+    const labels = { "-2": "Descarta completamente", "-1": "Menos probable", "0": "Sin cambio", "1": "Más probable", "2": "Apoya fuertemente" };
+    return labels[String(val)] || "—";
   };
 
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/");
+  };
+
+  const handleRoleChange = (val) => {
+    setRole(val);
+    localStorage.setItem("role", val);
   };
 
   const formatFileSize = (bytes) => {
@@ -170,162 +142,97 @@ export function ConfigPage() {
 
   const TABS = [
     { id: "images", label: "Gestión de Imágenes", icon: "🖼️" },
-    { id: "ai", label: "Configuración IA", icon: "🤖" },
-    { id: "sct", label: "Tests SCT", icon: "📋" },
+    { id: "ai",     label: "Configuración IA",    icon: "🤖" },
+    { id: "sct",    label: "Tests SCT",            icon: "📋" },
   ];
 
   return (
-    <div className="dashboard-page">
-      {/* Sidebar */}
-      <aside className="dashboard-sidebar">
-        <div className="sidebar-logo">
-          <div className="logo-icon">A</div>
-          <span>ASOFAMECH</span>
-        </div>
+    <>
+      <AppSidebar
+        user={user}
+        role={role}
+        activeRoute="config"
+        onRoleChange={handleRoleChange}
+        onLogout={handleLogout}
+      />
 
-        <nav className="sidebar-nav">
-          <Link to="/dashboard" className="nav-item">
-            <span className="nav-icon">🏠</span>
-            <span>Inicio</span>
-          </Link>
-          <Link to="/dashboard/chat" className="nav-item">
-            <span className="nav-icon">💬</span>
-            <span>Asistente IA</span>
-          </Link>
-          <Link to="/dashboard/sct" className="nav-item">
-            <span className="nav-icon">📋</span>
-            <span>Test SCT</span>
-          </Link>
-          <Link to="/dashboard/images" className="nav-item">
-            <span className="nav-icon">🖼️</span>
-            <span>Imágenes IA</span>
-          </Link>
-          {(role === "Administrador" || role === "Profesor") && (
-            <Link to="/dashboard/config" className="nav-item active">
-              <span className="nav-icon">⚙️</span>
-              <span>Configuración</span>
-            </Link>
-          )}
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div className="user-avatar">{user.name.charAt(0)}</div>
-            <div className="user-info">
-              <div className="user-name">{user.name}</div>
-              <div className="user-role">{role}</div>
-            </div>
-          </div>
-          <select
-            className="sidebar-role-selector"
-            value={role}
-            onChange={(e) => {
-              setRole(e.target.value);
-              localStorage.setItem("role", e.target.value);
-            }}
-          >
-            <option value="Estudiante">Estudiante</option>
-            <option value="Administrador">Administrador</option>
-            <option value="Profesor">Profesor</option>
-          </select>
-          <button onClick={handleLogout} className="btn-logout">
-            <span>↗</span> Cerrar Sesión
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="dashboard-main config-page">
-        <div className="config-header">
-          <h1 className="config-title">
-            <span className="config-title-icon">⚙️</span>
-            Panel de <span className="gradient-text">Configuración</span>
+      <div className="page-scroll">
+        {/* Hero header */}
+        <div className="cfg-hero">
+          <div className="cfg-hero-tag">Admin</div>
+          <h1 className="cfg-hero-title">
+            Panel de <span className="serif-it">Configuración</span>
           </h1>
-          <p className="config-subtitle">
-            Administra imágenes médicas, configuración de IA y tests SCT de la
-            plataforma.
+          <p className="cfg-hero-sub">
+            Administra imágenes médicas, configuración de IA y tests SCT de la plataforma.
           </p>
+
+          {/* Tabs inside hero */}
+          <div className="cfg-tabs">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                className={`cfg-tab ${activeTab === tab.id ? "active" : ""}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div className="config-tabs">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              className={`config-tab ${activeTab === tab.id ? "active" : ""}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <span className="config-tab-icon">{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
+        {/* Content */}
+        <div className="cfg-body">
 
-        {/* Tab content */}
-        <div className="config-content">
-          {/* ── Images tab ── */}
+          {/* ── IMAGES TAB ── */}
           {activeTab === "images" && (
-            <div className="config-section">
-              <div className="config-section-header">
+            <div className="cfg-section">
+              <div className="cfg-section-top">
                 <div>
-                  <h2 className="config-section-title">
-                    🖼️ Gestión de Imágenes Médicas
-                  </h2>
-                  <p className="config-section-desc">
-                    Sube, gestiona y elimina las imágenes histológicas que
-                    estarán disponibles para los estudiantes.
-                  </p>
+                  <div className="cfg-section-title">Gestión de Imágenes Médicas</div>
+                  <div className="cfg-section-desc">
+                    Sube, gestiona y elimina las imágenes histológicas disponibles para los estudiantes.
+                  </div>
                 </div>
-                <button
-                  className="btn-config-action"
-                  onClick={() => setShowUploadModal(true)}
-                >
-                  ➕ Subir imagen
+                <button className="cfg-action-btn" onClick={() => setShowUploadModal(true)}>
+                  + Subir imagen
                 </button>
               </div>
 
               {/* Stats */}
-              <div className="config-stats-row">
-                <div className="config-stat-card">
-                  <div className="config-stat-value">
-                    {imageLibrary.length}
-                  </div>
-                  <div className="config-stat-label">Total imágenes</div>
+              <div className="cfg-stats-row">
+                <div className="cfg-stat-card">
+                  <div className="cfg-stat-val clr-accent">{imageLibrary.length}</div>
+                  <div className="cfg-stat-lbl">Total imágenes</div>
                 </div>
-                <div className="config-stat-card">
-                  <div className="config-stat-value">
-                    {imageLibrary.filter((i) => i.has_dzi).length}
-                  </div>
-                  <div className="config-stat-label">Con DZI (zoom profundo)</div>
+                <div className="cfg-stat-card">
+                  <div className="cfg-stat-val clr-indigo">{imageLibrary.filter(i => i.has_dzi).length}</div>
+                  <div className="cfg-stat-lbl">Con DZI (zoom profundo)</div>
                 </div>
-                <div className="config-stat-card">
-                  <div className="config-stat-value">
-                    {formatFileSize(
-                      imageLibrary.reduce((acc, i) => acc + (i.file_size || 0), 0)
-                    )}
+                <div className="cfg-stat-card">
+                  <div className="cfg-stat-val clr-coral">
+                    {formatFileSize(imageLibrary.reduce((acc, i) => acc + (i.file_size || 0), 0))}
                   </div>
-                  <div className="config-stat-label">Espacio usado</div>
+                  <div className="cfg-stat-lbl">Espacio usado</div>
                 </div>
               </div>
 
-              {/* Image table */}
+              {/* Table */}
               {loadingImages ? (
-                <div className="config-loading">Cargando imágenes...</div>
+                <div className="cfg-loading">Cargando imágenes…</div>
               ) : imageLibrary.length === 0 ? (
-                <div className="config-empty">
-                  <span className="config-empty-icon">📭</span>
-                  <h3>No hay imágenes aún</h3>
-                  <p>Sube la primera imagen médica para que los estudiantes puedan visualizarla.</p>
-                  <button
-                    className="btn-config-action"
-                    onClick={() => setShowUploadModal(true)}
-                  >
-                    ➕ Subir primera imagen
+                <div className="cfg-empty">
+                  <span className="cfg-empty-icon">📭</span>
+                  <div className="cfg-empty-title">No hay imágenes aún</div>
+                  <p className="cfg-empty-desc">Sube la primera imagen médica para que los estudiantes puedan visualizarla.</p>
+                  <button className="cfg-action-btn" onClick={() => setShowUploadModal(true)}>
+                    + Subir primera imagen
                   </button>
                 </div>
               ) : (
-                <div className="config-table-wrapper">
-                  <table className="config-table">
+                <div className="cfg-table-wrap">
+                  <table className="cfg-table">
                     <thead>
                       <tr>
                         <th>Título</th>
@@ -342,35 +249,25 @@ export function ConfigPage() {
                       {imageLibrary.map((img) => (
                         <tr key={img.id}>
                           <td>
-                            <div className="config-img-title">
-                              <span className="config-img-icon">🔬</span>
-                              {img.title}
+                            <div className="cfg-img-cell">
+                              <span className="cfg-img-thumb">🔬</span>
+                              <span className="cfg-img-name">{img.title}</span>
                             </div>
                           </td>
-                          <td>
-                            <span className="config-badge">{img.file_type.toUpperCase()}</span>
-                          </td>
+                          <td><span className="cfg-badge">{img.file_type?.toUpperCase()}</span></td>
                           <td>{img.pathology_type || "—"}</td>
                           <td>{formatFileSize(img.file_size)}</td>
                           <td>
-                            {img.has_dzi ? (
-                              <span className="config-badge config-badge-green">✓ Sí</span>
-                            ) : (
-                              <span className="config-badge config-badge-gray">No</span>
-                            )}
+                            {img.has_dzi
+                              ? <span className="cfg-badge cfg-badge-green">✓ Sí</span>
+                              : <span className="cfg-badge cfg-badge-gray">No</span>}
                           </td>
                           <td>{img.uploader_name}</td>
                           <td>{new Date(img.created_at).toLocaleDateString("es-CL")}</td>
                           <td>
-                            <div className="config-actions-cell">
-                              <button
-                                className="btn-config-delete"
-                                title="Eliminar imagen"
-                                onClick={() => handleDeleteImage(img.id)}
-                              >
-                                🗑️ Eliminar
-                              </button>
-                            </div>
+                            <button className="cfg-del-btn" onClick={() => handleDeleteImage(img.id)}>
+                              🗑 Eliminar
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -381,169 +278,140 @@ export function ConfigPage() {
             </div>
           )}
 
-          {/* ── AI config tab (placeholder) ── */}
+          {/* ── AI TAB ── */}
           {activeTab === "ai" && (
-            <div className="config-section">
-              <div className="config-section-header">
+            <div className="cfg-section">
+              <div className="cfg-section-top">
                 <div>
-                  <h2 className="config-section-title">
-                    🤖 Configuración del Modelo de IA
-                  </h2>
-                  <p className="config-section-desc">
-                    Selecciona y configura el modelo de lenguaje utilizado por el
-                    asistente educativo.
-                  </p>
+                  <div className="cfg-section-title">Configuración del Modelo de IA</div>
+                  <div className="cfg-section-desc">
+                    Selecciona y configura el modelo de lenguaje utilizado por el asistente educativo.
+                  </div>
                 </div>
               </div>
-              <div className="config-placeholder">
-                <span className="config-placeholder-icon">🚧</span>
-                <h3>Próximamente</h3>
-                <p>
-                  Aquí podrás seleccionar el modelo de IA (Llama 3, Mistral, etc.),
-                  ajustar parámetros como temperatura, tokens máximos y configurar
-                  el prompt del sistema.
+              <div className="cfg-placeholder">
+                <span className="cfg-placeholder-icon">🚧</span>
+                <div className="cfg-placeholder-title">Próximamente</div>
+                <p className="cfg-placeholder-desc">
+                  Aquí podrás seleccionar el modelo de IA (Llama 3, Mistral, etc.), ajustar parámetros como temperatura,
+                  tokens máximos y configurar el prompt del sistema.
                 </p>
               </div>
             </div>
           )}
 
-          {/* ── SCT config tab ── */}
+          {/* ── SCT TAB ── */}
           {activeTab === "sct" && (
-            <div className="config-section">
-              <div className="config-section-header">
+            <div className="cfg-section">
+              <div className="cfg-section-top">
                 <div>
-                  <h2 className="config-section-title">
-                    📋 Gestión de Tests SCT
-                  </h2>
-                  <p className="config-section-desc">
-                    Genera, visualiza y administra los tests de razonamiento clínico
-                    disponibles para los estudiantes.
-                  </p>
+                  <div className="cfg-section-title">Gestión de Tests SCT</div>
+                  <div className="cfg-section-desc">
+                    Genera, visualiza y administra los tests de razonamiento clínico disponibles.
+                  </div>
                 </div>
-                <button
-                  className="btn-config-action"
-                  onClick={() => setShowGenerateModal(true)}
-                >
-                  ✨ Generar nuevo test
+                <button className="cfg-action-btn" onClick={() => setShowGenerateModal(true)}>
+                  ✨ Generar test
                 </button>
               </div>
 
               {/* Stats */}
-              <div className="config-stats-row">
-                <div className="config-stat-card">
-                  <div className="config-stat-value">{sctTests.length}</div>
-                  <div className="config-stat-label">Tests guardados</div>
+              <div className="cfg-stats-row">
+                <div className="cfg-stat-card">
+                  <div className="cfg-stat-val clr-accent">{sctTests.length}</div>
+                  <div className="cfg-stat-lbl">Tests guardados</div>
                 </div>
-                <div className="config-stat-card">
-                  <div className="config-stat-value">
+                <div className="cfg-stat-card">
+                  <div className="cfg-stat-val clr-indigo">
                     {sctTests.reduce((acc, t) => acc + (t.num_items || 0), 0)}
                   </div>
-                  <div className="config-stat-label">Total ítems</div>
+                  <div className="cfg-stat-lbl">Total ítems</div>
                 </div>
-                <div className="config-stat-card">
-                  <div className="config-stat-value">
-                    {[...new Set(sctTests.map((t) => t.focus))].length}
+                <div className="cfg-stat-card">
+                  <div className="cfg-stat-val clr-coral">
+                    {[...new Set(sctTests.map(t => t.focus))].length}
                   </div>
-                  <div className="config-stat-label">Enfoques médicos</div>
+                  <div className="cfg-stat-lbl">Enfoques médicos</div>
                 </div>
-                <div className="config-stat-card">
-                  <div className="config-stat-value">
-                    {[...new Set(sctTests.map((t) => t.difficulty))].length}
+                <div className="cfg-stat-card">
+                  <div className="cfg-stat-val" style={{ color: 'var(--lime)', filter: 'brightness(0.7)' }}>
+                    {[...new Set(sctTests.map(t => t.difficulty))].length}
                   </div>
-                  <div className="config-stat-label">Niveles dificultad</div>
+                  <div className="cfg-stat-lbl">Niveles dificultad</div>
                 </div>
               </div>
 
-              {/* Test list */}
+              {/* SCT list */}
               {loadingSCT ? (
-                <div className="config-loading">Cargando tests SCT...</div>
+                <div className="cfg-loading">Cargando tests SCT…</div>
               ) : sctTests.length === 0 ? (
-                <div className="config-empty">
-                  <span className="config-empty-icon">📄</span>
-                  <h3>No hay tests SCT guardados</h3>
-                  <p>Genera el primer test con IA para que los estudiantes practiquen razonamiento clínico.</p>
-                  <button
-                    className="btn-config-action"
-                    onClick={() => setShowGenerateModal(true)}
-                  >
-                    ✨ Generar primer test
-                  </button>
+                <div className="cfg-empty">
+                  <span className="cfg-empty-icon">📄</span>
+                  <div className="cfg-empty-title">No hay tests SCT guardados</div>
+                  <p className="cfg-empty-desc">Genera el primer test con IA para que los estudiantes practiquen razonamiento clínico.</p>
+                  <button className="cfg-action-btn" onClick={() => setShowGenerateModal(true)}>✨ Generar primer test</button>
                 </div>
               ) : (
-                <div className="sct-config-list">
+                <div className="cfg-sct-list">
                   {sctTests.map((test) => (
-                    <div key={test.id} className="sct-config-card">
-                      <div className="sct-config-card-header">
-                        <div className="sct-config-card-info">
-                          <h3 className="sct-config-card-title">{test.name}</h3>
-                          <div className="sct-config-card-meta">
-                            <span className={`config-badge ${getDifficultyColor(test.difficulty)}`}>
-                              {test.difficulty}
-                            </span>
-                            <span className="sct-config-meta-item">
-                              🎯 {test.focus}
-                            </span>
-                            <span className="sct-config-meta-item">
-                              📝 {test.num_items} ítems
-                            </span>
-                            <span className="sct-config-meta-item">
-                              📅 {new Date(test.created_at).toLocaleDateString("es-CL")}
-                            </span>
+                    <div key={test.id} className="cfg-sct-card">
+                      <div className="cfg-sct-card-header">
+                        <div className="cfg-sct-card-info">
+                          <div className="cfg-sct-name">{test.name}</div>
+                          <div className="cfg-sct-meta">
+                            <span className={`cfg-badge ${getDifficultyColor(test.difficulty)}`}>{test.difficulty}</span>
+                            <span className="cfg-sct-meta-item">🎯 {test.focus}</span>
+                            <span className="cfg-sct-meta-item">📝 {test.num_items} ítems</span>
+                            <span className="cfg-sct-meta-item">📅 {new Date(test.created_at).toLocaleDateString("es-CL")}</span>
                           </div>
                         </div>
-                        <div className="sct-config-card-actions">
+                        <div className="cfg-sct-card-actions">
                           <button
-                            className="btn-sct-config-view"
+                            className="cfg-view-btn"
                             onClick={() => handleToggleTestDetail(test.id)}
-                            title={expandedTest === test.id ? "Ocultar ítems" : "Ver ítems"}
                           >
-                            {expandedTest === test.id ? "🔼 Ocultar" : "🔽 Ver ítems"}
+                            {expandedTest === test.id ? "▲ Ocultar" : "▼ Ver ítems"}
                           </button>
                           <button
-                            className="btn-config-delete"
+                            className="cfg-del-btn"
                             onClick={() => handleDeleteSCTTest(test.id, test.name)}
-                            title="Eliminar test"
                           >
-                            🗑️ Eliminar
+                            🗑 Eliminar
                           </button>
                         </div>
                       </div>
 
-                      {/* Expanded detail */}
                       {expandedTest === test.id && (
-                        <div className="sct-config-detail">
+                        <div className="cfg-sct-detail">
                           {loadingTestDetail ? (
-                            <div className="sct-config-detail-loading">
-                              <div className="spinner-small"></div>
-                              <span>Cargando ítems...</span>
-                            </div>
-                          ) : expandedTestData && expandedTestData.items ? (
-                            <div className="sct-config-items">
+                            <div className="cfg-loading">Cargando ítems…</div>
+                          ) : expandedTestData?.items ? (
+                            <div className="cfg-sct-items">
                               {expandedTestData.items.map((item, idx) => (
-                                <div key={item.id || idx} className="sct-config-item">
-                                  <div className="sct-config-item-header">
-                                    <span className="sct-config-item-number">Caso {idx + 1}</span>
-                                    <span className={`sct-config-item-answer ${item.correct_answer > 0 ? 'positive' : item.correct_answer < 0 ? 'negative' : 'neutral'}`}>
-                                      Respuesta: {item.correct_answer > 0 ? `+${item.correct_answer}` : item.correct_answer} ({getAnswerLabel(item.correct_answer)})
+                                <div key={item.id || idx} className="cfg-sct-item">
+                                  <div className="cfg-sct-item-top">
+                                    <span className="cfg-sct-item-num">Caso {idx + 1}</span>
+                                    <span className={`cfg-sct-answer ${item.correct_answer > 0 ? "positive" : item.correct_answer < 0 ? "negative" : "neutral"}`}>
+                                      {item.correct_answer > 0 ? `+${item.correct_answer}` : item.correct_answer} — {getAnswerLabel(item.correct_answer)}
                                     </span>
                                   </div>
-                                  <div className="sct-config-item-body">
-                                    <div className="sct-config-item-field">
-                                      <span className="sct-config-field-label">🏥 Viñeta clínica</span>
-                                      <p className="sct-config-field-text">{item.vignette}</p>
+                                  <div className="cfg-sct-item-body">
+                                    <div className="cfg-sct-field">
+                                      <span className="cfg-sct-field-label">Viñeta clínica</span>
+                                      <p className="cfg-sct-field-text">{item.vignette}</p>
                                     </div>
-                                    <div className="sct-config-item-field">
-                                      <span className="sct-config-field-label">💭 Hipótesis</span>
-                                      <p className="sct-config-field-text">{item.hypothesis}</p>
+                                    <div className="cfg-sct-field">
+                                      <span className="cfg-sct-field-label" style={{ color: 'var(--indigo)' }}>Hipótesis</span>
+                                      <p className="cfg-sct-field-text">{item.hypothesis}</p>
                                     </div>
-                                    <div className="sct-config-item-field">
-                                      <span className="sct-config-field-label">🔍 Nueva información</span>
-                                      <p className="sct-config-field-text">{item.new_info}</p>
+                                    <div className="cfg-sct-field">
+                                      <span className="cfg-sct-field-label" style={{ color: 'var(--coral)' }}>Nueva información</span>
+                                      <p className="cfg-sct-field-text">{item.new_info}</p>
                                     </div>
                                     {item.explanation && (
-                                      <div className="sct-config-item-field">
-                                        <span className="sct-config-field-label">💡 Explicación</span>
-                                        <p className="sct-config-field-text explanation">{item.explanation}</p>
+                                      <div className="cfg-sct-field">
+                                        <span className="cfg-sct-field-label" style={{ color: 'var(--accent-deep)' }}>Explicación</span>
+                                        <p className="cfg-sct-field-text cfg-explanation">{item.explanation}</p>
                                       </div>
                                     )}
                                   </div>
@@ -551,7 +419,7 @@ export function ConfigPage() {
                               ))}
                             </div>
                           ) : (
-                            <p className="sct-config-detail-error">No se pudieron cargar los ítems.</p>
+                            <div className="cfg-loading">No se pudieron cargar los ítems.</div>
                           )}
                         </div>
                       )}
@@ -563,61 +431,42 @@ export function ConfigPage() {
           )}
         </div>
 
-        {/* Upload modal */}
+        {/* Modals */}
         {showUploadModal && (
           <UploadModal
             onClose={() => setShowUploadModal(false)}
-            onSuccess={(msg) => {
-              setShowUploadModal(false);
-              loadImageLibrary();
-              showToast(msg || "Imagen subida exitosamente", "success", 5000);
-            }}
+            onSuccess={(msg) => { setShowUploadModal(false); loadImageLibrary(); showToast(msg || "Imagen subida exitosamente", "success", 5000); }}
             onError={(msg) => showToast(msg, "error", 5000)}
           />
         )}
-
-        {/* SCT Generate modal */}
         {showGenerateModal && (
           <SCTGenerateModal
             onClose={() => setShowGenerateModal(false)}
-            onSuccess={(testName) => {
-              setShowGenerateModal(false);
-              loadSCTTestList();
-              showToast(`Test "${testName}" generado y guardado exitosamente`, "success", 5000);
-            }}
+            onSuccess={(testName) => { setShowGenerateModal(false); loadSCTTestList(); showToast(`Test "${testName}" generado exitosamente`, "success", 5000); }}
             onError={(msg) => showToast(msg, "error", 5000)}
           />
         )}
 
-        {/* Toast notification */}
         {toast && (
-          <div className={`toast-notification toast-${toast.type}`}>
-            <span className="toast-icon">
-              {toast.type === "success" ? "✅" : toast.type === "error" ? "❌" : "ℹ️"}
-            </span>
-            <span className="toast-message">{toast.message}</span>
-            <button className="toast-close" onClick={() => setToast(null)}>
-              ✕
-            </button>
+          <div className="v2-toast">
+            <span>{toast.type === "success" ? "✓" : "✕"}</span>
+            <span>{toast.message}</span>
+            <button className="v2-toast-close" onClick={() => setToast(null)}>✕</button>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </>
   );
 }
 
-/* ─── Upload Modal (same as before, with progress) ─── */
+/* ─── Upload Modal ─── */
 function UploadModal({ onClose, onSuccess, onError }) {
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    pathology_type: "",
-  });
+  const [formData, setFormData] = useState({ title: "", description: "", pathology_type: "" });
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadPhase, setUploadPhase] = useState("");
-  const xhrRef = React.useRef(null);
+  const xhrRef = useRef(null);
 
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + " B";
@@ -628,20 +477,14 @@ function UploadModal({ onClose, onSuccess, onError }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!file) return;
-
-    setUploading(true);
-    setUploadProgress(0);
-    setUploadPhase("uploading");
-
+    setUploading(true); setUploadProgress(0); setUploadPhase("uploading");
     const uploadData = new FormData();
     uploadData.append("file", file);
     uploadData.append("title", formData.title);
     uploadData.append("description", formData.description);
     uploadData.append("pathology_type", formData.pathology_type);
-
     const xhr = new XMLHttpRequest();
     xhrRef.current = xhr;
-
     xhr.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) {
         const percent = Math.round((event.loaded / event.total) * 100);
@@ -649,38 +492,19 @@ function UploadModal({ onClose, onSuccess, onError }) {
         if (percent >= 100) setUploadPhase("processing");
       }
     });
-
     xhr.addEventListener("load", () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         setUploadPhase("done");
-        setTimeout(() => {
-          onSuccess(
-            `"${formData.title}" subida exitosamente (${formatFileSize(file.size)})`
-          );
-        }, 800);
+        setTimeout(() => onSuccess(`"${formData.title}" subida exitosamente (${formatFileSize(file.size)})`), 800);
       } else {
         setUploadPhase("error");
-        try {
-          const err = JSON.parse(xhr.responseText);
-          onError(err.detail || "Error al subir la imagen");
-        } catch {
-          onError("Error al subir la imagen (código " + xhr.status + ")");
-        }
+        try { const err = JSON.parse(xhr.responseText); onError(err.detail || "Error al subir la imagen"); }
+        catch { onError("Error al subir la imagen (código " + xhr.status + ")"); }
         setUploading(false);
       }
     });
-
-    xhr.addEventListener("error", () => {
-      setUploadPhase("error");
-      onError("Error de conexión al subir la imagen");
-      setUploading(false);
-    });
-
-    xhr.addEventListener("abort", () => {
-      setUploadPhase("");
-      setUploading(false);
-    });
-
+    xhr.addEventListener("error", () => { setUploadPhase("error"); onError("Error de conexión al subir la imagen"); setUploading(false); });
+    xhr.addEventListener("abort", () => { setUploadPhase(""); setUploading(false); });
     xhr.open("POST", "http://localhost:8001/api/medical-images/upload");
     xhr.send(uploadData);
   };
@@ -691,124 +515,60 @@ function UploadModal({ onClose, onSuccess, onError }) {
   };
 
   return (
-    <div className="modal-overlay" onClick={!uploading ? onClose : undefined}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">📤 Subir Imagen Médica</h2>
-        <form onSubmit={handleSubmit} className="upload-form">
-          <div className="form-group">
-            <label>Archivo *</label>
-            <input
-              type="file"
-              accept="image/*,.svs"
-              onChange={(e) => setFile(e.target.files[0])}
-              required
-              disabled={uploading}
-              className="file-input"
-            />
-            {file && (
-              <p className="file-selected-info">
-                📄 {file.name} — {formatFileSize(file.size)}
-              </p>
-            )}
-            <p className="hint-text">
-              📌 Recomendado: JPG, PNG, TIFF
-              <br />
-              ⚠️ Archivos SVS requieren OpenSlide instalado en el servidor
-            </p>
+    <div className="cfg-modal-overlay" onClick={!uploading ? onClose : undefined}>
+      <div className="cfg-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cfg-modal-header">
+          <div className="cfg-modal-title">Subir Imagen Médica</div>
+          <div className="cfg-modal-sub">SVS, JPG, PNG, TIFF</div>
+        </div>
+        <form onSubmit={handleSubmit} className="cfg-modal-form">
+          <div className="cfg-modal-field">
+            <label className="cfg-modal-label">Archivo *</label>
+            <input type="file" accept="image/*,.svs" onChange={(e) => setFile(e.target.files[0])} required disabled={uploading} className="cfg-file-input" />
+            {file && <div className="cfg-file-selected">📄 {file.name} — {formatFileSize(file.size)}</div>}
+            <div className="cfg-field-hint">SVS requiere OpenSlide instalado en el servidor</div>
           </div>
-
-          <div className="form-group">
-            <label>Título *</label>
-            <input
-              type="text"
-              value={formData.title}
-              onChange={(e) =>
-                setFormData({ ...formData, title: e.target.value })
-              }
-              placeholder="Ej: Tejido pulmonar con necrosis"
-              required
-              disabled={uploading}
-              className="text-input"
-            />
+          <div className="cfg-modal-field">
+            <label className="cfg-modal-label">Título *</label>
+            <input type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} placeholder="Ej: Tejido pulmonar con necrosis" required disabled={uploading} className="cfg-modal-input" />
           </div>
-
-          <div className="form-group">
-            <label>Tipo de Patología</label>
-            <input
-              type="text"
-              value={formData.pathology_type}
-              onChange={(e) =>
-                setFormData({ ...formData, pathology_type: e.target.value })
-              }
-              placeholder="Ej: Necrosis, Células de Langerhans"
-              disabled={uploading}
-              className="text-input"
-            />
+          <div className="cfg-modal-field">
+            <label className="cfg-modal-label">Tipo de Patología</label>
+            <input type="text" value={formData.pathology_type} onChange={(e) => setFormData({ ...formData, pathology_type: e.target.value })} placeholder="Ej: Necrosis, Células de Langerhans" disabled={uploading} className="cfg-modal-input" />
           </div>
-
-          <div className="form-group">
-            <label>Descripción</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
-              placeholder="Descripción detallada de la imagen..."
-              rows="3"
-              disabled={uploading}
-              className="textarea-input"
-            />
+          <div className="cfg-modal-field">
+            <label className="cfg-modal-label">Descripción</label>
+            <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Descripción detallada de la imagen..." rows="3" disabled={uploading} className="cfg-modal-textarea" />
           </div>
 
           {uploading && (
-            <div className="upload-progress-section">
-              <div className="upload-progress-header">
-                <span className="upload-progress-label">
-                  {uploadPhase === "uploading" && "📤 Subiendo archivo..."}
-                  {uploadPhase === "processing" &&
-                    "⚙️ Procesando en el servidor..."}
-                  {uploadPhase === "done" && "✅ ¡Completado!"}
-                  {uploadPhase === "error" && "❌ Error"}
+            <div className="cfg-upload-progress">
+              <div className="cfg-upload-progress-header">
+                <span>
+                  {uploadPhase === "uploading" && "Subiendo archivo…"}
+                  {uploadPhase === "processing" && "Procesando en servidor…"}
+                  {uploadPhase === "done" && "✓ Completado"}
+                  {uploadPhase === "error" && "✕ Error"}
                 </span>
-                <span className="upload-progress-percent">
-                  {uploadPhase === "uploading" && `${uploadProgress}%`}
-                  {uploadPhase === "processing" && "100%"}
-                  {uploadPhase === "done" && "100%"}
-                </span>
+                <span className="cfg-upload-pct">{uploadPhase === "uploading" ? `${uploadProgress}%` : "100%"}</span>
               </div>
-              <div className="upload-progress-bar-track">
-                <div
-                  className={`upload-progress-bar-fill ${uploadPhase}`}
-                  style={{
-                    width: `${uploadPhase === "uploading" ? uploadProgress : 100}%`,
-                  }}
-                />
+              <div className="v2-progress-track" style={{ marginBottom: 0 }}>
+                <div className="v2-progress-fill" style={{ width: `${uploadPhase === "uploading" ? uploadProgress : 100}%`, background: uploadPhase === "done" ? "var(--accent)" : undefined }} />
               </div>
-              {uploadPhase === "uploading" && file && (
-                <p className="upload-progress-detail">
-                  {formatFileSize((file.size * uploadProgress) / 100)} de{" "}
-                  {formatFileSize(file.size)}
-                </p>
-              )}
               {uploadPhase === "processing" && (
-                <p className="upload-progress-detail">
-                  El archivo se subió completo. El servidor está procesando la
-                  imagen (generando tiles DZI si es SVS)...
-                </p>
+                <div className="cfg-field-hint" style={{ marginTop: '8px' }}>
+                  Generando tiles DZI si el archivo es SVS…
+                </div>
               )}
             </div>
           )}
 
-          <div className="modal-actions">
-            <button type="button" onClick={handleCancel} className="btn-cancel">
+          <div className="cfg-modal-actions">
+            <button type="button" onClick={handleCancel} className="cfg-cancel-btn">
               {uploading ? "Cancelar subida" : "Cancelar"}
             </button>
-            <button
-              type="submit"
-              disabled={uploading || !file}
-              className="btn-submit"
-            >
-              {uploading ? "Subiendo..." : "Subir Imagen"}
+            <button type="submit" disabled={uploading || !file} className="cfg-submit-btn">
+              {uploading ? "Subiendo…" : "Subir Imagen"}
             </button>
           </div>
         </form>
@@ -825,257 +585,137 @@ function SCTGenerateModal({ onClose, onSuccess, onError }) {
   const [testName, setTestName] = useState("");
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState(""); // idle, generating, saving, done
+  const [phase, setPhase] = useState("");
   const [generatedTest, setGeneratedTest] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const handleGenerate = async (e) => {
     e.preventDefault();
     if (!medicalFocus.trim()) return;
-
     const name = testName.trim() || `Test SCT - ${medicalFocus}`;
-    setGenerating(true);
-    setProgress(0);
-    setPhase("generating");
-
-    // Simulated progress
+    setGenerating(true); setProgress(0); setPhase("generating");
     const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 85) { clearInterval(progressInterval); return 85; }
-        return prev + 10;
-      });
+      setProgress((prev) => { if (prev >= 85) { clearInterval(progressInterval); return 85; } return prev + 10; });
     }, 1200);
-
     try {
-      const response = await generateSCT(
-        parseInt(numItems),
-        difficulty.toLowerCase(),
-        medicalFocus
-      );
-
-      clearInterval(progressInterval);
-      setProgress(90);
-
-      if (response && response.items && response.items.length > 0) {
-        setGeneratedTest(response);
-        setPhase("saving");
-
-        // Save immediately
+      const response = await generateSCT(parseInt(numItems), difficulty.toLowerCase(), medicalFocus);
+      clearInterval(progressInterval); setProgress(90);
+      if (response?.items?.length > 0) {
+        setGeneratedTest(response); setPhase("saving");
         const itemsToSave = response.items.map((item) => ({
-          id: item.id,
-          vignette: item.vignette || "",
-          hypothesis: item.hypothesis || "",
+          id: item.id, vignette: item.vignette || "", hypothesis: item.hypothesis || "",
           new_info: item.new_info || "",
-          scale_options: [
-            "−2: Descarta completamente",
-            "−1: Menos probable",
-            "0: Sin cambio",
-            "+1: Más probable",
-            "+2: Apoya fuertemente",
-          ],
-          correct_answer: item.correct_answer || 0,
-          explanation: item.explanation || "",
+          scale_options: ["−2: Descarta completamente", "−1: Menos probable", "0: Sin cambio", "+1: Más probable", "+2: Apoya fuertemente"],
+          correct_answer: item.correct_answer || 0, explanation: item.explanation || "",
         }));
-
-        await saveSCTTest(
-          name,
-          difficulty.toLowerCase(),
-          medicalFocus,
-          response.items.length,
-          itemsToSave
-        );
-
-        setProgress(100);
-        setPhase("done");
-
-        setTimeout(() => {
-          onSuccess(name);
-        }, 1200);
+        await saveSCTTest(name, difficulty.toLowerCase(), medicalFocus, response.items.length, itemsToSave);
+        setProgress(100); setPhase("done");
+        setTimeout(() => onSuccess(name), 1200);
       } else {
         throw new Error("No se generaron ítems");
       }
     } catch (error) {
       clearInterval(progressInterval);
       console.error("Error generando test SCT:", error);
-      setGenerating(false);
-      setProgress(0);
-      setPhase("");
+      setGenerating(false); setProgress(0); setPhase("");
       onError("Error al generar el test. Verifica que el backend y Ollama estén funcionando.");
     }
   };
 
   const getAnswerLabel = (val) => {
-    switch (val) {
-      case -2: return "Descarta completamente";
-      case -1: return "Menos probable";
-      case 0: return "Sin cambio";
-      case 1: return "Más probable";
-      case 2: return "Apoya fuertemente";
-      default: return "—";
-    }
+    const labels = { "-2": "Descarta completamente", "-1": "Menos probable", "0": "Sin cambio", "1": "Más probable", "2": "Apoya fuertemente" };
+    return labels[String(val)] || "—";
   };
 
   return (
-    <div className="modal-overlay" onClick={!generating ? onClose : undefined}>
-      <div className="modal-content sct-generate-modal" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">✨ Generar Test SCT con IA</h2>
+    <div className="cfg-modal-overlay" onClick={!generating ? onClose : undefined}>
+      <div className="cfg-modal cfg-modal-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="cfg-modal-header">
+          <div className="cfg-modal-title">Generar Test SCT con IA</div>
+          <div className="cfg-modal-sub">El test se guardará automáticamente en el banco de preguntas</div>
+        </div>
 
         {!generating ? (
-          <form onSubmit={handleGenerate} className="sct-generate-form">
-            <div className="form-group">
-              <label>Nombre del test <span className="hint-inline">(opcional)</span></label>
-              <input
-                type="text"
-                value={testName}
-                onChange={(e) => setTestName(e.target.value)}
-                placeholder="Se autogenera si se deja vacío"
-                className="text-input"
-              />
+          <form onSubmit={handleGenerate} className="cfg-modal-form">
+            <div className="cfg-modal-field">
+              <label className="cfg-modal-label">Nombre del test <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(opcional)</span></label>
+              <input type="text" value={testName} onChange={(e) => setTestName(e.target.value)} placeholder="Se autogenera si se deja vacío" className="cfg-modal-input" />
             </div>
-
-            <div className="form-group">
-              <label>Enfoque médico *</label>
-              <input
-                type="text"
-                value={medicalFocus}
-                onChange={(e) => setMedicalFocus(e.target.value)}
-                placeholder="Ej: VIH/SIDA, diabetes mellitus, insuficiencia cardíaca..."
-                required
-                className="text-input"
-              />
+            <div className="cfg-modal-field">
+              <label className="cfg-modal-label">Enfoque médico *</label>
+              <input type="text" value={medicalFocus} onChange={(e) => setMedicalFocus(e.target.value)} placeholder="Ej: VIH/SIDA, diabetes mellitus, insuficiencia cardíaca…" required className="cfg-modal-input" />
             </div>
-
-            <div className="sct-generate-row">
-              <div className="form-group">
-                <label>Número de ítems</label>
-                <input
-                  type="number"
-                  value={numItems}
-                  onChange={(e) => setNumItems(e.target.value)}
-                  min="1"
-                  max="20"
-                  className="text-input"
-                />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="cfg-modal-field">
+                <label className="cfg-modal-label">Número de ítems</label>
+                <input type="number" value={numItems} onChange={(e) => setNumItems(e.target.value)} min="1" max="20" className="cfg-modal-input" />
               </div>
-              <div className="form-group">
-                <label>Dificultad</label>
-                <select
-                  value={difficulty}
-                  onChange={(e) => setDifficulty(e.target.value)}
-                  className="text-input"
-                >
+              <div className="cfg-modal-field">
+                <label className="cfg-modal-label">Dificultad</label>
+                <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="cfg-modal-input">
                   <option value="Pregrado">Pregrado</option>
                   <option value="Internado">Internado</option>
                   <option value="Residente">Residente</option>
                 </select>
               </div>
             </div>
-
-            <div className="sct-generate-info">
-              <span className="sct-generate-info-icon">💡</span>
-              <p>
-                El test se generará usando Llama 3 y se guardará automáticamente
-                en el banco de preguntas. Los estudiantes podrán acceder a él
-                desde la sección de Tests SCT.
-              </p>
-            </div>
-
-            <div className="modal-actions">
-              <button type="button" onClick={onClose} className="btn-cancel">
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={!medicalFocus.trim()}
-                className="btn-submit"
-              >
-                ✨ Generar con IA
-              </button>
+            <div className="cfg-modal-actions">
+              <button type="button" onClick={onClose} className="cfg-cancel-btn">Cancelar</button>
+              <button type="submit" disabled={!medicalFocus.trim()} className="cfg-submit-btn">✨ Generar con IA</button>
             </div>
           </form>
         ) : (
-          <div className="sct-generate-progress">
-            <div className="sct-generate-progress-icon">
-              {phase === "done" ? (
-                <span className="sct-progress-check">✅</span>
-              ) : (
-                <div className="spinner"></div>
-              )}
+          <div className="cfg-gen-progress">
+            <div className="cfg-gen-progress-icon">
+              {phase === "done" ? <span style={{ fontSize: '48px' }}>✅</span> : <div className="v2-loading-spinner" style={{ margin: '0 auto' }} />}
             </div>
-
-            <h3 className="sct-generate-progress-title">
-              {phase === "generating" && "Generando test con IA..."}
-              {phase === "saving" && "Guardando en la base de datos..."}
+            <div className="cfg-gen-progress-title">
+              {phase === "generating" && "Generando test con IA…"}
+              {phase === "saving" && "Guardando en la base de datos…"}
               {phase === "done" && "¡Test generado exitosamente!"}
-            </h3>
-            <p className="sct-generate-progress-sub">
+            </div>
+            <div className="cfg-gen-progress-sub">
               {phase === "generating" && `Creando ${numItems} ítems de nivel ${difficulty} sobre ${medicalFocus}`}
-              {phase === "saving" && "Los ítems fueron generados, guardando..."}
+              {phase === "saving" && "Los ítems fueron generados, guardando…"}
               {phase === "done" && "El test está listo para que los estudiantes lo utilicen."}
-            </p>
-
-            <div className="upload-progress-bar-track">
-              <div
-                className={`upload-progress-bar-fill ${phase === "done" ? "done" : "processing"}`}
-                style={{ width: `${progress}%` }}
-              />
             </div>
-            <span className="sct-generate-progress-percent">{progress}%</span>
-
-            <div className="sct-generate-steps">
-              <div className={`sct-generate-step ${progress >= 20 ? "active" : ""}`}>
-                <span>{progress >= 20 ? "✓" : "⏳"}</span> Analizando enfoque médico
-              </div>
-              <div className={`sct-generate-step ${progress >= 50 ? "active" : ""}`}>
-                <span>{progress >= 50 ? "✓" : "⏳"}</span> Generando casos clínicos
-              </div>
-              <div className={`sct-generate-step ${progress >= 85 ? "active" : ""}`}>
-                <span>{progress >= 85 ? "✓" : "⏳"}</span> Creando hipótesis y respuestas
-              </div>
-              <div className={`sct-generate-step ${progress >= 100 ? "active" : ""}`}>
-                <span>{progress >= 100 ? "✓" : "⏳"}</span> Guardado en base de datos
-              </div>
+            <div className="v2-progress-track">
+              <div className="v2-progress-fill" style={{ width: `${progress}%` }} />
+            </div>
+            <div className="v2-loading-steps">
+              {[
+                { label: "Analizando enfoque médico", t: 20 },
+                { label: "Generando casos clínicos", t: 50 },
+                { label: "Creando hipótesis y respuestas", t: 85 },
+                { label: "Guardado en base de datos", t: 100 },
+              ].map((s, i) => (
+                <div key={i} className={`v2-loading-step ${progress >= s.t ? "done" : ""}`}>
+                  <div className="v2-loading-step-icon">{progress >= s.t ? "✓" : "○"}</div>
+                  <span>{s.label}</span>
+                </div>
+              ))}
             </div>
 
-            {/* Preview generated items */}
             {phase === "done" && generatedTest && (
-              <div className="sct-generate-preview">
-                <button
-                  className="btn-sct-config-view"
-                  onClick={() => setPreviewOpen(!previewOpen)}
-                >
-                  {previewOpen ? "🔼 Ocultar vista previa" : "🔽 Ver ítems generados"}
+              <div style={{ marginTop: '20px', width: '100%', textAlign: 'left' }}>
+                <button className="cfg-view-btn" onClick={() => setPreviewOpen(!previewOpen)} style={{ marginBottom: '12px' }}>
+                  {previewOpen ? "▲ Ocultar vista previa" : "▼ Ver ítems generados"}
                 </button>
-
                 {previewOpen && (
-                  <div className="sct-config-items">
+                  <div className="cfg-sct-items">
                     {generatedTest.items.map((item, idx) => (
-                      <div key={item.id || idx} className="sct-config-item">
-                        <div className="sct-config-item-header">
-                          <span className="sct-config-item-number">Caso {idx + 1}</span>
-                          <span className={`sct-config-item-answer ${item.correct_answer > 0 ? "positive" : item.correct_answer < 0 ? "negative" : "neutral"}`}>
-                            Respuesta: {item.correct_answer > 0 ? `+${item.correct_answer}` : item.correct_answer} ({getAnswerLabel(item.correct_answer)})
+                      <div key={item.id || idx} className="cfg-sct-item">
+                        <div className="cfg-sct-item-top">
+                          <span className="cfg-sct-item-num">Caso {idx + 1}</span>
+                          <span className={`cfg-sct-answer ${item.correct_answer > 0 ? "positive" : item.correct_answer < 0 ? "negative" : "neutral"}`}>
+                            {item.correct_answer > 0 ? `+${item.correct_answer}` : item.correct_answer} — {getAnswerLabel(item.correct_answer)}
                           </span>
                         </div>
-                        <div className="sct-config-item-body">
-                          <div className="sct-config-item-field">
-                            <span className="sct-config-field-label">🏥 Viñeta clínica</span>
-                            <p className="sct-config-field-text">{item.vignette}</p>
-                          </div>
-                          <div className="sct-config-item-field">
-                            <span className="sct-config-field-label">💭 Hipótesis</span>
-                            <p className="sct-config-field-text">{item.hypothesis}</p>
-                          </div>
-                          <div className="sct-config-item-field">
-                            <span className="sct-config-field-label">🔍 Nueva información</span>
-                            <p className="sct-config-field-text">{item.new_info}</p>
-                          </div>
-                          {item.explanation && (
-                            <div className="sct-config-item-field">
-                              <span className="sct-config-field-label">💡 Explicación</span>
-                              <p className="sct-config-field-text explanation">{item.explanation}</p>
-                            </div>
-                          )}
+                        <div className="cfg-sct-item-body">
+                          <div className="cfg-sct-field"><span className="cfg-sct-field-label">Viñeta clínica</span><p className="cfg-sct-field-text">{item.vignette}</p></div>
+                          <div className="cfg-sct-field"><span className="cfg-sct-field-label" style={{ color: 'var(--indigo)' }}>Hipótesis</span><p className="cfg-sct-field-text">{item.hypothesis}</p></div>
+                          <div className="cfg-sct-field"><span className="cfg-sct-field-label" style={{ color: 'var(--coral)' }}>Nueva información</span><p className="cfg-sct-field-text">{item.new_info}</p></div>
+                          {item.explanation && <div className="cfg-sct-field"><span className="cfg-sct-field-label" style={{ color: 'var(--accent-deep)' }}>Explicación</span><p className="cfg-sct-field-text cfg-explanation">{item.explanation}</p></div>}
                         </div>
                       </div>
                     ))}
