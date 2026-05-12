@@ -2,12 +2,18 @@ import os
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..histopathology.audit_log import append_audit_event, get_audit_log_path
 from ..histopathology.debug_patches import save_patch_debug_images
+from ..histopathology.heatmap_jobs import (
+    create_heatmap_job,
+    get_heatmap_job,
+    update_heatmap_job,
+    utc_now as job_utc_now,
+)
 from ..histopathology.heatmap_store import (
     load_heatmap_by_trace,
     load_latest_heatmap_for_image,
@@ -103,6 +109,233 @@ def _tile_grid(roi: ROIBox, tile_size: int, stride: int, max_tiles: int) -> list
             if len(tiles) >= max_tiles:
                 return tiles
     return tiles
+
+
+def _execute_heatmap_scan(
+    *,
+    request: HistopathologyScanRequest,
+    image_payload: dict,
+    user_id: int | None,
+    trace_id: str | None = None,
+    analyzed_at: str | None = None,
+    progress_callback=None,
+) -> dict:
+    trace_id = trace_id or str(uuid4())
+    analyzed_at = analyzed_at or _utc_now()
+    roi_payload = _dump_schema(request.roi)
+    extractor = OpenSlidePatchExtractor()
+
+    slide_width, slide_height = extractor.get_slide_dimensions(image_payload["file_path"])
+    _validate_roi_bounds(request.roi, slide_width, slide_height)
+    tiles = _tile_grid(request.roi, request.tile_size, request.stride, request.max_tiles)
+    total_tiles = len(tiles)
+    if progress_callback:
+        progress_callback(0, total_tiles)
+    inference_service = get_inference_service()
+
+    tile_results = []
+    for index, tile_roi in enumerate(tiles):
+        try:
+            patch_rgb = extractor.extract_roi2(image_payload["file_path"], tile_roi)
+        except PatchExtractionError as exc:
+            tile_results.append(
+                {
+                    "index": index,
+                    "roi": _dump_schema(tile_roi),
+                    "status": "error",
+                    "class": "error",
+                    "confidence": 0.0,
+                    "probabilities": {},
+                    "tumor_score": 0.0,
+                    "reason": str(exc),
+                }
+            )
+            if progress_callback:
+                progress_callback(index + 1, total_tiles)
+            continue
+
+        roi_quality = evaluate_roi_quality(patch_rgb)
+        if not roi_quality["is_evaluable"]:
+            tile_results.append(
+                {
+                    "index": index,
+                    "roi": _dump_schema(tile_roi),
+                    "status": "roi_no_evaluable",
+                    "class": "roi_no_evaluable",
+                    "confidence": 0.0,
+                    "probabilities": {},
+                    "tumor_score": 0.0,
+                    "roi_quality": roi_quality,
+                    "reason": roi_quality["reason"],
+                }
+            )
+            if progress_callback:
+                progress_callback(index + 1, total_tiles)
+            continue
+
+        raw_prediction = inference_service.predict_patch(patch_rgb)
+        status = "clasificado"
+        predicted_class = raw_prediction["predicted_class"]
+        reason = None
+
+        if predicted_class == "estroma":
+            status = "roi_no_evaluable"
+            predicted_class = "roi_no_evaluable"
+            reason = "Tile marcado como estroma por la cabeza 3-class."
+        elif raw_prediction["confidence"] < inference_service.confidence_threshold:
+            status = "resultado_incierto"
+            predicted_class = "incierto"
+            reason = "Ninguna clase supera el umbral de confianza configurado."
+
+        probabilities = raw_prediction["probabilities"]
+        tile_results.append(
+            {
+                "index": index,
+                "roi": _dump_schema(tile_roi),
+                "status": status,
+                "class": predicted_class,
+                "model_predicted_class": raw_prediction["model_predicted_class"],
+                "confidence": raw_prediction["confidence"],
+                "probabilities": probabilities,
+                "tumor_score": float(probabilities.get("metastasico", 0.0)),
+                "roi_quality": roi_quality,
+                "reason": reason,
+            }
+        )
+        if progress_callback:
+            progress_callback(index + 1, total_tiles)
+
+    evaluable_tiles = [tile for tile in tile_results if tile["status"] != "error"]
+    best_tile = max(evaluable_tiles, key=lambda item: item.get("tumor_score", 0.0), default=None)
+    classified_tumor = [
+        tile for tile in tile_results
+        if tile.get("class") == "metastasico"
+    ]
+    uncertain_high = [
+        tile for tile in tile_results
+        if tile.get("status") == "resultado_incierto" and tile.get("tumor_score", 0.0) >= 0.50
+    ]
+
+    response_payload = {
+        "trace_id": trace_id,
+        "analyzed_at": analyzed_at,
+        "image_id": request.image_id,
+        "status": "completed",
+        "roi": roi_payload,
+        "tile_size": request.tile_size,
+        "stride": request.stride,
+        "requested_max_tiles": request.max_tiles,
+        "tile_count": len(tile_results),
+        "tiles": tile_results,
+        "summary": {
+            "classified_metastatic_tiles": len(classified_tumor),
+            "uncertain_high_tumor_tiles": len(uncertain_high),
+            "best_tile": best_tile,
+            "max_tumor_score": best_tile.get("tumor_score", 0.0) if best_tile else 0.0,
+        },
+        "slide_dimensions": {
+            "width": slide_width,
+            "height": slide_height,
+        },
+        "model": _model_metadata(inference_service),
+        "persisted": False,
+        "warning": EDUCATIONAL_WARNING,
+    }
+
+    try:
+        heatmap_artifacts = save_heatmap_result(response_payload)
+        response_payload["persisted"] = True
+        response_payload["artifacts"] = heatmap_artifacts
+    except OSError as exc:
+        response_payload["persisted"] = False
+        response_payload["artifact_error"] = str(exc)
+
+    append_audit_event(
+        {
+            "event": "histopathology_scan_succeeded",
+            "trace_id": trace_id,
+            "timestamp": analyzed_at,
+            "image_id": request.image_id,
+            "image_filename": image_payload.get("filename"),
+            "user_id": user_id,
+            "roi": roi_payload,
+            "tile_size": request.tile_size,
+            "stride": request.stride,
+            "tile_count": len(tile_results),
+            "summary": response_payload["summary"],
+            "persisted": response_payload["persisted"],
+            "artifacts": response_payload.get("artifacts"),
+            "artifact_error": response_payload.get("artifact_error"),
+            "model": response_payload["model"],
+            "warning": EDUCATIONAL_WARNING,
+        }
+    )
+
+    return response_payload
+
+
+def _run_heatmap_job(
+    *,
+    job_id: str,
+    request: HistopathologyScanRequest,
+    image_payload: dict,
+    user_id: int | None,
+    trace_id: str,
+):
+    update_heatmap_job(
+        job_id,
+        status="running",
+        started_at=job_utc_now(),
+        progress=0.0,
+    )
+
+    def update_progress(processed: int, total: int):
+        progress = processed / total if total else 1.0
+        update_heatmap_job(
+            job_id,
+            processed_tiles=processed,
+            total_tiles=total,
+            progress=progress,
+        )
+
+    try:
+        result = _execute_heatmap_scan(
+            request=request,
+            image_payload=image_payload,
+            user_id=user_id,
+            trace_id=trace_id,
+            analyzed_at=_utc_now(),
+            progress_callback=update_progress,
+        )
+        update_heatmap_job(
+            job_id,
+            status="completed",
+            progress=1.0,
+            processed_tiles=result["tile_count"],
+            total_tiles=result["tile_count"],
+            completed_at=job_utc_now(),
+            result=result,
+        )
+    except Exception as exc:
+        update_heatmap_job(
+            job_id,
+            status="failed",
+            failed_at=job_utc_now(),
+            error=str(exc),
+        )
+        append_audit_event(
+            {
+                "event": "histopathology_heatmap_job_failed",
+                "trace_id": trace_id,
+                "timestamp": _utc_now(),
+                "image_id": request.image_id,
+                "image_filename": image_payload.get("filename"),
+                "user_id": user_id,
+                "roi": _dump_schema(request.roi),
+                "error_type": type(exc).__name__,
+                "detail": str(exc),
+            }
+        )
 
 
 @router.get("/status")
@@ -455,7 +688,6 @@ async def scan_roi_heatmap(
     trace_id = str(uuid4())
     analyzed_at = _utc_now()
     roi_payload = _dump_schema(request.roi)
-
     image = (
         db.query(MedicalImage)
         .filter(MedicalImage.id == request.image_id, MedicalImage.is_active == True)
@@ -476,19 +708,24 @@ async def scan_roi_heatmap(
             }
         )
         raise HTTPException(status_code=404, detail="Imagen no encontrada")
-
-    extractor = OpenSlidePatchExtractor()
+    image_payload = {
+        "id": image.id,
+        "filename": image.filename,
+        "file_path": image.file_path,
+    }
 
     try:
-        slide_width, slide_height = extractor.get_slide_dimensions(image.file_path)
-        _validate_roi_bounds(request.roi, slide_width, slide_height)
+        return _execute_heatmap_scan(
+            request=request,
+            image_payload=image_payload,
+            user_id=getattr(current_user, "id", None),
+            trace_id=trace_id,
+            analyzed_at=analyzed_at,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PatchExtractionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    try:
-        inference_service = get_inference_service()
     except ModelUnavailableError as exc:
         append_audit_event(
             {
@@ -504,140 +741,62 @@ async def scan_roi_heatmap(
         )
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    tiles = _tile_grid(request.roi, request.tile_size, request.stride, request.max_tiles)
-    tile_results = []
 
-    for index, tile_roi in enumerate(tiles):
-        try:
-            patch_rgb = extractor.extract_roi2(image.file_path, tile_roi)
-        except PatchExtractionError as exc:
-            tile_results.append(
-                {
-                    "index": index,
-                    "roi": _dump_schema(tile_roi),
-                    "status": "error",
-                    "class": "error",
-                    "confidence": 0.0,
-                    "probabilities": {},
-                    "reason": str(exc),
-                }
-            )
-            continue
+@router.post("/heatmaps/jobs")
+async def create_heatmap_scan_job(
+    request: HistopathologyScanRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    image = (
+        db.query(MedicalImage)
+        .filter(MedicalImage.id == request.image_id, MedicalImage.is_active == True)
+        .first()
+    )
+    if not image:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
 
-        roi_quality = evaluate_roi_quality(patch_rgb)
-        if not roi_quality["is_evaluable"]:
-            tile_results.append(
-                {
-                    "index": index,
-                    "roi": _dump_schema(tile_roi),
-                    "status": "roi_no_evaluable",
-                    "class": "roi_no_evaluable",
-                    "confidence": 0.0,
-                    "probabilities": {},
-                    "tumor_score": 0.0,
-                    "roi_quality": roi_quality,
-                    "reason": roi_quality["reason"],
-                }
-            )
-            continue
-
-        raw_prediction = inference_service.predict_patch(patch_rgb)
-        status = "clasificado"
-        predicted_class = raw_prediction["predicted_class"]
-        reason = None
-
-        if predicted_class == "estroma":
-            status = "roi_no_evaluable"
-            predicted_class = "roi_no_evaluable"
-            reason = "Tile marcado como estroma por la cabeza 3-class."
-        elif raw_prediction["confidence"] < inference_service.confidence_threshold:
-            status = "resultado_incierto"
-            predicted_class = "incierto"
-            reason = "Ninguna clase supera el umbral de confianza configurado."
-
-        probabilities = raw_prediction["probabilities"]
-        tile_results.append(
-            {
-                "index": index,
-                "roi": _dump_schema(tile_roi),
-                "status": status,
-                "class": predicted_class,
-                "model_predicted_class": raw_prediction["model_predicted_class"],
-                "confidence": raw_prediction["confidence"],
-                "probabilities": probabilities,
-                "tumor_score": float(probabilities.get("metastasico", 0.0)),
-                "roi_quality": roi_quality,
-                "reason": reason,
-            }
-        )
-
-    evaluable_tiles = [tile for tile in tile_results if tile["status"] != "error"]
-    best_tile = max(evaluable_tiles, key=lambda item: item.get("tumor_score", 0.0), default=None)
-    classified_tumor = [
-        tile for tile in tile_results
-        if tile.get("class") == "metastasico"
-    ]
-    uncertain_high = [
-        tile for tile in tile_results
-        if tile.get("status") == "resultado_incierto" and tile.get("tumor_score", 0.0) >= 0.50
-    ]
-
-    response_payload = {
-        "trace_id": trace_id,
-        "analyzed_at": analyzed_at,
+    trace_id = str(uuid4())
+    image_payload = {
+        "id": image.id,
+        "filename": image.filename,
+        "file_path": image.file_path,
+    }
+    request_payload = {
         "image_id": request.image_id,
-        "status": "completed",
-        "roi": roi_payload,
+        "roi": _dump_schema(request.roi),
         "tile_size": request.tile_size,
         "stride": request.stride,
-        "requested_max_tiles": request.max_tiles,
-        "tile_count": len(tile_results),
-        "tiles": tile_results,
-        "summary": {
-            "classified_metastatic_tiles": len(classified_tumor),
-            "uncertain_high_tumor_tiles": len(uncertain_high),
-            "best_tile": best_tile,
-            "max_tumor_score": best_tile.get("tumor_score", 0.0) if best_tile else 0.0,
-        },
-        "slide_dimensions": {
-            "width": slide_width,
-            "height": slide_height,
-        },
-        "model": _model_metadata(inference_service),
-        "persisted": False,
-        "warning": EDUCATIONAL_WARNING,
+        "max_tiles": request.max_tiles,
     }
-
-    try:
-        heatmap_artifacts = save_heatmap_result(response_payload)
-        response_payload["persisted"] = True
-        response_payload["artifacts"] = heatmap_artifacts
-    except OSError as exc:
-        response_payload["persisted"] = False
-        response_payload["artifact_error"] = str(exc)
-
-    append_audit_event(
+    job = create_heatmap_job(
         {
-            "event": "histopathology_scan_succeeded",
             "trace_id": trace_id,
-            "timestamp": analyzed_at,
-            "image_id": request.image_id,
-            "image_filename": image.filename,
-            "user_id": getattr(current_user, "id", None),
-            "roi": roi_payload,
-            "tile_size": request.tile_size,
-            "stride": request.stride,
-            "tile_count": len(tile_results),
-            "summary": response_payload["summary"],
-            "persisted": response_payload["persisted"],
-            "artifacts": response_payload.get("artifacts"),
-            "artifact_error": response_payload.get("artifact_error"),
-            "model": response_payload["model"],
-            "warning": EDUCATIONAL_WARNING,
+            "request": request_payload,
         }
     )
+    background_tasks.add_task(
+        _run_heatmap_job,
+        job_id=job["job_id"],
+        request=request,
+        image_payload=image_payload,
+        user_id=getattr(current_user, "id", None),
+        trace_id=trace_id,
+    )
 
-    return response_payload
+    return job
+
+
+@router.get("/heatmaps/jobs/{job_id}")
+async def get_heatmap_scan_job(
+    job_id: str,
+    current_user=Depends(get_current_user),
+):
+    job = get_heatmap_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job de heatmap no encontrado")
+    return job
 
 
 @router.get("/heatmaps/image/{image_id}/latest")

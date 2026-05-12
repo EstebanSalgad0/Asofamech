@@ -965,16 +965,20 @@ artifacts/histopathology/heatmaps/images/{image_id}/latest.json
 Endpoints de consulta:
 
 ```text
+POST /api/histopathology/heatmaps/jobs
+GET /api/histopathology/heatmaps/jobs/{job_id}
 GET /api/histopathology/heatmaps/image/{image_id}/latest
 GET /api/histopathology/heatmaps/{trace_id}
 ```
 
 El visor intenta recuperar automaticamente el ultimo heatmap guardado al abrir
-una imagen y permite ocultarlo sin borrar el artefacto.
+una imagen y permite ocultarlo sin borrar el artefacto. Para ejecucion normal
+desde la UI se usa un job asincronico en memoria: el frontend consulta progreso
+hasta recibir `completed`, y luego pinta el resultado persistido.
 
-Limitacion actual: este heatmap es sincrono y acotado a ROI 1. Para lamina
-completa falta convertirlo en tarea asincronica con progreso y cache de
-embeddings/scores por coordenada.
+Limitacion actual: este heatmap sigue acotado a ROI 1 y los jobs viven en
+memoria del proceso backend. Para lamina completa falta persistir jobs en base
+de datos/cola real y agregar cache de embeddings/scores por coordenada.
 
 ## 12. Limites metodologicos
 
