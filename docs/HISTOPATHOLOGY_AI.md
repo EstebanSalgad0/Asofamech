@@ -976,9 +976,28 @@ una imagen y permite ocultarlo sin borrar el artefacto. Para ejecucion normal
 desde la UI se usa un job asincronico en memoria: el frontend consulta progreso
 hasta recibir `completed`, y luego pinta el resultado persistido.
 
+Control de carga:
+
+```text
+HISTO_MAX_CONCURRENT_HEATMAP_JOBS=1
+```
+
+Por defecto solo corre un heatmap pesado a la vez. Los jobs adicionales quedan
+en cola en memoria hasta que exista un cupo.
+
+Cache por tile:
+
+```text
+artifacts/histopathology/heatmaps/tile_cache/{cache_key}.json
+```
+
+La clave usa `image_id`, coordenadas de tile, tamano del tile y firma del modelo
+actual. Si el mismo tile ya fue analizado con el mismo checkpoint/umbral, el
+backend reutiliza probabilidades, QC y score sin volver a pasar por CONCH.
+
 Limitacion actual: este heatmap sigue acotado a ROI 1 y los jobs viven en
 memoria del proceso backend. Para lamina completa falta persistir jobs en base
-de datos/cola real y agregar cache de embeddings/scores por coordenada.
+de datos/cola real y eventualmente cachear embeddings, no solo scores por tile.
 
 ## 12. Limites metodologicos
 

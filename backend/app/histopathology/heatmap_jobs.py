@@ -1,4 +1,5 @@
 import threading
+import os
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -7,10 +8,43 @@ from uuid import uuid4
 
 _JOBS: Dict[str, Dict[str, Any]] = {}
 _LOCK = threading.Lock()
+_WORKER_SEMAPHORE: threading.Semaphore | None = None
+_WORKER_LIMIT: int | None = None
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _configured_worker_limit() -> int:
+    value = os.getenv("HISTO_MAX_CONCURRENT_HEATMAP_JOBS", "1")
+    try:
+        parsed = int(value)
+    except ValueError:
+        return 1
+    return max(1, parsed)
+
+
+def _worker_semaphore() -> threading.Semaphore:
+    global _WORKER_LIMIT, _WORKER_SEMAPHORE
+    limit = _configured_worker_limit()
+    with _LOCK:
+        if _WORKER_SEMAPHORE is None or _WORKER_LIMIT != limit:
+            _WORKER_LIMIT = limit
+            _WORKER_SEMAPHORE = threading.Semaphore(limit)
+        return _WORKER_SEMAPHORE
+
+
+def heatmap_worker_limit() -> int:
+    return _configured_worker_limit()
+
+
+def acquire_heatmap_worker() -> None:
+    _worker_semaphore().acquire()
+
+
+def release_heatmap_worker() -> None:
+    _worker_semaphore().release()
 
 
 def create_heatmap_job(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -29,6 +63,7 @@ def create_heatmap_job(payload: Dict[str, Any]) -> Dict[str, Any]:
         "error": None,
         "request": payload["request"],
         "result": None,
+        "worker_limit": heatmap_worker_limit(),
     }
     with _LOCK:
         _JOBS[job_id] = job

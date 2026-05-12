@@ -214,12 +214,15 @@ Estado implementado:
 - overlay en OpenSeadragon sobre ROI 1;
 - persistencia JSON del heatmap por `trace_id` y ultimo mapa por `image_id`;
 - recuperacion automatica del ultimo mapa guardado al abrir una imagen;
-- jobs asincronicos en memoria para ejecutar heatmaps con progreso.
+- jobs asincronicos en memoria para ejecutar heatmaps con progreso;
+- limite configurable de jobs simultaneos con `HISTO_MAX_CONCURRENT_HEATMAP_JOBS`;
+- cache JSON por tile/coordenada/modelo para evitar recalcular CONCH.
 
 Pendiente para cerrar la fase completa:
 
 - ejecutar el escaneo por bandas/lotes en laminas completas;
-- cachear embeddings/scores por coordenada;
+- persistir jobs en base de datos o cola real;
+- cachear embeddings por coordenada si se requiere recalibrar el clasificador;
 - convertir scores guardados en heatmap persistente.
 
 Flujo:
