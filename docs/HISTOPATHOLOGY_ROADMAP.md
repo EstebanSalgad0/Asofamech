@@ -32,7 +32,9 @@ Ya existe una version funcional ampliada:
 - salida `clasificado`, `resultado_incierto` o `roi_no_evaluable`;
 - UI que muestra estado del modelo, umbral, probabilidades, QC y advertencia educativa;
 - importacion local de laminas CAMELYON17 ya descargadas en servidor;
-- DZI dinamico para WSI `.tif/.svs` grandes sin subir varios GB por navegador.
+- DZI dinamico para WSI `.tif/.svs` grandes sin subir varios GB por navegador;
+- primer escaneo tipo heatmap sobre ROI 1, dividiendo en tiles y pintando
+  sospecha metastasica en el visor.
 
 Limitacion principal actual:
 
@@ -54,6 +56,11 @@ stroma->tumor=11/50 = 22%
 
 Validacion visual controlada:
 patient_017_node_2.tif, ROI dentro de XML tumoral oficial
+P(metastasico)=99.8%
+
+Primer heatmap ROI 1:
+POST /api/histopathology/scan-roi
+tile 512x512 sobre coordenada tumoral oficial
 P(metastasico)=99.8%
 ```
 
@@ -196,6 +203,24 @@ Objetivo:
 
 Que el sistema no dependa solo de una ROI manual, sino que pueda explorar la
 lamina y sugerir zonas sospechosas.
+
+Estado implementado:
+
+- endpoint inicial `/api/histopathology/scan-roi`;
+- escaneo acotado a una ROI de entrada para controlar costo;
+- grid configurable con `tile_size`, `stride` y `max_tiles`;
+- cada tile pasa por QC, CONCH y cabeza 3-class;
+- respuesta con `tumor_score`, clase, probabilidades, QC y mejor tile;
+- overlay en OpenSeadragon sobre ROI 1.
+
+Pendiente para cerrar la fase completa:
+
+- ejecutar el escaneo por bandas/lotes en laminas completas;
+- persistir resultados por `image_id`;
+- agregar progreso asincronico;
+- cachear embeddings/scores por coordenada;
+- permitir saltar automaticamente al mejor tile;
+- convertir scores guardados en heatmap persistente.
 
 Flujo:
 

@@ -18,6 +18,14 @@ class HistopathologyAnalyzeRequest(BaseModel):
     roi_2: ROIBox
 
 
+class HistopathologyScanRequest(BaseModel):
+    image_id: int
+    roi: ROIBox
+    tile_size: int = Field(512, ge=64, le=2048)
+    stride: int = Field(512, ge=32, le=2048)
+    max_tiles: int = Field(64, ge=1, le=256)
+
+
 class HistopathologyPrediction(BaseModel):
     predicted_class: str
     confidence: float
