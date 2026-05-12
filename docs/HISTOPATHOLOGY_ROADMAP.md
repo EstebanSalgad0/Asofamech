@@ -213,12 +213,12 @@ Estado implementado:
 - respuesta con `tumor_score`, clase, probabilidades, QC y mejor tile;
 - overlay en OpenSeadragon sobre ROI 1;
 - persistencia JSON del heatmap por `trace_id` y ultimo mapa por `image_id`;
-- recuperacion automatica del ultimo mapa guardado al abrir una imagen.
+- recuperacion automatica del ultimo mapa guardado al abrir una imagen;
+- jobs asincronicos en memoria para ejecutar heatmaps con progreso.
 
 Pendiente para cerrar la fase completa:
 
 - ejecutar el escaneo por bandas/lotes en laminas completas;
-- agregar progreso asincronico;
 - cachear embeddings/scores por coordenada;
 - convertir scores guardados en heatmap persistente.
 

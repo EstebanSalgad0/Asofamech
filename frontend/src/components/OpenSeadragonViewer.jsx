@@ -113,6 +113,7 @@ export function OpenSeadragonViewer({ imageData }) {
   const [scanningHeatmap, setScanningHeatmap] = useState(false);
   const [heatmap, setHeatmap] = useState(null);
   const [heatmapSource, setHeatmapSource] = useState(null);
+  const [heatmapJob, setHeatmapJob] = useState(null);
   const [viewportVersion, setViewportVersion] = useState(0);
 
   const fetchModelStatus = async () => {
@@ -172,6 +173,7 @@ export function OpenSeadragonViewer({ imageData }) {
     setPrediction(null);
     setHeatmap(null);
     setHeatmapSource(null);
+    setHeatmapJob(null);
     setRoi1(null);
     setRoi2(null);
     setLoading(true);
@@ -313,6 +315,7 @@ export function OpenSeadragonViewer({ imageData }) {
       setPrediction(null);
       setHeatmap(null);
       setHeatmapSource(null);
+      setHeatmapJob(null);
       setRoiError(null);
     }
 
@@ -424,9 +427,11 @@ export function OpenSeadragonViewer({ imageData }) {
     setScanningHeatmap(true);
     setRoiError(null);
     setHeatmap(null);
+    setHeatmapSource(null);
+    setHeatmapJob(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/histopathology/scan-roi`, {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -444,18 +449,61 @@ export function OpenSeadragonViewer({ imageData }) {
         throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
       }
 
-      setHeatmap(payload);
-      setHeatmapSource(payload?.persisted ? 'saved' : 'session');
+      setHeatmapJob(payload);
+      await pollHeatmapJob(payload.job_id);
     } catch (err) {
       setRoiError(err.message);
-    } finally {
       setScanningHeatmap(false);
     }
   };
 
+  const pollHeatmapJob = async (jobId) => {
+    let keepPolling = true;
+
+    while (keepPolling) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs/${jobId}`);
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+
+      setHeatmapJob(payload);
+
+      if (payload.status === 'completed') {
+        setHeatmap(payload.result);
+        setHeatmapSource(payload.result?.persisted ? 'saved' : 'session');
+        setScanningHeatmap(false);
+        keepPolling = false;
+      }
+
+      if (payload.status === 'failed') {
+        setScanningHeatmap(false);
+        throw new Error(payload.error || 'El job de heatmap fallo.');
+      }
+    }
+  };
+
+  const heatmapProgressLabel = (() => {
+    if (!heatmapJob) return null;
+    const processed = heatmapJob.processed_tiles || 0;
+    const total = heatmapJob.total_tiles || 0;
+    const percent = typeof heatmapJob.progress === 'number'
+      ? `${Math.round(heatmapJob.progress * 100)}%`
+      : '0%';
+
+    if (heatmapJob.status === 'queued') return 'En cola...';
+    if (heatmapJob.status === 'running') return `Procesando ${processed}/${total || '?'} tiles (${percent})`;
+    if (heatmapJob.status === 'completed') return `Completado ${processed}/${total} tiles`;
+    if (heatmapJob.status === 'failed') return `Error: ${heatmapJob.error || 'fallo desconocido'}`;
+    return heatmapJob.status;
+  })();
+
   const clearHeatmapOverlay = () => {
     setHeatmap(null);
     setHeatmapSource(null);
+    setHeatmapJob(null);
   };
 
   const focusBestHeatmapTile = () => {
@@ -778,6 +826,20 @@ export function OpenSeadragonViewer({ imageData }) {
               >
                 {scanningHeatmap ? 'Generando mapa...' : 'Mapa de ROI 1'}
               </button>
+              {heatmapProgressLabel && (
+                <div style={{
+                  marginTop: 8,
+                  color: heatmapJob?.status === 'failed' ? '#fecaca' : '#bae6fd',
+                  background: 'rgba(15, 23, 42, 0.62)',
+                  border: '1px solid rgba(56, 189, 248, 0.22)',
+                  borderRadius: 8,
+                  padding: '7px 8px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}>
+                  {heatmapProgressLabel}
+                </div>
+              )}
             </div>
 
             {heatmap && (
@@ -860,10 +922,17 @@ export function OpenSeadragonViewer({ imageData }) {
                   Ocultar mapa
                 </button>
                 <div style={{ display: 'flex', gap: 8, marginTop: 10, color: '#cbd5e1', fontSize: 11, flexWrap: 'wrap' }}>
-                  <span><span style={{ color: '#ef4444' }}>■</span> alta</span>
-                  <span><span style={{ color: '#f59e0b' }}>■</span> media</span>
-                  <span><span style={{ color: '#22c55e' }}>■</span> baja</span>
-                  <span><span style={{ color: '#94a3b8' }}>■</span> no evaluable</span>
+                  {[
+                    ['#ef4444', 'alta'],
+                    ['#f59e0b', 'media'],
+                    ['#22c55e', 'baja'],
+                    ['#94a3b8', 'no evaluable'],
+                  ].map(([color, label]) => (
+                    <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ width: 8, height: 8, background: color, display: 'inline-block', borderRadius: 2 }} />
+                      {label}
+                    </span>
+                  ))}
                 </div>
               </div>
             )}
