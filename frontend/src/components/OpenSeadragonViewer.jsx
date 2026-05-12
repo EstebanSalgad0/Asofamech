@@ -115,6 +115,7 @@ export function OpenSeadragonViewer({ imageData }) {
   const [heatmapSource, setHeatmapSource] = useState(null);
   const [heatmapJob, setHeatmapJob] = useState(null);
   const [viewportVersion, setViewportVersion] = useState(0);
+  const [tileSizeOption, setTileSizeOption] = useState(512);
 
   const fetchModelStatus = async () => {
     setStatusLoading(true);
@@ -437,8 +438,8 @@ export function OpenSeadragonViewer({ imageData }) {
         body: JSON.stringify({
           image_id: imageData.id,
           roi: roi1,
-          tile_size: HEATMAP_TILE_SIZE,
-          stride: HEATMAP_STRIDE,
+          tile_size: tileSizeOption,
+          stride: tileSizeOption,
           max_tiles: HEATMAP_MAX_TILES,
         }),
       });
@@ -809,6 +810,28 @@ export function OpenSeadragonViewer({ imageData }) {
                 {analyzeLabel}
               </button>
 
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: '#94a3b8', fontSize: 11, flexShrink: 0 }}>Tam. tile:</span>
+                {[512, 1024].map((size) => (
+                  <button
+                    key={size}
+                    onClick={() => setTileSizeOption(size)}
+                    style={{
+                      border: tileSizeOption === size ? '1px solid #38bdf8' : '1px solid rgba(148, 163, 184, 0.22)',
+                      background: tileSizeOption === size ? 'rgba(56, 189, 248, 0.18)' : 'rgba(15, 23, 42, 0.5)',
+                      color: tileSizeOption === size ? '#bae6fd' : '#94a3b8',
+                      borderRadius: 6,
+                      padding: '3px 10px',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+
               <button
                 disabled={!canScanHeatmap}
                 onClick={scanRoi1Heatmap}
@@ -826,18 +849,95 @@ export function OpenSeadragonViewer({ imageData }) {
               >
                 {scanningHeatmap ? 'Generando mapa...' : 'Mapa de ROI 1'}
               </button>
-              {heatmapProgressLabel && (
-                <div style={{
-                  marginTop: 8,
-                  color: heatmapJob?.status === 'failed' ? '#fecaca' : '#bae6fd',
-                  background: 'rgba(15, 23, 42, 0.62)',
-                  border: '1px solid rgba(56, 189, 248, 0.22)',
-                  borderRadius: 8,
-                  padding: '7px 8px',
-                  fontSize: 11,
-                  fontWeight: 700,
-                }}>
-                  {heatmapProgressLabel}
+
+              {!heatmap && !scanningHeatmap && imageData?.id && (
+                <button
+                  onClick={() => loadLatestHeatmap(imageData.id)}
+                  style={{
+                    marginTop: 6,
+                    width: '100%',
+                    border: '1px solid rgba(148, 163, 184, 0.22)',
+                    background: 'rgba(15, 23, 42, 0.55)',
+                    color: '#94a3b8',
+                    borderRadius: 10,
+                    padding: '7px 10px',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  Cargar ultimo mapa
+                </button>
+              )}
+
+              {(scanningHeatmap || heatmapJob) && (
+                <div style={{ marginTop: 8 }}>
+                  {(() => {
+                    const status = heatmapJob?.status;
+                    const processed = heatmapJob?.processed_tiles ?? 0;
+                    const total = heatmapJob?.total_tiles ?? 0;
+                    const percent = Math.round((heatmapJob?.progress ?? 0) * 100);
+                    const statusLabels = { queued: 'En cola', running: 'Procesando', completed: 'Completado', failed: 'Error' };
+                    const palettes = {
+                      queued:    { badge: 'rgba(71,85,105,0.85)',   bar: '#64748b' },
+                      running:   { badge: 'rgba(14,116,144,0.85)',  bar: '#38bdf8' },
+                      completed: { badge: 'rgba(21,128,61,0.85)',   bar: '#22c55e' },
+                      failed:    { badge: 'rgba(153,27,27,0.85)',   bar: '#ef4444' },
+                    };
+                    const palette = palettes[status] || palettes.queued;
+                    const barWidth = status === 'completed' ? 100 : percent;
+                    return (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                          <span style={{
+                            background: palette.badge,
+                            borderRadius: 4,
+                            padding: '2px 7px',
+                            fontSize: 10,
+                            fontWeight: 800,
+                            color: '#f0f9ff',
+                            letterSpacing: 0.5,
+                            textTransform: 'uppercase',
+                          }}>
+                            {statusLabels[status] || (status ?? 'En cola')}
+                          </span>
+                          {total > 0 && (
+                            <span style={{ fontSize: 11, color: '#94a3b8' }}>{processed}/{total} tiles</span>
+                          )}
+                        </div>
+                        <div style={{ background: 'rgba(30,41,59,0.85)', borderRadius: 4, height: 7, overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${barWidth}%`,
+                            height: '100%',
+                            background: palette.bar,
+                            borderRadius: 4,
+                            transition: 'width 0.5s ease',
+                          }} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 10, color: '#64748b' }}>
+                          <span>
+                            {status === 'queued' && 'Esperando worker...'}
+                            {status === 'running' && `${percent}% completado`}
+                            {status === 'completed' && `${total} tiles analizados`}
+                          </span>
+                          <span>{percent}%</span>
+                        </div>
+                        {status === 'failed' && (
+                          <div style={{
+                            marginTop: 6,
+                            color: '#fca5a5',
+                            background: 'rgba(127,29,29,0.4)',
+                            border: '1px solid rgba(248,113,113,0.3)',
+                            borderRadius: 6,
+                            padding: '5px 7px',
+                            fontSize: 11,
+                          }}>
+                            {heatmapJob?.error || 'Error desconocido en el job.'}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>

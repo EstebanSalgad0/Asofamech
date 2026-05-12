@@ -19,7 +19,7 @@ Caracter: prototipo academico educativo, no diagnostico clinico.
 | Visor histopatologico | Implementado/parcial | `OpenSeadragonViewer.jsx`, `MedicalImageViewer.jsx`, endpoints DZI | DZI/OpenSeadragon para deep zoom; Fabric para imagenes sin DZI. |
 | ROI y patches | Implementado/parcial | `OpenSeadragonViewer.jsx`, `roi.py`, `patch_extractor.py` | ROI 1/ROI 2 en visor DZI con validacion y extraccion; anotaciones Fabric exportables localmente. |
 | IA visual | Parcial/avanzado | `inference_service.py`, checkpoints en `backend/artifacts` | CONCH congelado + cabeza 3 clases; requiere checkpoint, token/cache HF y entorno GPU/CPU compatible. |
-| Heatmap ROI | Parcial/en desarrollo | `POST /api/histopathology/scan-roi`, overlay en `OpenSeadragonViewer.jsx` | Escaneo sincronico acotado a ROI; no lamina completa asincronica ni persistencia de scores. |
+| Heatmap ROI | Implementado/parcial | `POST /api/histopathology/heatmaps/jobs`, `GET .../jobs/{job_id}`, `GET .../image/{id}/latest`, overlay en `OpenSeadragonViewer.jsx`, `heatmap_store.py`, `heatmap_jobs.py` | Escaneo asincronico acotado a ROI 1 con jobs en memoria, polling de progreso, persistencia en filesystem por `image_id` y `trace_id`, carga de ultimo mapa guardado. No heatmap de lamina completa (requiere precalculo admin). |
 | Pruebas | Parcial | `backend/tests/*` | `backend/.venv/Scripts/python.exe -m pytest tests -q`: 8 passed. |
 | Docker | Parcial | `docker-compose.yml`, Dockerfiles | Compose incluye db/backend/ollama; no incluye servicio frontend. |
 
@@ -27,10 +27,10 @@ Verificaciones ejecutadas:
 
 | Verificacion | Resultado |
 |---|---|
-| `backend/.venv/Scripts/python.exe -m pytest tests -q` | 8 passed |
-| `npm.cmd run build` en `frontend` | Build exitoso, 55 modulos transformados; warning por chunk JS > 500 kB |
-| `git log --oneline -n 12` | Ultimo commit funcional revisado: `ca183b2 feat: agrega heatmap de ROI histopatologico` |
-| `git status --short` | Solo quedaba pendiente este documento de levantamiento tecnico para Capitulo IV |
+| `backend/.venv/Scripts/python.exe -m pytest tests -q` | 8 passed (linea base); 22 passed tras agregar tests de `heatmap_store` y `heatmap_jobs` |
+| `npm.cmd run build` en `frontend` | Build exitoso; advertencia de chunk JS > 500 kB |
+| `git log --oneline -n 12` | Ultimo commit funcional revisado: `8cfd641 feat: ejecuta heatmaps como jobs con progreso` |
+| `git status --short` | Cambios en: `OpenSeadragonViewer.jsx`, nuevos tests `test_heatmap_store.py`, `test_heatmap_jobs.py`, actualizacion de este documento |
 
 ---
 
@@ -63,8 +63,10 @@ Nota de alcance: el sistema debe modelarse como apoyo formativo, no como diagnos
 | 18 | Modulo IA visual | Clasifica patch | Patch evaluable | Clase/probabilidades/umbral | Parcial/avanzado | `inference_service.py`, checkpoint Stage 6 |
 | 19 | Backend | Registra auditoria | Resultado + trace | JSONL audit log | Implementado | `backend/artifacts/histopathology/audit_log.jsonl` |
 | 20 | Frontend | Muestra resultado educativo | Payload IA | Clase, confianza, QC, warning | Implementado/parcial | Captura resultado ROI |
-| 21 | Estudiante | Solicita mapa ROI 1 | ROI 1 | Heatmap acotado | Parcial/en desarrollo | POST `/api/histopathology/scan-roi` |
-| 22 | Backend/IA | Divide ROI en tiles y clasifica | ROI, tile_size, stride | Tiles con `tumor_score` | Parcial/en desarrollo | Audit log con `histopathology_scan_succeeded` |
+| 21 | Estudiante | Solicita mapa ROI 1 (acotado) | ROI 1, tile_size (512/1024) | Job asincronico creado (`job_id`) | Implementado/parcial | POST `/api/histopathology/heatmaps/jobs`; selector de tile_size en UI |
+| 21a | Frontend | Hace polling de progreso del job | `job_id` | Estado: en cola / procesando / completado / fallido; tiles procesados/total | Implementado/parcial | GET `/api/histopathology/heatmaps/jobs/{job_id}`; barra de progreso en visor |
+| 21b | Estudiante (opcional) | Carga ultimo mapa guardado | `image_id` | Heatmap previo recuperado | Implementado/parcial | GET `/api/histopathology/heatmaps/image/{id}/latest`; boton "Cargar ultimo mapa" |
+| 22 | Backend/IA | Divide ROI en tiles, clasifica y persiste | ROI, tile_size, stride, max_tiles | Tiles con `tumor_score`; heatmap guardado en filesystem | Implementado/parcial | `heatmap_jobs.py`, `heatmap_store.py`; archivos en `artifacts/histopathology/heatmaps/` |
 | 23 | Estudiante | Consulta chatbot | Pregunta texto | Respuesta educativa | Parcial | `/dashboard/chat`, `POST /api/chat` |
 | 24 | Backend/RAG/LLM | Busca casos y llama Ollama | Pregunta + tabla `cases` | Mensaje IA | Parcial | `chat.py`, logs Ollama |
 | 25 | Estudiante | Genera/resuelve SCT | Numero, dificultad, enfoque | Test y resultado | Implementado/parcial | `/dashboard/sct`, `sct.py` |
@@ -174,8 +176,8 @@ Estructura BPMN sugerida: mantener 4 pools maximo en la lamina principal: Estudi
 | PB-20 | IA visual | Servicio CONCH + cabeza 3 clases | Alta | Parcial/avanzado | PyTorch, CONCH, checkpoint | `/status` listo y predice ROI | Checkpoint + audit log |
 | PB-21 | IA visual | Control de calidad ROI | Alta | Implementado/parcial | PIL/QC | Rechaza fondo/estroma/baja celularidad | Tests QC |
 | PB-22 | IA visual | Validacion clinica formal | Alta | Pendiente | Dataset validado, expertos | Metricas externas defendibles | Informe validacion |
-| PB-23 | IA visual | Heatmap ROI 1 | Media | Parcial/en desarrollo | scan-roi, visor | Tiles coloreados en ROI | Captura overlay |
-| PB-24 | IA visual | Heatmap lamina completa asincronico | Media | Pendiente | Cola, cache, persistencia | Progreso y scores persistidos | Endpoints tarea |
+| PB-23 | IA visual | Heatmap ROI 1 asincronico acotado | Media | Implementado/parcial | heatmap_jobs, heatmap_store, visor | Jobs async, barra progreso, tiles coloreados, persistencia filesystem, carga de ultimo mapa | Overlay visor; archivos en artifacts/ |
+| PB-24 | IA visual | Heatmap lamina completa (precalculo admin) | Media | Pendiente | GPU, cola persistente, cache, auth admin | Lamina completa analizada en background; scores cacheados; estudiantes consumen resultado | Endpoints tarea larga; panel admin |
 | PB-25 | RAG / LLM | Chat educativo con Ollama | Alta | Parcial | Ollama, LLaMA | Responde pregunta en espanol con aviso | `/api/chat` |
 | PB-26 | RAG / LLM | RAG SQL por casos | Media | Parcial | Tabla cases | Incluye max. 3 casos relevantes | `chat.py` |
 | PB-27 | RAG / LLM | RAG vectorial/documental | Media | Pendiente | Embeddings, vector DB | Recuperacion semantica trazable | Indice/vector store |
@@ -224,7 +226,7 @@ Estructura BPMN sugerida: mantener 4 pools maximo en la lamina principal: Estudi
 | I5 | Imagenes medicas | Upload/listado/visor Fabric/DZI | Biblioteca y visor parcial | Implementado/parcial | `medical_images.py`, `ImagesPage.jsx` |
 | I6 | ROI histopatologica | ROI 1/ROI 2, extraccion patch, validaciones | Analisis ROI backend/frontend | Implementado/parcial | `OpenSeadragonViewer.jsx`, tests ROI |
 | I7 | IA visual CONCH | CONCH, checkpoints, QC, auditoria | Clasificador educativo ROI 3 clases | Parcial/avanzado | artifacts, audit log, `/status` |
-| I8 | Heatmap ROI | `scan-roi`, grid de tiles, overlay, mejor tile como ROI 2 | Heatmap acotado a ROI 1 | Implementado/parcial | audit log scan, overlay |
+| I8 | Heatmap ROI asincronico | Jobs async (`heatmap_jobs.py`), persistencia (`heatmap_store.py`), polling frontend, barra progreso, selector tile_size, boton "Cargar ultimo mapa", mejor tile como ROI 2 | Heatmap acotado a ROI 1 con progreso y persistencia | Implementado/parcial | audit log scan, overlay, artifacts/histopathology/heatmaps/ |
 | I9 | Documentacion/defensa | Docs histopatologia, roadmap, DB | Material para informe | Parcial | `docs/*` |
 
 Bloqueos tecnicos detectados:
@@ -253,7 +255,7 @@ Bloqueos tecnicos detectados:
 | Patch extraction | Patches | Implementado | `patch_extractor.py` | OpenSlide/PIL |
 | QC ROI | IA visual | Implementado | `roi_quality.py`, tests | Heuristico |
 | CONCH classifier | IA visual | Parcial/avanzado | checkpoint Stage 6, audit log | No validacion clinica final |
-| Heatmap ROI 1 | IA visual | Implementado/parcial | `scan-roi`, overlay, mejor tile | Sin asincronia ni persistencia |
+| Heatmap ROI 1 | IA visual | Implementado/parcial | Jobs async, polling, overlay, mejor tile, persistencia filesystem | Acotado a ROI 1; no heatmap lamina completa; jobs en memoria (no sobreviven reinicio) |
 | Pruebas | Validacion | Parcial | 8 passed | Solo histopatologia basica |
 
 ---
@@ -411,7 +413,9 @@ Bloqueos tecnicos detectados:
 | GET | `/api/medical-images/info/{image_id}` | Detalle imagen | image_id | Metadata | Implementado | Imagenes |
 | GET | `/api/histopathology/status` | Estado IA visual | - | Model metadata/listo | Implementado/parcial | IA visual |
 | POST | `/api/histopathology/analyze-roi` | Analiza ROI 2 | image_id, roi_1, roi_2 | Prediccion/QC/audit | Implementado/parcial | ROI/IA visual |
-| POST | `/api/histopathology/scan-roi` | Heatmap ROI | image_id, roi, tile params | Tiles + resumen | Parcial/en desarrollo | Heatmap |
+| POST | `/api/histopathology/heatmaps/jobs` | Inicia job heatmap ROI 1 | image_id, roi, tile_size, stride, max_tiles | `{job_id, status:"queued", ...}` | Implementado/parcial | Heatmap async |
+| GET | `/api/histopathology/heatmaps/jobs/{job_id}` | Consulta estado job heatmap | job_id | `{status, progress, processed_tiles, total_tiles, result}` | Implementado/parcial | Heatmap async |
+| GET | `/api/histopathology/heatmaps/image/{image_id}/latest` | Carga ultimo heatmap persistido | image_id | Heatmap guardado o 404 | Implementado/parcial | Heatmap async |
 
 ### Tablas de base de datos
 
@@ -441,9 +445,9 @@ Bloqueos tecnicos detectados:
 | Captura visor DZI | Visor | Deep zoom histopatologico | Implementado/parcial | Incluir si backend activo |
 | Captura ROI 1/ROI 2 | ROI | Seleccion de regiones | Implementado/parcial | Incluir |
 | Captura resultado ROI | IA visual | Clase, confianza, QC, warning | Parcial/avanzado | Incluir como educativo/no diagnostico |
-| Captura heatmap ROI | IA visual | Escaneo acotado por tiles | Parcial/en desarrollo | Incluir como implementacion parcial |
+| Captura heatmap ROI async | IA visual | Job asincronico, barra progreso, tiles coloreados, persistencia | Implementado/parcial | Incluir mostrando estados (en cola, procesando, completado) |
 | FastAPI `/docs` | Backend/API | Endpoints reales | Implementado/parcial | Incluir |
-| `pytest` 8 passed | Pruebas | Validacion ROI/QC/auditoria | Parcial | Incluir log |
+| `pytest` 22 passed | Pruebas | Validacion ROI/QC/auditoria/heatmap_store/heatmap_jobs | Parcial | Incluir log |
 | Build frontend | Frontend | Compilacion | Implementado | Incluir log resumido |
 | `docker-compose.yml` | Despliegue | DB/backend/ollama/GPU/env | Parcial | Incluir, aclarar frontend fuera |
 | `models.py`/psql | Base de datos | Tablas reales | Parcial | Incluir |
@@ -452,6 +456,112 @@ Bloqueos tecnicos detectados:
 | `patient_017_node_2.dzi` | Visor | DZI real 94968 x 210579 | Implementado/parcial | Incluir |
 | Git log | Gestion desarrollo | Evolucion por commits | Implementado | Incluir 5-10 commits |
 | Kanban externo | Gestion proyecto | Scrumban/Kanban | Pendiente si no existe | Crear captura si se uso Trello/GitHub Projects |
+
+---
+
+---
+
+## 8a. Arquitectura del modulo heatmap asincronico
+
+### Descripcion general
+
+El modulo de heatmap histopatologico permite al estudiante solicitar un analisis tile a tile de la Region de Interes 1 (ROI 1) definida sobre una lamina histopatologica. A diferencia de un escaneo sincronico (que bloquea la solicitud HTTP hasta terminar), el sistema utiliza un patron de jobs asincronicos para permitir progreso observable, tolerancia a latencias y persistencia del resultado.
+
+### Flujo tecnico del job de heatmap
+
+```
+[Estudiante: clic "Mapa de ROI 1"]
+         |
+         v
+POST /api/histopathology/heatmaps/jobs
+  {image_id, roi, tile_size, stride, max_tiles}
+         |
+         v
+Backend: crea job en memoria (_JOBS dict, heatmap_jobs.py)
+  status: "queued", job_id: UUID
+         |
+         v
+Backend: lanza hilo de trabajo (BackgroundTasks / threading)
+  - Divide ROI en grid de tiles segun tile_size y stride
+  - Por cada tile: extrae patch (OpenSlide/PIL), QC, clasifica (CONCH)
+  - Actualiza job: status="running", progress, processed_tiles, total_tiles
+         |
+         v
+[Frontend: polling cada ~1.2 s]
+GET /api/histopathology/heatmaps/jobs/{job_id}
+  -> actualiza barra de progreso y conteo de tiles
+         |
+         v
+Backend: al terminar todos los tiles
+  - Calcula resumen: tile con mayor tumor_score (best_tile), count metastasicos
+  - Persiste resultado en filesystem (heatmap_store.py):
+      artifacts/histopathology/heatmaps/traces/{trace_id}.json
+      artifacts/histopathology/heatmaps/images/{image_id}/latest.json
+  - Actualiza job: status="completed", result={tiles, summary, persisted:true}
+         |
+         v
+Frontend: recibe result, renderiza overlay de tiles coloreados
+  Verde (baja) / Amarillo (media) / Rojo (alta metastasis) / Gris (no evaluable)
+         |
+         v
+[Sesion futura: clic "Cargar ultimo mapa"]
+GET /api/histopathology/heatmaps/image/{image_id}/latest
+  -> recupera heatmap previo persistido sin necesidad de re-analizar
+```
+
+### Parametros configurables en la UI
+
+| Parametro | Valores disponibles | Efecto |
+|---|---|---|
+| `tile_size` | 512 px, 1024 px | Tamano del tile cuadrado extraido; determina granularidad del mapa |
+| `stride` | Igual a `tile_size` (sin solapamiento) | Avance entre tiles; stride = tile_size implica cobertura sin redundancia |
+| `max_tiles` | 64 (constante actual) | Limite de tiles por job para proteger tiempo de respuesta educativo |
+
+### Persistencia de heatmaps (heatmap_store.py)
+
+Cada resultado de job completado se guarda en dos rutas del filesystem:
+
+- **Por trace_id**: `artifacts/histopathology/heatmaps/traces/{trace_id}.json`  
+  Permite recuperar cualquier analisis previo de forma trazable.
+
+- **Por image_id (latest)**: `artifacts/histopathology/heatmaps/images/{image_id}/latest.json`  
+  Permite cargar rapidamente el heatmap mas reciente de una imagen sin conocer el trace_id.
+
+La escritura esta protegida por un `threading.Lock` para evitar corrupcion en entornos con concurrencia.
+
+### Cola de jobs y limite de workers (heatmap_jobs.py)
+
+Los jobs se almacenan en memoria (`_JOBS: Dict[str, Dict]`) con un semaforo (`_WORKER_SEMAPHORE`) configurable via variable de entorno `HISTO_MAX_CONCURRENT_HEATMAP_JOBS` (defecto: 1). Esto limita la cantidad de jobs de heatmap ejecutandose simultaneamente para no saturar la GPU o CPU del servidor educativo.
+
+Limitacion importante: los jobs en memoria no sobreviven reinicios del servidor. El resultado ya persistido en filesystem si es recuperable.
+
+### Uso educativo vs. uso admin/docente
+
+El diseno del modulo distingue dos niveles de uso:
+
+**Estudiante (uso interactivo):**
+- Puede solicitar heatmaps acotados a ROI 1 con max_tiles=64 y tile_size 512 o 1024.
+- El analisis tarda segundos a pocos minutos segun el area de ROI y la disponibilidad de GPU.
+- Resultado inmediato visible en visor con overlay de tiles coloreados.
+- Puede cargar el ultimo mapa guardado sin repetir el calculo.
+- **No puede** analizar la lamina completa (WSI completa puede tener millones de tiles).
+
+**Docente / administrador (precalculo):**
+- Para laminas grandes o preprocesadas, el docente o administrador debe ejecutar el heatmap de lamina completa fuera del flujo interactivo (script batch, cola de tareas persistente o endpoint protegido).
+- El resultado se guarda en el filesystem y queda disponible para todos los estudiantes via "Cargar ultimo mapa".
+- Este flujo no esta implementado aun como endpoint autenticado; es una tarea pendiente (PB-24).
+
+### Riesgos tecnicos identificados
+
+| Riesgo | Descripcion | Impacto | Mitigacion actual |
+|---|---|---|---|
+| Consumo de GPU/CPU | El modelo CONCH requiere inferencia por cada tile; sin GPU puede ser lento para ROI grande. | Alto en produccion; moderado con max_tiles=64 | Limite `max_tiles`, semaforo de workers |
+| Concurrencia sin persistencia de jobs | Jobs en memoria se pierden al reiniciar el servidor; el cliente queda en polling indefinido. | Medio | Resultado ya persistido en filesystem; pendiente: cola durable (Redis, DB) |
+| WSI muy grandes | Laminillas completas de 100,000+ px por lado generan miles de tiles; no acotados al ROI del estudiante. | Alto | ROI 1 acotado obligatorio; heatmap completo reservado para admin |
+| Saturacion de workers | Multiples estudiantes solicitando heatmaps simultaneamente pueden colapsar la memoria o el modelo. | Alto si sin limites | `HISTO_MAX_CONCURRENT_HEATMAP_JOBS`; pendiente: autenticacion y rate limit |
+| Uso no diagnostico | Clasificacion educativa no validada clinicamente; puede mostrar falsos positivos/negativos. | Critico si se malinterpreta | Advertencia visible en UI; log de auditoria por trace_id; disclaimer en resultado |
+| Dependencia de checkpoint CONCH | Si el checkpoint no esta disponible, el modelo no carga y todos los heatmaps fallan. | Alto | `/api/histopathology/status` indica `model_ready=false`; boton analizar deshabilitado |
+| Tamano del bundle frontend | Bundle JS > 500 kB (warning Vite); OpenSeadragon es grande. | Bajo/medio en educativo | Advertencia conocida; puede mitigarse con code splitting futuro |
 
 ---
 

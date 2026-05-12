@@ -9,8 +9,10 @@ from ..db import get_db
 from ..histopathology.audit_log import append_audit_event, get_audit_log_path
 from ..histopathology.debug_patches import save_patch_debug_images
 from ..histopathology.heatmap_jobs import (
+    acquire_heatmap_worker,
     create_heatmap_job,
     get_heatmap_job,
+    release_heatmap_worker,
     update_heatmap_job,
     utc_now as job_utc_now,
 )
@@ -18,6 +20,11 @@ from ..histopathology.heatmap_store import (
     load_heatmap_by_trace,
     load_latest_heatmap_for_image,
     save_heatmap_result,
+)
+from ..histopathology.heatmap_tile_cache import (
+    build_tile_cache_key,
+    load_cached_tile,
+    save_cached_tile,
 )
 from ..histopathology.ml.conch_feature_extractor import ModelUnavailableError
 from ..histopathology.ml.inference_service import DEFAULT_LABELS, get_inference_service
@@ -82,6 +89,17 @@ def _model_metadata(inference_service) -> dict:
     }
 
 
+def _heatmap_model_signature(inference_service) -> str:
+    return "|".join(
+        [
+            str(inference_service.classifier_path),
+            str(inference_service.checkpoint_ref),
+            str(inference_service.num_classes),
+            str(inference_service.confidence_threshold),
+        ]
+    )
+
+
 def _axis_positions(start: int, length: int, tile_size: int, stride: int) -> list[int]:
     if length <= tile_size:
         return [start]
@@ -132,21 +150,48 @@ def _execute_heatmap_scan(
     if progress_callback:
         progress_callback(0, total_tiles)
     inference_service = get_inference_service()
+    model_signature = _heatmap_model_signature(inference_service)
+    cache_hits = 0
+    cache_misses = 0
 
     tile_results = []
     for index, tile_roi in enumerate(tiles):
+        tile_roi_payload = _dump_schema(tile_roi)
+        cache_key = build_tile_cache_key(
+            image_id=request.image_id,
+            roi=tile_roi_payload,
+            model_signature=model_signature,
+        )
+        cached_tile = load_cached_tile(cache_key)
+        if cached_tile:
+            cache_hits += 1
+            tile_results.append(
+                {
+                    **cached_tile,
+                    "index": index,
+                    "cache": "hit",
+                    "cache_key": cache_key,
+                }
+            )
+            if progress_callback:
+                progress_callback(index + 1, total_tiles)
+            continue
+
+        cache_misses += 1
         try:
             patch_rgb = extractor.extract_roi2(image_payload["file_path"], tile_roi)
         except PatchExtractionError as exc:
             tile_results.append(
                 {
                     "index": index,
-                    "roi": _dump_schema(tile_roi),
+                    "roi": tile_roi_payload,
                     "status": "error",
                     "class": "error",
                     "confidence": 0.0,
                     "probabilities": {},
                     "tumor_score": 0.0,
+                    "cache": "miss",
+                    "cache_key": cache_key,
                     "reason": str(exc),
                 }
             )
@@ -156,19 +201,24 @@ def _execute_heatmap_scan(
 
         roi_quality = evaluate_roi_quality(patch_rgb)
         if not roi_quality["is_evaluable"]:
-            tile_results.append(
-                {
-                    "index": index,
-                    "roi": _dump_schema(tile_roi),
-                    "status": "roi_no_evaluable",
-                    "class": "roi_no_evaluable",
-                    "confidence": 0.0,
-                    "probabilities": {},
-                    "tumor_score": 0.0,
-                    "roi_quality": roi_quality,
-                    "reason": roi_quality["reason"],
-                }
-            )
+            tile_result = {
+                "index": index,
+                "roi": tile_roi_payload,
+                "status": "roi_no_evaluable",
+                "class": "roi_no_evaluable",
+                "confidence": 0.0,
+                "probabilities": {},
+                "tumor_score": 0.0,
+                "roi_quality": roi_quality,
+                "cache": "miss",
+                "cache_key": cache_key,
+                "reason": roi_quality["reason"],
+            }
+            tile_results.append(tile_result)
+            try:
+                save_cached_tile(cache_key, tile_result)
+            except OSError:
+                tile_result["cache_save_error"] = True
             if progress_callback:
                 progress_callback(index + 1, total_tiles)
             continue
@@ -188,20 +238,25 @@ def _execute_heatmap_scan(
             reason = "Ninguna clase supera el umbral de confianza configurado."
 
         probabilities = raw_prediction["probabilities"]
-        tile_results.append(
-            {
-                "index": index,
-                "roi": _dump_schema(tile_roi),
-                "status": status,
-                "class": predicted_class,
-                "model_predicted_class": raw_prediction["model_predicted_class"],
-                "confidence": raw_prediction["confidence"],
-                "probabilities": probabilities,
-                "tumor_score": float(probabilities.get("metastasico", 0.0)),
-                "roi_quality": roi_quality,
-                "reason": reason,
-            }
-        )
+        tile_result = {
+            "index": index,
+            "roi": tile_roi_payload,
+            "status": status,
+            "class": predicted_class,
+            "model_predicted_class": raw_prediction["model_predicted_class"],
+            "confidence": raw_prediction["confidence"],
+            "probabilities": probabilities,
+            "tumor_score": float(probabilities.get("metastasico", 0.0)),
+            "roi_quality": roi_quality,
+            "cache": "miss",
+            "cache_key": cache_key,
+            "reason": reason,
+        }
+        tile_results.append(tile_result)
+        try:
+            save_cached_tile(cache_key, tile_result)
+        except OSError:
+            tile_result["cache_save_error"] = True
         if progress_callback:
             progress_callback(index + 1, total_tiles)
 
@@ -232,6 +287,9 @@ def _execute_heatmap_scan(
             "uncertain_high_tumor_tiles": len(uncertain_high),
             "best_tile": best_tile,
             "max_tumor_score": best_tile.get("tumor_score", 0.0) if best_tile else 0.0,
+            "cache_hits": cache_hits,
+            "cache_misses": cache_misses,
+            "cache_hit_rate": cache_hits / total_tiles if total_tiles else 0.0,
         },
         "slide_dimensions": {
             "width": slide_width,
@@ -282,6 +340,7 @@ def _run_heatmap_job(
     user_id: int | None,
     trace_id: str,
 ):
+    acquire_heatmap_worker()
     update_heatmap_job(
         job_id,
         status="running",
@@ -336,6 +395,8 @@ def _run_heatmap_job(
                 "detail": str(exc),
             }
         )
+    finally:
+        release_heatmap_worker()
 
 
 @router.get("/status")
