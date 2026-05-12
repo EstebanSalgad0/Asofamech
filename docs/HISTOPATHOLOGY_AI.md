@@ -904,7 +904,61 @@ region tumoral anotada. No debe interpretarse como validacion final del modelo:
 faltan pruebas sistematicas en regiones sanas, stroma/fibrosis, laminas
 negativas y coordenadas tumorales de otras laminas.
 
-## 11. Limites metodologicos
+## 11. Primer heatmap sobre ROI
+
+Como paso intermedio antes de analizar una lamina completa, se agrego un escaneo
+acotado sobre ROI. El objetivo es dividir una region amplia en tiles, inferir
+cada tile y mostrar un mapa visual de sospecha en OpenSeadragon.
+
+Endpoint:
+
+```text
+POST /api/histopathology/scan-roi
+```
+
+Payload:
+
+```json
+{
+  "image_id": 10,
+  "roi": { "x": 53293, "y": 150872, "width": 512, "height": 512 },
+  "tile_size": 512,
+  "stride": 512,
+  "max_tiles": 64
+}
+```
+
+Flujo:
+
+```text
+ROI amplia
+-> grid de tiles
+-> extraccion con OpenSlide
+-> QC por tile
+-> CONCH + cabeza 3-class
+-> tumor_score = P(metastasico)
+-> resumen con mejor tile
+-> overlay en el visor
+```
+
+Prueba controlada sobre `patient_017_node_2.tif`, dentro del XML tumoral oficial:
+
+```text
+tile: x=53293, y=150872, width=512, height=512
+status: clasificado
+class: metastasico
+P(metastasico): 99.8%
+P(no_metastasico): 0.2%
+P(estroma): 0.0%
+QC tejido: 96.4%
+QC nucleos: 32.3%
+```
+
+Limitacion actual: este heatmap es sincrono y acotado a ROI 1. Para lamina
+completa falta convertirlo en tarea asincronica con progreso, cache de
+embeddings/scores y persistencia por `image_id`.
+
+## 12. Limites metodologicos
 
 El clasificador actual cubre una tarea estrecha:
 

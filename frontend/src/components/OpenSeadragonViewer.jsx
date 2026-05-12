@@ -11,6 +11,9 @@ const ROI_COLORS = {
 
 const ROI2_MIN_SIZE = 32;
 const ROI2_MAX_SIZE = 4096;
+const HEATMAP_TILE_SIZE = 512;
+const HEATMAP_STRIDE = 512;
+const HEATMAP_MAX_TILES = 64;
 
 function normalizeRect(start, end) {
   const x = Math.min(start.x, end.x);
@@ -52,6 +55,34 @@ function formatClassName(value) {
   return labels[value] || value || 'N/D';
 }
 
+function heatmapColor(score, status) {
+  if (status === 'roi_no_evaluable' || status === 'error') {
+    return {
+      border: '#94a3b8',
+      fill: `rgba(148, 163, 184, ${0.08 + Math.max(0, Math.min(1, score || 0)) * 0.12})`,
+    };
+  }
+
+  if (score >= 0.90) {
+    return {
+      border: '#ef4444',
+      fill: `rgba(239, 68, 68, ${0.16 + score * 0.28})`,
+    };
+  }
+
+  if (score >= 0.50) {
+    return {
+      border: '#f59e0b',
+      fill: `rgba(245, 158, 11, ${0.12 + score * 0.22})`,
+    };
+  }
+
+  return {
+    border: '#22c55e',
+    fill: `rgba(34, 197, 94, ${0.07 + score * 0.16})`,
+  };
+}
+
 function describeApiError(payload, fallback) {
   if (!payload) return fallback;
   if (typeof payload.detail === 'string') return payload.detail;
@@ -79,6 +110,8 @@ export function OpenSeadragonViewer({ imageData }) {
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [scanningHeatmap, setScanningHeatmap] = useState(false);
+  const [heatmap, setHeatmap] = useState(null);
   const [viewportVersion, setViewportVersion] = useState(0);
 
   const fetchModelStatus = async () => {
@@ -117,6 +150,7 @@ export function OpenSeadragonViewer({ imageData }) {
     setError(null);
     setRoiError(null);
     setPrediction(null);
+    setHeatmap(null);
     setRoi1(null);
     setRoi2(null);
     setLoading(true);
@@ -255,6 +289,7 @@ export function OpenSeadragonViewer({ imageData }) {
       setRoi1(imageRect);
       setRoi2(null);
       setPrediction(null);
+      setHeatmap(null);
       setRoiError(null);
     }
 
@@ -283,6 +318,7 @@ export function OpenSeadragonViewer({ imageData }) {
         : null
   );
   const canAnalyze = Boolean(roi1 && roi2 && roiContains(roi1, roi2) && !roi2SizeError && modelReady && !analyzing);
+  const canScanHeatmap = Boolean(roi1 && modelReady && !scanningHeatmap);
   const analyzeLabel = analyzing
     ? 'Analizando...'
     : modelReady
@@ -316,6 +352,17 @@ export function OpenSeadragonViewer({ imageData }) {
         subtle: '#bbf7d0',
       };
 
+  const heatmapTileViewerRects = useMemo(() => {
+    if (!heatmap?.tiles) return [];
+    return heatmap.tiles
+      .filter((tile) => tile?.roi)
+      .map((tile) => ({
+        ...tile,
+        viewerRect: imageRectToViewerRect(tile.roi),
+      }))
+      .filter((tile) => tile.viewerRect);
+  }, [heatmap, viewportVersion]);
+
   const analyzeRoi2 = async () => {
     if (!canAnalyze) return;
 
@@ -346,6 +393,66 @@ export function OpenSeadragonViewer({ imageData }) {
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const scanRoi1Heatmap = async () => {
+    if (!canScanHeatmap) return;
+
+    setScanningHeatmap(true);
+    setRoiError(null);
+    setHeatmap(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/scan-roi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_id: imageData.id,
+          roi: roi1,
+          tile_size: HEATMAP_TILE_SIZE,
+          stride: HEATMAP_STRIDE,
+          max_tiles: HEATMAP_MAX_TILES,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+
+      setHeatmap(payload);
+    } catch (err) {
+      setRoiError(err.message);
+    } finally {
+      setScanningHeatmap(false);
+    }
+  };
+
+  const focusBestHeatmapTile = () => {
+    const bestRoi = heatmap?.summary?.best_tile?.roi;
+    const viewer = osdRef.current;
+    if (!bestRoi || !viewer) return;
+
+    const imageRect = new OpenSeadragon.Rect(bestRoi.x, bestRoi.y, bestRoi.width, bestRoi.height);
+    const tiledImage = viewer.world.getItemAt(0);
+    const viewportRect = tiledImage
+      ? tiledImage.imageToViewportRectangle(imageRect)
+      : viewer.viewport.imageToViewportRectangle(imageRect);
+
+    viewer.viewport.fitBounds(viewportRect, true);
+    setViewportVersion((value) => value + 1);
+  };
+
+  const useBestHeatmapTileAsRoi2 = () => {
+    const bestRoi = heatmap?.summary?.best_tile?.roi;
+    if (!bestRoi || !roi1 || !roiContains(roi1, bestRoi)) return;
+
+    setRoi2(bestRoi);
+    setPrediction(null);
+    setRoiError(null);
+    setActiveTool('roi2');
+    focusBestHeatmapTile();
   };
 
   const zoomIn = () => osdRef.current?.viewport?.zoomBy(2);
@@ -404,6 +511,30 @@ export function OpenSeadragonViewer({ imageData }) {
               pointerEvents: activeTool === 'roi1' || activeTool === 'roi2' ? 'auto' : 'none',
             }}
           >
+            {heatmapTileViewerRects.map((tile) => {
+              const score = Math.max(0, Math.min(1, tile.tumor_score || 0));
+              const isMetastatic = tile.class === 'metastasico';
+              const palette = heatmapColor(score, tile.status);
+
+              return (
+                <div
+                  key={`${tile.index}-${tile.roi.x}-${tile.roi.y}`}
+                  title={`P metastasico ${formatPercent(score)} - ${formatClassName(tile.class)}`}
+                  style={{
+                    position: 'absolute',
+                    left: tile.viewerRect.left,
+                    top: tile.viewerRect.top,
+                    width: tile.viewerRect.width,
+                    height: tile.viewerRect.height,
+                    border: `1px solid ${palette.border}`,
+                    background: palette.fill,
+                    boxShadow: isMetastatic ? '0 0 0 1px rgba(248, 113, 113, 0.35)' : 'none',
+                    pointerEvents: 'none',
+                  }}
+                />
+              );
+            })}
+
             {roi1ViewerRect && (
               <div style={{
                 position: 'absolute',
@@ -600,7 +731,91 @@ export function OpenSeadragonViewer({ imageData }) {
               >
                 {analyzeLabel}
               </button>
+
+              <button
+                disabled={!canScanHeatmap}
+                onClick={scanRoi1Heatmap}
+                style={{
+                  marginTop: 8,
+                  width: '100%',
+                  border: canScanHeatmap ? '1px solid #38bdf8' : '1px solid rgba(148, 163, 184, 0.18)',
+                  background: canScanHeatmap ? 'rgba(14, 116, 144, 0.72)' : 'rgba(71, 85, 105, 0.45)',
+                  color: canScanHeatmap ? '#e0f2fe' : '#94a3b8',
+                  borderRadius: 10,
+                  padding: '9px 10px',
+                  cursor: canScanHeatmap ? 'pointer' : 'not-allowed',
+                  fontWeight: 700,
+                }}
+              >
+                {scanningHeatmap ? 'Generando mapa...' : 'Mapa de ROI 1'}
+              </button>
             </div>
+
+            {heatmap && (
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.88)',
+                border: '1px solid rgba(56, 189, 248, 0.32)',
+                borderRadius: 14,
+                padding: 12,
+                backdropFilter: 'blur(8px)',
+                fontSize: 12,
+                lineHeight: 1.45,
+              }}>
+                <div style={{ fontWeight: 800, color: '#bae6fd', marginBottom: 6 }}>Mapa educativo ROI 1</div>
+                <div style={{ color: '#cbd5e1' }}>Tiles analizados: {heatmap.tile_count}</div>
+                <div style={{ color: '#cbd5e1' }}>
+                  Tiles metastasicos: {heatmap.summary?.classified_metastatic_tiles ?? 0}
+                </div>
+                <div style={{ color: '#cbd5e1' }}>
+                  Max P(metastasico): {formatPercent(heatmap.summary?.max_tumor_score)}
+                </div>
+                {heatmap.summary?.best_tile?.roi && (
+                  <div style={{ color: '#93c5fd', marginTop: 6 }}>
+                    Mejor tile: {formatRoi(heatmap.summary.best_tile.roi)}
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+                  <button
+                    onClick={focusBestHeatmapTile}
+                    disabled={!heatmap.summary?.best_tile?.roi}
+                    style={{
+                      border: '1px solid rgba(56, 189, 248, 0.36)',
+                      background: 'rgba(8, 47, 73, 0.72)',
+                      color: '#e0f2fe',
+                      borderRadius: 8,
+                      padding: '8px 6px',
+                      cursor: heatmap.summary?.best_tile?.roi ? 'pointer' : 'not-allowed',
+                      fontWeight: 700,
+                      fontSize: 11,
+                    }}
+                  >
+                    Ir al mejor
+                  </button>
+                  <button
+                    onClick={useBestHeatmapTileAsRoi2}
+                    disabled={!heatmap.summary?.best_tile?.roi || !roi1 || !roiContains(roi1, heatmap.summary.best_tile.roi)}
+                    style={{
+                      border: '1px solid rgba(251, 146, 60, 0.36)',
+                      background: 'rgba(124, 45, 18, 0.72)',
+                      color: '#ffedd5',
+                      borderRadius: 8,
+                      padding: '8px 6px',
+                      cursor: heatmap.summary?.best_tile?.roi ? 'pointer' : 'not-allowed',
+                      fontWeight: 700,
+                      fontSize: 11,
+                    }}
+                  >
+                    Usar ROI 2
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, color: '#cbd5e1', fontSize: 11, flexWrap: 'wrap' }}>
+                  <span><span style={{ color: '#ef4444' }}>■</span> alta</span>
+                  <span><span style={{ color: '#f59e0b' }}>■</span> media</span>
+                  <span><span style={{ color: '#22c55e' }}>■</span> baja</span>
+                  <span><span style={{ color: '#94a3b8' }}>■</span> no evaluable</span>
+                </div>
+              </div>
+            )}
 
             {prediction && (
               <div style={{

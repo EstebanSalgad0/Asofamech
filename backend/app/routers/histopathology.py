@@ -13,7 +13,7 @@ from ..histopathology.ml.inference_service import DEFAULT_LABELS, get_inference_
 from ..histopathology.patch_extractor import OpenSlidePatchExtractor, PatchExtractionError
 from ..histopathology.roi_quality import evaluate_roi_quality, get_quality_thresholds
 from ..histopathology.roi import validate_roi_pair
-from ..histopathology.schemas import HistopathologyAnalyzeRequest
+from ..histopathology.schemas import HistopathologyAnalyzeRequest, HistopathologyScanRequest, ROIBox
 from ..models import MedicalImage
 from .medical_images import get_current_user
 
@@ -45,6 +45,59 @@ def _configured_confidence_threshold() -> float:
     except ValueError:
         return 0.90
     return parsed if 0.0 < parsed <= 1.0 else 0.90
+
+
+def _validate_roi_bounds(roi: ROIBox, slide_width: int, slide_height: int) -> None:
+    if roi.x + roi.width > slide_width or roi.y + roi.height > slide_height:
+        raise ValueError("La ROI queda fuera de los limites de la lamina.")
+
+
+def _model_metadata(inference_service) -> dict:
+    return {
+        "task": "camelyon_patch_classification_with_stroma_abstention",
+        "backbone": "CONCH frozen",
+        "classifier": f"{inference_service.num_classes}-class linear head over CONCH embeddings",
+        "checkpoint_ref": inference_service.checkpoint_ref,
+        "classifier_checkpoint": inference_service.classifier_path,
+        "device": inference_service.device,
+        "feature_dim": inference_service.feature_dim,
+        "num_classes": inference_service.num_classes,
+        "classifier_kind": inference_service.classifier_kind,
+        "labels": inference_service.labels,
+        "class_mapping": inference_service.class_mapping,
+        "confidence_threshold": inference_service.confidence_threshold,
+        "training_mode": inference_service.training_mode,
+        "validation": inference_service.validation,
+    }
+
+
+def _axis_positions(start: int, length: int, tile_size: int, stride: int) -> list[int]:
+    if length <= tile_size:
+        return [start]
+
+    end = start + length
+    positions = list(range(start, end - tile_size + 1, stride))
+    last = end - tile_size
+    if not positions or positions[-1] != last:
+        positions.append(last)
+    return positions
+
+
+def _tile_grid(roi: ROIBox, tile_size: int, stride: int, max_tiles: int) -> list[ROIBox]:
+    tiles = []
+    x_positions = _axis_positions(roi.x, roi.width, tile_size, stride)
+    y_positions = _axis_positions(roi.y, roi.height, tile_size, stride)
+
+    for y in y_positions:
+        for x in x_positions:
+            width = min(tile_size, roi.x + roi.width - x)
+            height = min(tile_size, roi.y + roi.height - y)
+            if width < 64 or height < 64:
+                continue
+            tiles.append(ROIBox(x=x, y=y, width=width, height=height))
+            if len(tiles) >= max_tiles:
+                return tiles
+    return tiles
 
 
 @router.get("/status")
@@ -230,22 +283,7 @@ async def analyze_roi2(
         "color_mode": "RGB",
         "debug_artifacts": debug_artifacts,
     }
-    model_metadata = {
-        "task": "camelyon_patch_classification_with_stroma_abstention",
-        "backbone": "CONCH frozen",
-        "classifier": f"{inference_service.num_classes}-class linear head over CONCH embeddings",
-        "checkpoint_ref": inference_service.checkpoint_ref,
-        "classifier_checkpoint": inference_service.classifier_path,
-        "device": inference_service.device,
-        "feature_dim": inference_service.feature_dim,
-        "num_classes": inference_service.num_classes,
-        "classifier_kind": inference_service.classifier_kind,
-        "labels": inference_service.labels,
-        "class_mapping": inference_service.class_mapping,
-        "confidence_threshold": inference_service.confidence_threshold,
-        "training_mode": inference_service.training_mode,
-        "validation": inference_service.validation,
-    }
+    model_metadata = _model_metadata(inference_service)
     slide_dimensions = {
         "width": slide_width,
         "height": slide_height,
@@ -396,6 +434,188 @@ async def analyze_roi2(
             "debug_artifacts": debug_artifacts,
             "prediction": prediction,
             "model": model_metadata,
+            "warning": EDUCATIONAL_WARNING,
+        }
+    )
+
+    return response_payload
+
+
+@router.post("/scan-roi")
+async def scan_roi_heatmap(
+    request: HistopathologyScanRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    trace_id = str(uuid4())
+    analyzed_at = _utc_now()
+    roi_payload = _dump_schema(request.roi)
+
+    image = (
+        db.query(MedicalImage)
+        .filter(MedicalImage.id == request.image_id, MedicalImage.is_active == True)
+        .first()
+    )
+
+    if not image:
+        append_audit_event(
+            {
+                "event": "histopathology_scan_failed",
+                "trace_id": trace_id,
+                "timestamp": analyzed_at,
+                "image_id": request.image_id,
+                "user_id": getattr(current_user, "id", None),
+                "roi": roi_payload,
+                "error_type": "image_not_found",
+                "detail": "Imagen no encontrada",
+            }
+        )
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
+
+    extractor = OpenSlidePatchExtractor()
+
+    try:
+        slide_width, slide_height = extractor.get_slide_dimensions(image.file_path)
+        _validate_roi_bounds(request.roi, slide_width, slide_height)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PatchExtractionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        inference_service = get_inference_service()
+    except ModelUnavailableError as exc:
+        append_audit_event(
+            {
+                "event": "histopathology_scan_failed",
+                "trace_id": trace_id,
+                "timestamp": analyzed_at,
+                "image_id": request.image_id,
+                "user_id": getattr(current_user, "id", None),
+                "roi": roi_payload,
+                "error_type": "model_unavailable",
+                "detail": str(exc),
+            }
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    tiles = _tile_grid(request.roi, request.tile_size, request.stride, request.max_tiles)
+    tile_results = []
+
+    for index, tile_roi in enumerate(tiles):
+        try:
+            patch_rgb = extractor.extract_roi2(image.file_path, tile_roi)
+        except PatchExtractionError as exc:
+            tile_results.append(
+                {
+                    "index": index,
+                    "roi": _dump_schema(tile_roi),
+                    "status": "error",
+                    "class": "error",
+                    "confidence": 0.0,
+                    "probabilities": {},
+                    "reason": str(exc),
+                }
+            )
+            continue
+
+        roi_quality = evaluate_roi_quality(patch_rgb)
+        if not roi_quality["is_evaluable"]:
+            tile_results.append(
+                {
+                    "index": index,
+                    "roi": _dump_schema(tile_roi),
+                    "status": "roi_no_evaluable",
+                    "class": "roi_no_evaluable",
+                    "confidence": 0.0,
+                    "probabilities": {},
+                    "tumor_score": 0.0,
+                    "roi_quality": roi_quality,
+                    "reason": roi_quality["reason"],
+                }
+            )
+            continue
+
+        raw_prediction = inference_service.predict_patch(patch_rgb)
+        status = "clasificado"
+        predicted_class = raw_prediction["predicted_class"]
+        reason = None
+
+        if predicted_class == "estroma":
+            status = "roi_no_evaluable"
+            predicted_class = "roi_no_evaluable"
+            reason = "Tile marcado como estroma por la cabeza 3-class."
+        elif raw_prediction["confidence"] < inference_service.confidence_threshold:
+            status = "resultado_incierto"
+            predicted_class = "incierto"
+            reason = "Ninguna clase supera el umbral de confianza configurado."
+
+        probabilities = raw_prediction["probabilities"]
+        tile_results.append(
+            {
+                "index": index,
+                "roi": _dump_schema(tile_roi),
+                "status": status,
+                "class": predicted_class,
+                "model_predicted_class": raw_prediction["model_predicted_class"],
+                "confidence": raw_prediction["confidence"],
+                "probabilities": probabilities,
+                "tumor_score": float(probabilities.get("metastasico", 0.0)),
+                "roi_quality": roi_quality,
+                "reason": reason,
+            }
+        )
+
+    evaluable_tiles = [tile for tile in tile_results if tile["status"] != "error"]
+    best_tile = max(evaluable_tiles, key=lambda item: item.get("tumor_score", 0.0), default=None)
+    classified_tumor = [
+        tile for tile in tile_results
+        if tile.get("class") == "metastasico"
+    ]
+    uncertain_high = [
+        tile for tile in tile_results
+        if tile.get("status") == "resultado_incierto" and tile.get("tumor_score", 0.0) >= 0.50
+    ]
+
+    response_payload = {
+        "trace_id": trace_id,
+        "analyzed_at": analyzed_at,
+        "image_id": request.image_id,
+        "status": "completed",
+        "roi": roi_payload,
+        "tile_size": request.tile_size,
+        "stride": request.stride,
+        "requested_max_tiles": request.max_tiles,
+        "tile_count": len(tile_results),
+        "tiles": tile_results,
+        "summary": {
+            "classified_metastatic_tiles": len(classified_tumor),
+            "uncertain_high_tumor_tiles": len(uncertain_high),
+            "best_tile": best_tile,
+            "max_tumor_score": best_tile.get("tumor_score", 0.0) if best_tile else 0.0,
+        },
+        "slide_dimensions": {
+            "width": slide_width,
+            "height": slide_height,
+        },
+        "model": _model_metadata(inference_service),
+        "warning": EDUCATIONAL_WARNING,
+    }
+
+    append_audit_event(
+        {
+            "event": "histopathology_scan_succeeded",
+            "trace_id": trace_id,
+            "timestamp": analyzed_at,
+            "image_id": request.image_id,
+            "image_filename": image.filename,
+            "user_id": getattr(current_user, "id", None),
+            "roi": roi_payload,
+            "tile_size": request.tile_size,
+            "stride": request.stride,
+            "tile_count": len(tile_results),
+            "summary": response_payload["summary"],
+            "model": response_payload["model"],
             "warning": EDUCATIONAL_WARNING,
         }
     )
