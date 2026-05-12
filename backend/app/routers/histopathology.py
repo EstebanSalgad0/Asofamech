@@ -8,6 +8,11 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..histopathology.audit_log import append_audit_event, get_audit_log_path
 from ..histopathology.debug_patches import save_patch_debug_images
+from ..histopathology.heatmap_store import (
+    load_heatmap_by_trace,
+    load_latest_heatmap_for_image,
+    save_heatmap_result,
+)
 from ..histopathology.ml.conch_feature_extractor import ModelUnavailableError
 from ..histopathology.ml.inference_service import DEFAULT_LABELS, get_inference_service
 from ..histopathology.patch_extractor import OpenSlidePatchExtractor, PatchExtractionError
@@ -599,8 +604,17 @@ async def scan_roi_heatmap(
             "height": slide_height,
         },
         "model": _model_metadata(inference_service),
+        "persisted": False,
         "warning": EDUCATIONAL_WARNING,
     }
+
+    try:
+        heatmap_artifacts = save_heatmap_result(response_payload)
+        response_payload["persisted"] = True
+        response_payload["artifacts"] = heatmap_artifacts
+    except OSError as exc:
+        response_payload["persisted"] = False
+        response_payload["artifact_error"] = str(exc)
 
     append_audit_event(
         {
@@ -615,9 +629,45 @@ async def scan_roi_heatmap(
             "stride": request.stride,
             "tile_count": len(tile_results),
             "summary": response_payload["summary"],
+            "persisted": response_payload["persisted"],
+            "artifacts": response_payload.get("artifacts"),
+            "artifact_error": response_payload.get("artifact_error"),
             "model": response_payload["model"],
             "warning": EDUCATIONAL_WARNING,
         }
     )
 
     return response_payload
+
+
+@router.get("/heatmaps/image/{image_id}/latest")
+async def get_latest_heatmap(
+    image_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    image = (
+        db.query(MedicalImage)
+        .filter(MedicalImage.id == image_id, MedicalImage.is_active == True)
+        .first()
+    )
+    if not image:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
+
+    heatmap = load_latest_heatmap_for_image(image_id)
+    if not heatmap:
+        raise HTTPException(status_code=404, detail="No hay heatmap guardado para esta imagen")
+
+    return heatmap
+
+
+@router.get("/heatmaps/{trace_id}")
+async def get_heatmap_by_trace(
+    trace_id: str,
+    current_user=Depends(get_current_user),
+):
+    heatmap = load_heatmap_by_trace(trace_id)
+    if not heatmap:
+        raise HTTPException(status_code=404, detail="Heatmap no encontrado")
+
+    return heatmap

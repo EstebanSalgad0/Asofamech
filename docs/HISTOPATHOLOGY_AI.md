@@ -938,6 +938,7 @@ ROI amplia
 -> CONCH + cabeza 3-class
 -> tumor_score = P(metastasico)
 -> resumen con mejor tile
+-> persistencia JSON por trace_id e image_id
 -> overlay en el visor
 ```
 
@@ -954,9 +955,26 @@ QC tejido: 96.4%
 QC nucleos: 32.3%
 ```
 
+Persistencia:
+
+```text
+artifacts/histopathology/heatmaps/traces/{trace_id}.json
+artifacts/histopathology/heatmaps/images/{image_id}/latest.json
+```
+
+Endpoints de consulta:
+
+```text
+GET /api/histopathology/heatmaps/image/{image_id}/latest
+GET /api/histopathology/heatmaps/{trace_id}
+```
+
+El visor intenta recuperar automaticamente el ultimo heatmap guardado al abrir
+una imagen y permite ocultarlo sin borrar el artefacto.
+
 Limitacion actual: este heatmap es sincrono y acotado a ROI 1. Para lamina
-completa falta convertirlo en tarea asincronica con progreso, cache de
-embeddings/scores y persistencia por `image_id`.
+completa falta convertirlo en tarea asincronica con progreso y cache de
+embeddings/scores por coordenada.
 
 ## 12. Limites metodologicos
 

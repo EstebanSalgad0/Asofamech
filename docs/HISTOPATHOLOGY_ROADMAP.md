@@ -211,15 +211,15 @@ Estado implementado:
 - grid configurable con `tile_size`, `stride` y `max_tiles`;
 - cada tile pasa por QC, CONCH y cabeza 3-class;
 - respuesta con `tumor_score`, clase, probabilidades, QC y mejor tile;
-- overlay en OpenSeadragon sobre ROI 1.
+- overlay en OpenSeadragon sobre ROI 1;
+- persistencia JSON del heatmap por `trace_id` y ultimo mapa por `image_id`;
+- recuperacion automatica del ultimo mapa guardado al abrir una imagen.
 
 Pendiente para cerrar la fase completa:
 
 - ejecutar el escaneo por bandas/lotes en laminas completas;
-- persistir resultados por `image_id`;
 - agregar progreso asincronico;
 - cachear embeddings/scores por coordenada;
-- permitir saltar automaticamente al mejor tile;
 - convertir scores guardados en heatmap persistente.
 
 Flujo:

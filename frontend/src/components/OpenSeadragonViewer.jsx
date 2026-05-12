@@ -112,6 +112,7 @@ export function OpenSeadragonViewer({ imageData }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [scanningHeatmap, setScanningHeatmap] = useState(false);
   const [heatmap, setHeatmap] = useState(null);
+  const [heatmapSource, setHeatmapSource] = useState(null);
   const [viewportVersion, setViewportVersion] = useState(0);
 
   const fetchModelStatus = async () => {
@@ -135,6 +136,25 @@ export function OpenSeadragonViewer({ imageData }) {
     }
   };
 
+  const loadLatestHeatmap = async (imageId) => {
+    if (!imageId) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${imageId}/latest`);
+      if (response.status === 404) return;
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+
+      setHeatmap(payload);
+      setHeatmapSource('saved');
+    } catch (err) {
+      console.warn('No se pudo cargar el heatmap guardado:', err);
+    }
+  };
+
   useEffect(() => {
     fetchModelStatus();
   }, []);
@@ -151,6 +171,7 @@ export function OpenSeadragonViewer({ imageData }) {
     setRoiError(null);
     setPrediction(null);
     setHeatmap(null);
+    setHeatmapSource(null);
     setRoi1(null);
     setRoi2(null);
     setLoading(true);
@@ -188,6 +209,7 @@ export function OpenSeadragonViewer({ imageData }) {
     viewer.addHandler('open', () => {
       setLoading(false);
       setError(null);
+      loadLatestHeatmap(imageData.id);
       refreshOverlay();
     });
 
@@ -290,6 +312,7 @@ export function OpenSeadragonViewer({ imageData }) {
       setRoi2(null);
       setPrediction(null);
       setHeatmap(null);
+      setHeatmapSource(null);
       setRoiError(null);
     }
 
@@ -422,11 +445,17 @@ export function OpenSeadragonViewer({ imageData }) {
       }
 
       setHeatmap(payload);
+      setHeatmapSource(payload?.persisted ? 'saved' : 'session');
     } catch (err) {
       setRoiError(err.message);
     } finally {
       setScanningHeatmap(false);
     }
+  };
+
+  const clearHeatmapOverlay = () => {
+    setHeatmap(null);
+    setHeatmapSource(null);
   };
 
   const focusBestHeatmapTile = () => {
@@ -762,6 +791,11 @@ export function OpenSeadragonViewer({ imageData }) {
                 lineHeight: 1.45,
               }}>
                 <div style={{ fontWeight: 800, color: '#bae6fd', marginBottom: 6 }}>Mapa educativo ROI 1</div>
+                {heatmapSource && (
+                  <div style={{ color: '#93c5fd', marginBottom: 6 }}>
+                    Origen: {heatmapSource === 'saved' ? 'guardado' : 'sesion actual'}
+                  </div>
+                )}
                 <div style={{ color: '#cbd5e1' }}>Tiles analizados: {heatmap.tile_count}</div>
                 <div style={{ color: '#cbd5e1' }}>
                   Tiles metastasicos: {heatmap.summary?.classified_metastatic_tiles ?? 0}
@@ -808,6 +842,23 @@ export function OpenSeadragonViewer({ imageData }) {
                     Usar ROI 2
                   </button>
                 </div>
+                <button
+                  onClick={clearHeatmapOverlay}
+                  style={{
+                    marginTop: 8,
+                    width: '100%',
+                    border: '1px solid rgba(148, 163, 184, 0.24)',
+                    background: 'rgba(15, 23, 42, 0.7)',
+                    color: '#cbd5e1',
+                    borderRadius: 8,
+                    padding: '8px 6px',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: 11,
+                  }}
+                >
+                  Ocultar mapa
+                </button>
                 <div style={{ display: 'flex', gap: 8, marginTop: 10, color: '#cbd5e1', fontSize: 11, flexWrap: 'wrap' }}>
                   <span><span style={{ color: '#ef4444' }}>■</span> alta</span>
                   <span><span style={{ color: '#f59e0b' }}>■</span> media</span>
