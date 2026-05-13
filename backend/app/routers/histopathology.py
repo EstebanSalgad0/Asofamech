@@ -2,12 +2,19 @@ import os
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..histopathology.audit_log import append_audit_event, get_audit_log_path
 from ..histopathology.debug_patches import save_patch_debug_images
+from ..histopathology.heatmap_access import (
+    check_heatmap_rate_limit,
+    heatmap_rate_limit_key,
+    max_tile_size_for_role,
+    max_tiles_for_role,
+    normalize_role,
+)
 from ..histopathology.heatmap_jobs import (
     acquire_heatmap_worker,
     create_heatmap_job,
@@ -806,14 +813,57 @@ async def scan_roi_heatmap(
 
 @router.post("/heatmaps/jobs")
 async def create_heatmap_scan_job(
-    request: HistopathologyScanRequest,
+    scan_request: HistopathologyScanRequest,
     background_tasks: BackgroundTasks,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    effective_role = normalize_role(
+        http_request.headers.get("x-asofamech-role") or getattr(current_user, "role", None)
+    )
+    max_allowed_tiles = max_tiles_for_role(effective_role)
+    if scan_request.max_tiles > max_allowed_tiles:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Tu rol permite hasta {max_allowed_tiles} tiles por heatmap. "
+                "Reduce el area ROI o pide a un docente preparar el mapa."
+            ),
+        )
+
+    max_allowed_tile_size = max_tile_size_for_role(effective_role)
+    if scan_request.tile_size > max_allowed_tile_size or scan_request.stride > max_allowed_tile_size:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Tu rol permite tile/stride de hasta {max_allowed_tile_size}px para heatmaps."
+            ),
+        )
+
+    client_id = http_request.headers.get("x-asofamech-client-id")
+    rate_key = heatmap_rate_limit_key(
+        user_id=getattr(current_user, "id", None),
+        role=effective_role,
+        client_id=client_id,
+    )
+    allowed, retry_after, limit, window_seconds = check_heatmap_rate_limit(
+        rate_key,
+        effective_role,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Demasiadas solicitudes de heatmap. Limite: {limit} cada "
+                f"{window_seconds} segundos."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+
     image = (
         db.query(MedicalImage)
-        .filter(MedicalImage.id == request.image_id, MedicalImage.is_active == True)
+        .filter(MedicalImage.id == scan_request.image_id, MedicalImage.is_active == True)
         .first()
     )
     if not image:
@@ -826,11 +876,13 @@ async def create_heatmap_scan_job(
         "file_path": image.file_path,
     }
     request_payload = {
-        "image_id": request.image_id,
-        "roi": _dump_schema(request.roi),
-        "tile_size": request.tile_size,
-        "stride": request.stride,
-        "max_tiles": request.max_tiles,
+        "image_id": scan_request.image_id,
+        "roi": _dump_schema(scan_request.roi),
+        "tile_size": scan_request.tile_size,
+        "stride": scan_request.stride,
+        "max_tiles": scan_request.max_tiles,
+        "requested_by_role": effective_role,
+        "client_id": client_id,
     }
     job = create_heatmap_job(
         {
@@ -841,7 +893,7 @@ async def create_heatmap_scan_job(
     background_tasks.add_task(
         _run_heatmap_job,
         job_id=job["job_id"],
-        request=request,
+        request=scan_request,
         image_payload=image_payload,
         user_id=getattr(current_user, "id", None),
         trace_id=trace_id,

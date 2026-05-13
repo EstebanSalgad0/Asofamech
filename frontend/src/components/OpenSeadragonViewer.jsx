@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import OpenSeadragon from 'openseadragon';
+import { heatmapMaxTilesForCurrentRole, histopathologyHeaders, isPrivilegedRole } from '../histopathologyAccess';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8001';
 
@@ -13,7 +14,6 @@ const ROI2_MIN_SIZE = 32;
 const ROI2_MAX_SIZE = 4096;
 const HEATMAP_TILE_SIZE = 512;
 const HEATMAP_STRIDE = 512;
-const HEATMAP_MAX_TILES = 64;
 
 function normalizeRect(start, end) {
   const x = Math.min(start.x, end.x);
@@ -116,6 +116,8 @@ export function OpenSeadragonViewer({ imageData }) {
   const [heatmapJob, setHeatmapJob] = useState(null);
   const [viewportVersion, setViewportVersion] = useState(0);
   const [tileSizeOption, setTileSizeOption] = useState(512);
+  const heatmapMaxTiles = heatmapMaxTilesForCurrentRole();
+  const privilegedHeatmaps = isPrivilegedRole();
 
   const fetchModelStatus = async () => {
     setStatusLoading(true);
@@ -435,13 +437,13 @@ export function OpenSeadragonViewer({ imageData }) {
     try {
       const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: histopathologyHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           image_id: imageData.id,
           roi: roi1,
           tile_size: tileSizeOption,
           stride: tileSizeOption,
-          max_tiles: HEATMAP_MAX_TILES,
+          max_tiles: heatmapMaxTiles,
         }),
       });
 
@@ -832,6 +834,9 @@ export function OpenSeadragonViewer({ imageData }) {
                     {size}
                   </button>
                 ))}
+              </div>
+              <div style={{ marginTop: 5, color: '#94a3b8', fontSize: 11 }}>
+                Max tiles: {heatmapMaxTiles}{privilegedHeatmaps ? ' (docente/admin)' : ' (estudiante)'}
               </div>
 
               <button

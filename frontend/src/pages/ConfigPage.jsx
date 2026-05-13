@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, deleteSCTTest } from "../api";
 import { AppSidebar } from "../components/AppSidebar";
+import { histopathologyHeaders } from "../histopathologyAccess";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
 
@@ -280,7 +281,7 @@ export function ConfigPage() {
     try {
       const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: histopathologyHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           image_id: Number(selectedHeatmapImageId),
           roi: heatmapRoi,

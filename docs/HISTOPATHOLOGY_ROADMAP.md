@@ -216,6 +216,9 @@ Estado implementado:
 - recuperacion automatica del ultimo mapa guardado al abrir una imagen;
 - jobs asincronicos en memoria para ejecutar heatmaps con progreso;
 - limite configurable de jobs simultaneos con `HISTO_MAX_CONCURRENT_HEATMAP_JOBS`;
+- limites por rol para proteger el servidor:
+  - estudiantes: 16 tiles y 3 solicitudes por ventana;
+  - profesor/administrador: limites mas altos para preparacion docente;
 - cache JSON por tile/coordenada/modelo para evitar recalcular CONCH;
 - panel docente/admin en `ConfigPage.jsx` para generar o recuperar el ultimo
   heatmap acotado de una imagen DZI sin pedir que cada estudiante lo calcule;
