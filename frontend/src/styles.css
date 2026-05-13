@@ -368,7 +368,10 @@ a { color: inherit; text-decoration: none; }
 .form-select { padding: 14px 16px; border: 2px solid var(--border); border-radius: var(--radius-md); font-size: 15px; outline: none; background: white; cursor: pointer; }
 .password-input-wrapper { position: relative; }
 .password-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 16px; padding: 8px; }
+.password-input-wrapper .form-input { width: 100%; padding-right: 82px; }
+.auth-error { padding: 12px 14px; border: 1px solid #f97316; border-radius: var(--radius-md); background: #fff7ed; color: #9a3412; font-size: 14px; line-height: 1.4; }
 .btn-auth-submit { padding: 16px; background: var(--gradient-cta); color: white; border: none; border-radius: var(--radius-md); font-weight: 700; cursor: pointer; margin-top: 8px; }
+.btn-auth-submit:disabled { opacity: 0.7; cursor: wait; }
 .auth-switch { text-align: center; margin-top: 24px; font-size: 14px; color: var(--text-secondary); }
 .auth-switch-link { color: var(--primary); font-weight: 600; text-decoration: none; }
 .auth-info-side { background: var(--gradient-cta); color: white; padding: 64px; display: flex; align-items: center; }
@@ -2524,6 +2527,10 @@ a { color: inherit; text-decoration: none; }
   color: rgba(255,255,255,0.45);
   font-size: 12px; cursor: pointer;
   margin-bottom: 8px; font-family: inherit;
+}
+.app-role-display {
+  cursor: default;
+  text-align: center;
 }
 .app-logout-btn {
   width: 100%; padding: 8px 10px;

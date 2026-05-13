@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { sendChatMessage } from "../api";
 import { startSession, flushSession, trackConsultation, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
+import { clearAuthSession } from "../authClient";
 
 const STORAGE_KEY = "asofamech_chat_history";
 const BOT_WELCOME = "¡Hola! Soy tu asistente educativo médico. Puedo ayudarte con preguntas sobre enfermedades, síntomas, diagnósticos, tratamientos y casos de estudio. ¿En qué puedo ayudarte hoy?";
@@ -96,7 +97,8 @@ export function ChatbotPage() {
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
-    if (!userData) { navigate("/auth"); return; }
+    const token = localStorage.getItem("auth_token");
+    if (!userData || !token) { clearAuthSession(); navigate("/auth"); return; }
     setUser(JSON.parse(userData));
     const savedRole = localStorage.getItem("role");
     if (savedRole) setRole(savedRole);
@@ -210,7 +212,7 @@ export function ChatbotPage() {
 
   const handleLogout = () => {
     flushSession();
-    localStorage.removeItem("user");
+    clearAuthSession();
     navigate("/");
   };
 

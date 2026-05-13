@@ -1,3 +1,5 @@
+import { authHeaders, getStoredRole } from "./authClient";
+
 const CLIENT_ID_KEY = "asofamech_histopathology_client_id";
 
 export const PRIVILEGED_HEATMAP_MAX_TILES = 64;
@@ -11,7 +13,7 @@ export function normalizeRole(role) {
 }
 
 export function currentRole() {
-  return localStorage.getItem("role") || "Estudiante";
+  return getStoredRole();
 }
 
 export function isPrivilegedRole(role = currentRole()) {
@@ -32,9 +34,9 @@ export function histopathologyClientId() {
 }
 
 export function histopathologyHeaders(extra = {}) {
-  return {
+  return authHeaders({
     ...extra,
     "X-Asofamech-Role": currentRole(),
     "X-Asofamech-Client-Id": histopathologyClientId(),
-  };
+  });
 }

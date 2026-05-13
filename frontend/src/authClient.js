@@ -1,0 +1,56 @@
+export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
+
+const TOKEN_KEY = "auth_token";
+const USER_KEY = "user";
+const ROLE_KEY = "role";
+
+export function getAuthToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function getStoredUser() {
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredRole() {
+  const user = getStoredUser();
+  return user?.role_label || localStorage.getItem(ROLE_KEY) || "Estudiante";
+}
+
+export function saveAuthSession(payload) {
+  const user = payload?.user;
+  if (!payload?.access_token || !user) {
+    throw new Error("Respuesta de autenticacion incompleta");
+  }
+  localStorage.setItem(TOKEN_KEY, payload.access_token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.setItem(ROLE_KEY, user.role_label || "Estudiante");
+}
+
+export function clearAuthSession() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(ROLE_KEY);
+}
+
+export function authHeaders(extra = {}) {
+  const token = getAuthToken();
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+export async function authFetch(pathOrUrl, options = {}) {
+  const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API_BASE}${pathOrUrl}`;
+  return fetch(url, {
+    ...options,
+    headers: authHeaders(options.headers || {}),
+  });
+}

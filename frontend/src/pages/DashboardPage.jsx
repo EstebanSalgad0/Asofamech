@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { startSession, flushSession, getMetrics, formatStudyTime, getRecentActivity, timeAgo } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
+import { clearAuthSession } from "../authClient";
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -19,8 +20,11 @@ export function DashboardPage() {
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
-    if (!userData) {
+    const token = localStorage.getItem("auth_token");
+    if (!userData || !token) {
+      clearAuthSession();
       navigate("/auth");
+      return;
     } else {
       setUser(JSON.parse(userData));
       const savedRole = localStorage.getItem("role");
@@ -51,7 +55,7 @@ export function DashboardPage() {
 
   const handleLogout = () => {
     flushSession();
-    localStorage.removeItem("user");
+    clearAuthSession();
     navigate("/");
   };
 
