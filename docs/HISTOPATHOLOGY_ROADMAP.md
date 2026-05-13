@@ -222,7 +222,10 @@ Estado implementado:
 - cache JSON por tile/coordenada/modelo para evitar recalcular CONCH;
 - panel docente/admin en `ConfigPage.jsx` para generar o recuperar el ultimo
   heatmap acotado de una imagen DZI sin pedir que cada estudiante lo calcule;
-- historial JSON por imagen para recuperar mapas previos por `trace_id`.
+- historial JSON por imagen para recuperar mapas previos por `trace_id`;
+- metadata educativa por mapa: nombre, nota docente y tipo (`tumoral`, `sano`,
+  `mixto`, `estroma`, `falso_positivo`, `discusion`);
+- visor de estudiante con lista de "Mapas preparados" cargables por nombre.
 
 Pendiente para cerrar la fase completa:
 

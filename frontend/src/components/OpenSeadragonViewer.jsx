@@ -55,6 +55,19 @@ function formatClassName(value) {
   return labels[value] || value || 'N/D';
 }
 
+function educationalTypeLabel(value) {
+  const labels = {
+    referencia: 'Referencia',
+    tumoral: 'Zona tumoral',
+    sano: 'Zona sana',
+    mixto: 'Zona mixta',
+    estroma: 'Estroma/no evaluable',
+    falso_positivo: 'Falso positivo',
+    discusion: 'Discusion docente',
+  };
+  return labels[value] || 'Referencia';
+}
+
 function heatmapColor(score, status) {
   if (status === 'roi_no_evaluable' || status === 'error') {
     return {
@@ -114,6 +127,9 @@ export function OpenSeadragonViewer({ imageData }) {
   const [heatmap, setHeatmap] = useState(null);
   const [heatmapSource, setHeatmapSource] = useState(null);
   const [heatmapJob, setHeatmapJob] = useState(null);
+  const [preparedHeatmaps, setPreparedHeatmaps] = useState([]);
+  const [loadingPreparedHeatmaps, setLoadingPreparedHeatmaps] = useState(false);
+  const [loadingPreparedTrace, setLoadingPreparedTrace] = useState(null);
   const [viewportVersion, setViewportVersion] = useState(0);
   const [tileSizeOption, setTileSizeOption] = useState(512);
   const heatmapMaxTiles = heatmapMaxTilesForCurrentRole();
@@ -160,6 +176,51 @@ export function OpenSeadragonViewer({ imageData }) {
     }
   };
 
+  const applyPreparedHeatmap = (payload, source = 'prepared') => {
+    setHeatmap(payload);
+    setHeatmapSource(source);
+    if (payload?.tile_size) setTileSizeOption(payload.tile_size);
+  };
+
+  const loadPreparedHeatmaps = async (imageId) => {
+    if (!imageId) return;
+    setLoadingPreparedHeatmaps(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${imageId}/history?limit=6`);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        if (response.status === 404) {
+          setPreparedHeatmaps([]);
+          return;
+        }
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+      setPreparedHeatmaps(payload?.items || []);
+    } catch (err) {
+      console.warn('No se pudieron cargar mapas preparados:', err);
+      setPreparedHeatmaps([]);
+    } finally {
+      setLoadingPreparedHeatmaps(false);
+    }
+  };
+
+  const loadPreparedHeatmapTrace = async (traceId) => {
+    if (!traceId) return;
+    setLoadingPreparedTrace(traceId);
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/${traceId}`);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+      applyPreparedHeatmap(payload);
+    } catch (err) {
+      setRoiError(err.message);
+    } finally {
+      setLoadingPreparedTrace(null);
+    }
+  };
+
   useEffect(() => {
     fetchModelStatus();
   }, []);
@@ -178,6 +239,7 @@ export function OpenSeadragonViewer({ imageData }) {
     setHeatmap(null);
     setHeatmapSource(null);
     setHeatmapJob(null);
+    setPreparedHeatmaps([]);
     setRoi1(null);
     setRoi2(null);
     setLoading(true);
@@ -216,6 +278,7 @@ export function OpenSeadragonViewer({ imageData }) {
       setLoading(false);
       setError(null);
       loadLatestHeatmap(imageData.id);
+      loadPreparedHeatmaps(imageData.id);
       refreshOverlay();
     });
 
@@ -877,6 +940,69 @@ export function OpenSeadragonViewer({ imageData }) {
                 </button>
               )}
 
+              {preparedHeatmaps.length > 0 && (
+                <div style={{
+                  marginTop: 8,
+                  borderTop: '1px solid rgba(148, 163, 184, 0.18)',
+                  paddingTop: 8,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                    <span style={{ color: '#bae6fd', fontSize: 11, fontWeight: 800 }}>Mapas preparados</span>
+                    <button
+                      onClick={() => loadPreparedHeatmaps(imageData.id)}
+                      disabled={loadingPreparedHeatmaps}
+                      style={{
+                        border: '1px solid rgba(148, 163, 184, 0.22)',
+                        background: 'rgba(15, 23, 42, 0.55)',
+                        color: '#94a3b8',
+                        borderRadius: 6,
+                        padding: '3px 7px',
+                        cursor: loadingPreparedHeatmaps ? 'wait' : 'pointer',
+                        fontSize: 10,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {loadingPreparedHeatmaps ? '...' : 'Actualizar'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {preparedHeatmaps.slice(0, 4).map((item) => {
+                      const educational = item.educational || {};
+                      const summary = item.summary || {};
+                      return (
+                        <button
+                          key={item.trace_id}
+                          onClick={() => loadPreparedHeatmapTrace(item.trace_id)}
+                          disabled={loadingPreparedTrace === item.trace_id}
+                          title={educational.note || item.trace_id}
+                          style={{
+                            border: '1px solid rgba(56, 189, 248, 0.22)',
+                            background: 'rgba(8, 47, 73, 0.46)',
+                            color: '#dbeafe',
+                            borderRadius: 8,
+                            padding: '7px 8px',
+                            cursor: loadingPreparedTrace === item.trace_id ? 'wait' : 'pointer',
+                            textAlign: 'left',
+                            fontSize: 11,
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                            <strong style={{ color: '#e0f2fe', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {loadingPreparedTrace === item.trace_id ? 'Cargando...' : (educational.label || 'Mapa preparado')}
+                            </strong>
+                            <span style={{ color: '#93c5fd', flexShrink: 0 }}>{formatPercent(summary.max_tumor_score)}</span>
+                          </div>
+                          <div style={{ color: '#94a3b8' }}>
+                            {educationalTypeLabel(educational.type)} · tile {item.tile_size || 'N/D'} · {item.tile_count || 0} tiles
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {(scanningHeatmap || heatmapJob) && (
                 <div style={{ marginTop: 8 }}>
                   {(() => {
@@ -962,7 +1088,23 @@ export function OpenSeadragonViewer({ imageData }) {
                 <div style={{ fontWeight: 800, color: '#bae6fd', marginBottom: 6 }}>Mapa educativo ROI 1</div>
                 {heatmapSource && (
                   <div style={{ color: '#93c5fd', marginBottom: 6 }}>
-                    Origen: {heatmapSource === 'saved' ? 'guardado' : 'sesion actual'}
+                    Origen: {heatmapSource === 'prepared' ? 'mapa preparado' : heatmapSource === 'saved' ? 'guardado' : 'sesion actual'}
+                  </div>
+                )}
+                {heatmap.educational && (
+                  <div style={{
+                    color: '#e0f2fe',
+                    background: 'rgba(8, 47, 73, 0.64)',
+                    border: '1px solid rgba(56, 189, 248, 0.2)',
+                    borderRadius: 8,
+                    padding: 8,
+                    marginBottom: 8,
+                  }}>
+                    <div style={{ color: '#bae6fd', fontWeight: 800 }}>{heatmap.educational.label || 'Mapa preparado sin nombre'}</div>
+                    <div style={{ color: '#93c5fd', fontSize: 11 }}>{educationalTypeLabel(heatmap.educational.type)}</div>
+                    {heatmap.educational.note && (
+                      <div style={{ color: '#cbd5e1', marginTop: 5 }}>{heatmap.educational.note}</div>
+                    )}
                   </div>
                 )}
                 <div style={{ color: '#cbd5e1' }}>

@@ -24,6 +24,15 @@ class HistopathologyScanRequest(BaseModel):
     tile_size: int = Field(512, ge=64, le=2048)
     stride: int = Field(512, ge=32, le=2048)
     max_tiles: int = Field(64, ge=1, le=256)
+    educational_label: Optional[str] = Field(None, max_length=120)
+    educational_note: Optional[str] = Field(None, max_length=600)
+    educational_type: Optional[str] = Field(None, max_length=40)
+
+
+class HeatmapEducationalMetadataUpdate(BaseModel):
+    educational_label: Optional[str] = Field(None, max_length=120)
+    educational_note: Optional[str] = Field(None, max_length=600)
+    educational_type: Optional[str] = Field(None, max_length=40)
 
 
 class HistopathologyPrediction(BaseModel):

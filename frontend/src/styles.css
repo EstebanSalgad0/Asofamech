@@ -3773,6 +3773,18 @@ a { color: inherit; text-decoration: none; }
   margin-top: 12px;
   align-items: end;
 }
+.cfg-heatmap-metadata-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.55fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+.cfg-heatmap-metadata-form .wide {
+  grid-column: 1 / -1;
+}
+.cfg-heatmap-note {
+  min-height: 58px;
+}
 .cfg-heatmap-segment {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -3876,6 +3888,44 @@ a { color: inherit; text-decoration: none; }
   color: var(--ink);
   margin-bottom: 8px;
 }
+.cfg-heatmap-educational {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(91,108,246,0.07);
+  border: 1px solid rgba(91,108,246,0.16);
+}
+.cfg-heatmap-educational strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+.cfg-heatmap-educational p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.cfg-heatmap-type {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: rgba(91,108,246,0.14);
+  color: var(--indigo);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.cfg-heatmap-type.type-tumoral { background: rgba(255,107,92,0.14); color: #c0392b; }
+.cfg-heatmap-type.type-sano { background: rgba(30,201,154,0.14); color: var(--accent-deep); }
+.cfg-heatmap-type.type-mixto { background: rgba(245,158,11,0.16); color: #92400e; }
+.cfg-heatmap-type.type-estroma { background: rgba(100,116,139,0.16); color: #475569; }
+.cfg-heatmap-type.type-falso_positivo { background: rgba(216,232,58,0.24); color: #6f7600; }
 .cfg-heatmap-kv {
   display: grid;
   grid-template-columns: minmax(120px, 0.45fr) minmax(0, 1fr);
@@ -3961,6 +4011,11 @@ a { color: inherit; text-decoration: none; }
   font-size: 11px;
   line-height: 1.35;
 }
+.cfg-heatmap-history-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
 .cfg-heatmap-history-trace {
   color: var(--muted);
   font-family: 'JetBrains Mono', monospace;
@@ -4015,7 +4070,8 @@ a { color: inherit; text-decoration: none; }
 
 @media (max-width: 640px) {
   .cfg-heatmap-fields,
-  .cfg-heatmap-options {
+  .cfg-heatmap-options,
+  .cfg-heatmap-metadata-form {
     grid-template-columns: 1fr 1fr;
   }
 

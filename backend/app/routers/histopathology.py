@@ -28,6 +28,7 @@ from ..histopathology.heatmap_store import (
     load_heatmap_by_trace,
     load_latest_heatmap_for_image,
     save_heatmap_result,
+    update_heatmap_educational_metadata,
 )
 from ..histopathology.heatmap_tile_cache import (
     build_tile_cache_key,
@@ -39,7 +40,12 @@ from ..histopathology.ml.inference_service import DEFAULT_LABELS, get_inference_
 from ..histopathology.patch_extractor import OpenSlidePatchExtractor, PatchExtractionError
 from ..histopathology.roi_quality import evaluate_roi_quality, get_quality_thresholds
 from ..histopathology.roi import validate_roi_pair
-from ..histopathology.schemas import HistopathologyAnalyzeRequest, HistopathologyScanRequest, ROIBox
+from ..histopathology.schemas import (
+    HeatmapEducationalMetadataUpdate,
+    HistopathologyAnalyzeRequest,
+    HistopathologyScanRequest,
+    ROIBox,
+)
 from ..models import MedicalImage
 from .medical_images import get_current_user
 
@@ -302,6 +308,11 @@ def _execute_heatmap_scan(
         "slide_dimensions": {
             "width": slide_width,
             "height": slide_height,
+        },
+        "educational": {
+            "label": request.educational_label or "",
+            "note": request.educational_note or "",
+            "type": request.educational_type or "referencia",
         },
         "model": _model_metadata(inference_service),
         "persisted": False,
@@ -883,6 +894,11 @@ async def create_heatmap_scan_job(
         "max_tiles": scan_request.max_tiles,
         "requested_by_role": effective_role,
         "client_id": client_id,
+        "educational": {
+            "label": scan_request.educational_label or "",
+            "note": scan_request.educational_note or "",
+            "type": scan_request.educational_type or "referencia",
+        },
     }
     job = create_heatmap_job(
         {
@@ -967,3 +983,23 @@ async def get_heatmap_by_trace(
         raise HTTPException(status_code=404, detail="Heatmap no encontrado")
 
     return heatmap
+
+
+@router.patch("/heatmaps/{trace_id}/educational")
+async def update_heatmap_educational_metadata_endpoint(
+    trace_id: str,
+    metadata: HeatmapEducationalMetadataUpdate,
+    current_user=Depends(get_current_user),
+):
+    updated = update_heatmap_educational_metadata(
+        trace_id,
+        {
+            "educational_label": metadata.educational_label,
+            "educational_note": metadata.educational_note,
+            "educational_type": metadata.educational_type,
+        },
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Heatmap no encontrado")
+
+    return updated

@@ -971,6 +971,7 @@ GET /api/histopathology/heatmaps/jobs/{job_id}
 GET /api/histopathology/heatmaps/image/{image_id}/latest
 GET /api/histopathology/heatmaps/image/{image_id}/history?limit=20
 GET /api/histopathology/heatmaps/{trace_id}
+PATCH /api/histopathology/heatmaps/{trace_id}/educational
 ```
 
 El visor intenta recuperar automaticamente el ultimo heatmap guardado al abrir
@@ -980,12 +981,29 @@ hasta recibir `completed`, y luego pinta el resultado persistido.
 
 La pantalla de configuracion incorpora un panel docente/admin para preparar
 heatmaps acotados sobre imagenes con DZI. Desde ahi se elige la lamina, se
-definen coordenadas ROI, `tile_size` y `max_tiles`, se lanza el mismo job
-asincronico y se revisa el ultimo resultado persistido con trace, cache,
-tiles positivos y mejor tile. El panel tambien consulta un historial por imagen
-para recuperar mapas anteriores mediante `trace_id`; esto permite preparar
-varias regiones docentes, por ejemplo tumor, tejido sano y zona mixta, antes de
-que entren estudiantes, sin convertir todavia el flujo en heatmap de lamina
+definen coordenadas ROI, `tile_size`, `max_tiles`, nombre educativo, tipo y nota
+docente, se lanza el mismo job asincronico y se revisa el resultado persistido
+con trace, cache, tiles positivos y mejor tile. El panel tambien consulta un
+historial por imagen para recuperar mapas anteriores mediante `trace_id` y
+actualizar su metadata educativa sin recalcular el mapa.
+
+Tipos educativos soportados por UI:
+
+```text
+referencia
+tumoral
+sano
+mixto
+estroma
+falso_positivo
+discusion
+```
+
+El visor OpenSeadragon muestra una lista de "Mapas preparados" con nombre,
+tipo, nota y score maximo. El estudiante puede cargar un mapa docente por
+nombre sin conocer coordenadas ni `trace_id`; esto permite preparar varias
+regiones docentes, por ejemplo tumor, tejido sano y zona mixta, antes de que
+entren estudiantes, sin convertir todavia el flujo en heatmap de lamina
 completa.
 
 Control de carga:
