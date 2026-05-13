@@ -7,6 +7,8 @@
  *   asofamech_session    – session start timestamp for study-time tracking
  */
 
+import { userStorageKey } from "./authClient";
+
 const METRICS_KEY = "asofamech_metrics";
 const ACTIVITY_KEY = "asofamech_activity";
 const SESSION_KEY = "asofamech_session";
@@ -16,14 +18,14 @@ const MAX_ACTIVITY = 30;
 
 function loadMetrics() {
   try {
-    const raw = localStorage.getItem(METRICS_KEY);
+    const raw = localStorage.getItem(userStorageKey(METRICS_KEY));
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return { consultations: 0, studyMs: 0, testsTotal: 0, testsPassed: 0 };
 }
 
 function saveMetrics(m) {
-  localStorage.setItem(METRICS_KEY, JSON.stringify(m));
+  localStorage.setItem(userStorageKey(METRICS_KEY), JSON.stringify(m));
 }
 
 /** Increment the chat-consultation counter by `n` (default 1). */
@@ -50,14 +52,16 @@ export function getMetrics() {
 
 /** Call on every page mount to start / resume a session. */
 export function startSession() {
-  if (!localStorage.getItem(SESSION_KEY)) {
-    localStorage.setItem(SESSION_KEY, Date.now().toString());
+  const key = userStorageKey(SESSION_KEY);
+  if (!localStorage.getItem(key)) {
+    localStorage.setItem(key, Date.now().toString());
   }
 }
 
 /** Call on page unload / unmount to flush elapsed time. */
 export function flushSession() {
-  const start = parseInt(localStorage.getItem(SESSION_KEY), 10);
+  const key = userStorageKey(SESSION_KEY);
+  const start = parseInt(localStorage.getItem(key), 10);
   if (!start) return;
   const elapsed = Date.now() - start;
   if (elapsed > 500) {                       // ignore trivial durations
@@ -65,7 +69,7 @@ export function flushSession() {
     m.studyMs += elapsed;
     saveMetrics(m);
   }
-  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(key);
 }
 
 /**
@@ -82,14 +86,14 @@ export function formatStudyTime(ms) {
 
 function loadActivity() {
   try {
-    const raw = localStorage.getItem(ACTIVITY_KEY);
+    const raw = localStorage.getItem(userStorageKey(ACTIVITY_KEY));
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return [];
 }
 
 function saveActivity(list) {
-  localStorage.setItem(ACTIVITY_KEY, JSON.stringify(list));
+  localStorage.setItem(userStorageKey(ACTIVITY_KEY), JSON.stringify(list));
 }
 
 /**

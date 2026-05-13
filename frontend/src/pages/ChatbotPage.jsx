@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { sendChatMessage } from "../api";
 import { startSession, flushSession, trackConsultation, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
-import { clearAuthSession } from "../authClient";
+import { clearAuthSession, userStorageKey } from "../authClient";
 
 const STORAGE_KEY = "asofamech_chat_history";
 const BOT_WELCOME = "¡Hola! Soy tu asistente educativo médico. Puedo ayudarte con preguntas sobre enfermedades, síntomas, diagnósticos, tratamientos y casos de estudio. ¿En qué puedo ayudarte hoy?";
@@ -28,7 +28,7 @@ function timeAgo(dateStr) {
 
 function loadConversations() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(userStorageKey(STORAGE_KEY));
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -36,7 +36,7 @@ function loadConversations() {
 }
 
 function saveConversations(conversations) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+  localStorage.setItem(userStorageKey(STORAGE_KEY), JSON.stringify(conversations));
 }
 
 function createNewConversation() {

@@ -132,6 +132,11 @@ export function OpenSeadragonViewer({ imageData }) {
   const [loadingPreparedTrace, setLoadingPreparedTrace] = useState(null);
   const [viewportVersion, setViewportVersion] = useState(0);
   const [tileSizeOption, setTileSizeOption] = useState(512);
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [historialOpen, setHistorialOpen] = useState(false);
+  const [correctionDraft, setCorrectionDraft] = useState({});
+  // correctionDraft[sessionId] = { open, label, note, includeInDataset, saving }
   const heatmapMaxTiles = heatmapMaxTilesForCurrentRole();
   const privilegedHeatmaps = isPrivilegedRole();
 
@@ -246,6 +251,8 @@ export function OpenSeadragonViewer({ imageData }) {
     setHeatmapSource(null);
     setHeatmapJob(null);
     setPreparedHeatmaps([]);
+    setSessions([]);
+    setHistorialOpen(false);
     setRoi1(null);
     setRoi2(null);
     setLoading(true);
@@ -285,6 +292,7 @@ export function OpenSeadragonViewer({ imageData }) {
       setError(null);
       loadLatestHeatmap(imageData.id);
       loadPreparedHeatmaps(imageData.id);
+      loadSessions(imageData.id);
       refreshOverlay();
     });
 
@@ -575,6 +583,128 @@ export function OpenSeadragonViewer({ imageData }) {
     if (heatmapJob.status === 'failed') return `Error: ${heatmapJob.error || 'fallo desconocido'}`;
     return heatmapJob.status;
   })();
+
+  const loadSessions = async (imageId) => {
+    if (!imageId) return;
+    setSessionsLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/histopathology/sessions?image_id=${imageId}&limit=20`,
+        { headers: histopathologyHeaders() }
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) return;
+      setSessions(payload?.items || []);
+    } catch {
+      // historial no critico, falla silenciosa
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const restoreSession = (session) => {
+    if (!session?.roi_1 || !session?.roi_2) return;
+    setRoi1(session.roi_1);
+    setRoi2(session.roi_2);
+    setPrediction({
+      trace_id: session.trace_id,
+      analyzed_at: session.analyzed_at,
+      status: session.status,
+      clase: session.clase,
+      confidence: session.confidence,
+      probabilities: session.probabilities,
+      reason: session.reason,
+      recommendation: session.recommendation,
+      roi_quality: session.roi_quality_metrics ? { metrics: session.roi_quality_metrics } : null,
+      warning: session.warning || 'Resultado educativo restaurado de sesion anterior.',
+    });
+    setRoiError(null);
+    setActiveTool('navigate');
+  };
+
+  const deleteSession = async (sessionId) => {
+    try {
+      await fetch(`${API_BASE}/api/histopathology/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: histopathologyHeaders(),
+      });
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch {
+      // falla silenciosa
+    }
+  };
+
+  const DOCENTE_LABEL_OPTIONS = [
+    { value: 'correcto', label: 'Correcto' },
+    { value: 'falso_positivo', label: 'Falso positivo' },
+    { value: 'falso_negativo', label: 'Falso negativo' },
+    { value: 'estroma_no_evaluable', label: 'Estroma / No evaluable' },
+    { value: 'zona_tumoral_confirmada', label: 'Zona tumoral confirmada' },
+    { value: 'zona_sana_confirmada', label: 'Zona sana confirmada' },
+  ];
+
+  const openCorrectionForm = (s) => {
+    setCorrectionDraft((prev) => ({
+      ...prev,
+      [s.id]: {
+        open: true,
+        label: s.correction?.docente_label || '',
+        note: s.correction?.docente_note || '',
+        includeInDataset: s.correction?.include_in_dataset || false,
+        saving: false,
+      },
+    }));
+  };
+
+  const updateCorrectionDraft = (sessionId, patch) => {
+    setCorrectionDraft((prev) => ({
+      ...prev,
+      [sessionId]: { ...prev[sessionId], ...patch },
+    }));
+  };
+
+  const submitCorrection = async (sessionId) => {
+    const draft = correctionDraft[sessionId];
+    if (!draft?.label) return;
+    updateCorrectionDraft(sessionId, { saving: true });
+    try {
+      const res = await fetch(`${API_BASE}/api/histopathology/sessions/${sessionId}/correction`, {
+        method: 'POST',
+        headers: { ...histopathologyHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          docente_label: draft.label,
+          docente_note: draft.note || null,
+          include_in_dataset: draft.includeInDataset,
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setSessions((prev) =>
+          prev.map((s) => (s.id === sessionId ? { ...s, correction: saved } : s))
+        );
+        updateCorrectionDraft(sessionId, { open: false, saving: false });
+      } else {
+        updateCorrectionDraft(sessionId, { saving: false });
+      }
+    } catch {
+      updateCorrectionDraft(sessionId, { saving: false });
+    }
+  };
+
+  const removeCorrection = async (sessionId) => {
+    try {
+      await fetch(`${API_BASE}/api/histopathology/sessions/${sessionId}/correction`, {
+        method: 'DELETE',
+        headers: histopathologyHeaders(),
+      });
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, correction: null } : s))
+      );
+      setCorrectionDraft((prev) => ({ ...prev, [sessionId]: undefined }));
+    } catch {
+      // falla silenciosa
+    }
+  };
 
   const clearHeatmapOverlay = () => {
     setHeatmap(null);
@@ -1259,6 +1389,282 @@ export function OpenSeadragonViewer({ imageData }) {
                 </div>
               </div>
             )}
+
+            {/* Panel Historial de sesiones */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.88)',
+              border: '1px solid rgba(148, 163, 184, 0.2)',
+              borderRadius: 14,
+              backdropFilter: 'blur(8px)',
+              fontSize: 12,
+              overflow: 'hidden',
+            }}>
+              <button
+                onClick={() => setHistorialOpen((v) => !v)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  padding: '10px 12px',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textAlign: 'left',
+                }}
+              >
+                <span>Historial de esta lamina ({sessionsLoading ? '...' : sessions.length})</span>
+                <span style={{ fontSize: 10, opacity: 0.7 }}>{historialOpen ? '▲' : '▼'}</span>
+              </button>
+
+              {historialOpen && (
+                <div style={{ padding: '0 12px 12px' }}>
+                  {sessionsLoading && (
+                    <div style={{ color: '#64748b', fontSize: 11, textAlign: 'center', padding: '8px 0' }}>Cargando...</div>
+                  )}
+                  {!sessionsLoading && sessions.length === 0 && (
+                    <div style={{ color: '#64748b', fontSize: 11, textAlign: 'center', padding: '8px 0' }}>
+                      Sin analisis previos para esta lamina.
+                    </div>
+                  )}
+                  {sessions.map((s) => {
+                    const claseColor = {
+                      metastasico: '#ef4444',
+                      no_metastasico: '#22c55e',
+                      incierto: '#f59e0b',
+                      roi_no_evaluable: '#94a3b8',
+                    }[s.clase] || '#94a3b8';
+                    const fecha = s.analyzed_at
+                      ? new Date(s.analyzed_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                      : '—';
+                    return (
+                      <div
+                        key={s.id}
+                        style={{
+                          marginBottom: 6,
+                          background: 'rgba(30, 41, 59, 0.7)',
+                          border: '1px solid rgba(148,163,184,0.15)',
+                          borderRadius: 8,
+                          padding: '7px 8px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{
+                              background: claseColor,
+                              color: '#fff',
+                              borderRadius: 4,
+                              padding: '1px 6px',
+                              fontSize: 10,
+                              fontWeight: 800,
+                            }}>
+                              {formatClassName(s.clase)}
+                            </span>
+                            {s.correction && (
+                              <span style={{
+                                background: '#7c3aed',
+                                color: '#ede9fe',
+                                borderRadius: 4,
+                                padding: '1px 5px',
+                                fontSize: 9,
+                                fontWeight: 700,
+                              }}>
+                                {DOCENTE_LABEL_OPTIONS.find((o) => o.value === s.correction.docente_label)?.label || s.correction.docente_label}
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ color: '#64748b', fontSize: 10 }}>{fecha}</span>
+                        </div>
+                        <div style={{ color: '#94a3b8', fontSize: 10, marginBottom: 5 }}>
+                          Confianza: {formatPercent(s.confidence)} · ROI2: {s.roi_2 ? `${s.roi_2.width}×${s.roi_2.height}` : '—'}
+                        </div>
+                        <div style={{ display: 'flex', gap: 5 }}>
+                          <button
+                            onClick={() => restoreSession(s)}
+                            style={{
+                              flex: 1,
+                              border: '1px solid rgba(56,189,248,0.3)',
+                              background: 'rgba(14,116,144,0.5)',
+                              color: '#e0f2fe',
+                              borderRadius: 6,
+                              padding: '4px 0',
+                              cursor: 'pointer',
+                              fontSize: 10,
+                              fontWeight: 700,
+                            }}
+                          >
+                            Restaurar
+                          </button>
+                          {privilegedHeatmaps && (
+                            <button
+                              onClick={() => openCorrectionForm(s)}
+                              style={{
+                                border: '1px solid rgba(124,58,237,0.35)',
+                                background: s.correction ? 'rgba(109,40,217,0.5)' : 'rgba(60,20,120,0.4)',
+                                color: '#c4b5fd',
+                                borderRadius: 6,
+                                padding: '4px 7px',
+                                cursor: 'pointer',
+                                fontSize: 10,
+                              }}
+                              title="Corregir resultado"
+                            >
+                              ✎
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteSession(s.id)}
+                            style={{
+                              border: '1px solid rgba(248,113,113,0.2)',
+                              background: 'rgba(127,29,29,0.4)',
+                              color: '#fca5a5',
+                              borderRadius: 6,
+                              padding: '4px 8px',
+                              cursor: 'pointer',
+                              fontSize: 10,
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {privilegedHeatmaps && correctionDraft[s.id]?.open && (() => {
+                          const draft = correctionDraft[s.id];
+                          return (
+                            <div style={{
+                              marginTop: 7,
+                              background: 'rgba(46, 16, 101, 0.4)',
+                              border: '1px solid rgba(124,58,237,0.3)',
+                              borderRadius: 7,
+                              padding: '8px 8px 6px',
+                            }}>
+                              <div style={{ color: '#c4b5fd', fontSize: 10, fontWeight: 700, marginBottom: 5 }}>
+                                Correccion docente
+                              </div>
+                              <select
+                                value={draft.label}
+                                onChange={(e) => updateCorrectionDraft(s.id, { label: e.target.value })}
+                                style={{
+                                  width: '100%',
+                                  background: 'rgba(15,23,42,0.8)',
+                                  color: '#e2e8f0',
+                                  border: '1px solid rgba(124,58,237,0.4)',
+                                  borderRadius: 5,
+                                  padding: '4px 5px',
+                                  fontSize: 10,
+                                  marginBottom: 5,
+                                }}
+                              >
+                                <option value="">-- Seleccionar etiqueta --</option>
+                                {DOCENTE_LABEL_OPTIONS.map((o) => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                              <textarea
+                                value={draft.note}
+                                onChange={(e) => updateCorrectionDraft(s.id, { note: e.target.value })}
+                                placeholder="Nota docente (opcional)"
+                                maxLength={600}
+                                rows={2}
+                                style={{
+                                  width: '100%',
+                                  background: 'rgba(15,23,42,0.8)',
+                                  color: '#e2e8f0',
+                                  border: '1px solid rgba(124,58,237,0.3)',
+                                  borderRadius: 5,
+                                  padding: '4px 5px',
+                                  fontSize: 10,
+                                  resize: 'vertical',
+                                  marginBottom: 5,
+                                  boxSizing: 'border-box',
+                                }}
+                              />
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#a78bfa', fontSize: 10, marginBottom: 6, cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={draft.includeInDataset}
+                                  onChange={(e) => updateCorrectionDraft(s.id, { includeInDataset: e.target.checked })}
+                                />
+                                Incluir en dataset de entrenamiento
+                              </label>
+                              <div style={{ display: 'flex', gap: 5 }}>
+                                <button
+                                  onClick={() => submitCorrection(s.id)}
+                                  disabled={!draft.label || draft.saving}
+                                  style={{
+                                    flex: 1,
+                                    background: draft.label ? 'rgba(109,40,217,0.7)' : 'rgba(60,20,120,0.3)',
+                                    border: '1px solid rgba(124,58,237,0.5)',
+                                    color: '#ede9fe',
+                                    borderRadius: 5,
+                                    padding: '4px 0',
+                                    cursor: draft.label ? 'pointer' : 'default',
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {draft.saving ? 'Guardando...' : 'Guardar'}
+                                </button>
+                                {s.correction && (
+                                  <button
+                                    onClick={() => removeCorrection(s.id)}
+                                    style={{
+                                      border: '1px solid rgba(248,113,113,0.2)',
+                                      background: 'rgba(127,29,29,0.4)',
+                                      color: '#fca5a5',
+                                      borderRadius: 5,
+                                      padding: '4px 7px',
+                                      cursor: 'pointer',
+                                      fontSize: 10,
+                                    }}
+                                  >
+                                    Eliminar
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => updateCorrectionDraft(s.id, { open: false })}
+                                  style={{
+                                    border: '1px solid rgba(148,163,184,0.15)',
+                                    background: 'none',
+                                    color: '#64748b',
+                                    borderRadius: 5,
+                                    padding: '4px 7px',
+                                    cursor: 'pointer',
+                                    fontSize: 10,
+                                  }}
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    );
+                  })}
+                  {sessions.length > 0 && (
+                    <button
+                      onClick={() => loadSessions(imageData?.id)}
+                      style={{
+                        marginTop: 4,
+                        width: '100%',
+                        border: '1px solid rgba(148,163,184,0.18)',
+                        background: 'none',
+                        color: '#64748b',
+                        borderRadius: 6,
+                        padding: '4px 0',
+                        cursor: 'pointer',
+                        fontSize: 10,
+                      }}
+                    >
+                      Actualizar
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div style={{
