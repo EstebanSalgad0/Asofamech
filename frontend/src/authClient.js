@@ -23,6 +23,16 @@ export function getStoredRole() {
   return user?.role_label || localStorage.getItem(ROLE_KEY) || "Estudiante";
 }
 
+export function getUserStorageScope(user = getStoredUser()) {
+  if (user?.id) return `user_${user.id}`;
+  if (user?.email) return `email_${String(user.email).trim().toLowerCase().replace(/[^a-z0-9._-]/g, "_")}`;
+  return "anonymous";
+}
+
+export function userStorageKey(baseKey) {
+  return `${baseKey}:${getUserStorageScope()}`;
+}
+
 export function saveAuthSession(payload) {
   const user = payload?.user;
   if (!payload?.access_token || !user) {

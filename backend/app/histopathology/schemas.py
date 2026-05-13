@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -43,6 +43,59 @@ class HistopathologyPrediction(BaseModel):
     model_predicted_class: Optional[str] = None
     class_mapping: Optional[Dict[str, str]] = None
     decision_threshold: Optional[float] = None
+
+
+DOCENTE_LABEL_CHOICES = [
+    "correcto",
+    "falso_positivo",
+    "falso_negativo",
+    "estroma_no_evaluable",
+    "zona_tumoral_confirmada",
+    "zona_sana_confirmada",
+]
+
+DOCENTE_LABEL_DISPLAY = {
+    "correcto": "Correcto",
+    "falso_positivo": "Falso positivo",
+    "falso_negativo": "Falso negativo",
+    "estroma_no_evaluable": "Estroma / No evaluable",
+    "zona_tumoral_confirmada": "Zona tumoral confirmada",
+    "zona_sana_confirmada": "Zona sana confirmada",
+}
+
+
+class CorrectionCreateRequest(BaseModel):
+    docente_label: str = Field(..., description="Una de: " + ", ".join(DOCENTE_LABEL_CHOICES))
+    docente_note: Optional[str] = Field(None, max_length=600)
+    include_in_dataset: bool = False
+
+
+class HistopathologySessionSummary(BaseModel):
+    id: int
+    trace_id: str
+    analyzed_at: str
+    status: str
+    clase: Optional[str] = None
+    confidence: Optional[float] = None
+    roi_1: Dict[str, int]
+    roi_2: Dict[str, int]
+
+    class Config:
+        orm_mode = True
+
+
+class HistopathologySessionDetail(HistopathologySessionSummary):
+    probabilities: Optional[Dict[str, float]] = None
+    reason: Optional[str] = None
+    recommendation: Optional[str] = None
+    roi_quality_metrics: Optional[Dict[str, Any]] = None
+    warning: Optional[str] = None
+
+
+class HistopathologySessionListResponse(BaseModel):
+    image_id: Optional[int] = None
+    count: int
+    items: List[HistopathologySessionSummary]
 
 
 class HistopathologyAnalyzeResponse(BaseModel):

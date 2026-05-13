@@ -41,12 +41,14 @@ from ..histopathology.patch_extractor import OpenSlidePatchExtractor, PatchExtra
 from ..histopathology.roi_quality import evaluate_roi_quality, get_quality_thresholds
 from ..histopathology.roi import validate_roi_pair
 from ..histopathology.schemas import (
+    CorrectionCreateRequest,
+    DOCENTE_LABEL_CHOICES,
     HeatmapEducationalMetadataUpdate,
     HistopathologyAnalyzeRequest,
     HistopathologyScanRequest,
     ROIBox,
 )
-from ..models import MedicalImage
+from ..models import HistopathologyCorrection, HistopathologySession, MedicalImage
 from ..auth import get_current_user
 
 
@@ -85,6 +87,96 @@ def _require_heatmap_manager(current_user) -> None:
             status_code=403,
             detail="Solo docentes y administradores pueden modificar mapas educativos.",
         )
+
+
+def _require_docente_or_admin(current_user) -> None:
+    if getattr(current_user, "role", None) not in {"docente", "administrador"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo docentes y administradores pueden realizar esta accion.",
+        )
+
+
+def _save_histopathology_session(
+    db: Session, user_id: int | None, image_id: int, payload: dict
+) -> None:
+    """Persiste un resultado de analisis ROI 2 en histopathology_sessions."""
+    if user_id is None:
+        return
+    roi_quality = payload.get("roi_quality") or {}
+    metrics = roi_quality.get("metrics") if isinstance(roi_quality, dict) else None
+    analyzed_at_str = payload.get("analyzed_at") or _utc_now()
+    try:
+        analyzed_at_dt = datetime.fromisoformat(analyzed_at_str).replace(tzinfo=None)
+    except Exception:
+        analyzed_at_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    existing = (
+        db.query(HistopathologySession)
+        .filter(HistopathologySession.trace_id == payload["trace_id"])
+        .first()
+    )
+    if existing:
+        return
+
+    session = HistopathologySession(
+        trace_id=payload["trace_id"],
+        user_id=user_id,
+        image_id=image_id,
+        analyzed_at=analyzed_at_dt,
+        roi_1=payload.get("roi_1"),
+        roi_2=payload.get("roi_2"),
+        status=payload.get("status", "clasificado"),
+        clase=payload.get("clase"),
+        confidence=payload.get("confidence"),
+        probabilities=payload.get("probabilities"),
+        reason=payload.get("reason"),
+        recommendation=payload.get("recommendation"),
+        roi_quality_metrics=metrics,
+        warning=payload.get("warning"),
+    )
+    db.add(session)
+    db.commit()
+
+
+def _correction_to_out(c: HistopathologyCorrection) -> dict:
+    return {
+        "id": c.id,
+        "session_id": c.session_id,
+        "trace_id": c.trace_id,
+        "docente_label": c.docente_label,
+        "docente_note": c.docente_note,
+        "include_in_dataset": c.include_in_dataset,
+        "corrected_at": c.corrected_at.isoformat() if c.corrected_at else None,
+        "docente_user_id": c.docente_user_id,
+    }
+
+
+def _session_to_summary(s: HistopathologySession) -> dict:
+    return {
+        "id": s.id,
+        "trace_id": s.trace_id,
+        "image_id": s.image_id,
+        "analyzed_at": s.analyzed_at.isoformat() if s.analyzed_at else None,
+        "status": s.status,
+        "clase": s.clase,
+        "confidence": s.confidence,
+        "roi_1": s.roi_1,
+        "roi_2": s.roi_2,
+        "correction": _correction_to_out(s.correction) if s.correction else None,
+    }
+
+
+def _session_to_detail(s: HistopathologySession) -> dict:
+    return {
+        **_session_to_summary(s),
+        "user_id": s.user_id,
+        "probabilities": s.probabilities,
+        "reason": s.reason,
+        "recommendation": s.recommendation,
+        "roi_quality_metrics": s.roi_quality_metrics,
+        "warning": s.warning,
+    }
 
 
 def _validate_roi_bounds(roi: ROIBox, slide_width: int, slide_height: int) -> None:
@@ -673,6 +765,10 @@ async def analyze_roi2(
             }
         )
 
+        try:
+            _save_histopathology_session(db, getattr(current_user, "id", None), request.image_id, response_payload)
+        except Exception:
+            pass
         return response_payload
 
     raw_prediction = inference_service.predict_patch(patch_rgb)
@@ -764,6 +860,10 @@ async def analyze_roi2(
         }
     )
 
+    try:
+        _save_histopathology_session(db, getattr(current_user, "id", None), request.image_id, response_payload)
+    except Exception:
+        pass
     return response_payload
 
 
@@ -993,6 +1093,72 @@ async def get_heatmap_by_trace(
     return heatmap
 
 
+@router.get("/sessions")
+async def list_sessions(
+    image_id: int | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    query = db.query(HistopathologySession).filter(
+        HistopathologySession.user_id == current_user.id,
+        HistopathologySession.is_active == True,
+    )
+    if image_id is not None:
+        query = query.filter(HistopathologySession.image_id == image_id)
+    sessions = (
+        query.order_by(HistopathologySession.analyzed_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "image_id": image_id,
+        "count": len(sessions),
+        "items": [_session_to_summary(s) for s in sessions],
+    }
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    session = (
+        db.query(HistopathologySession)
+        .filter(
+            HistopathologySession.id == session_id,
+            HistopathologySession.user_id == current_user.id,
+            HistopathologySession.is_active == True,
+        )
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesion no encontrada")
+    return _session_to_detail(session)
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+async def delete_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    session = (
+        db.query(HistopathologySession)
+        .filter(
+            HistopathologySession.id == session_id,
+            HistopathologySession.user_id == current_user.id,
+            HistopathologySession.is_active == True,
+        )
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesion no encontrada")
+    session.is_active = False
+    db.commit()
+
+
 @router.patch("/heatmaps/{trace_id}/educational")
 async def update_heatmap_educational_metadata_endpoint(
     trace_id: str,
@@ -1012,3 +1178,159 @@ async def update_heatmap_educational_metadata_endpoint(
         raise HTTPException(status_code=404, detail="Heatmap no encontrado")
 
     return updated
+
+
+@router.post("/sessions/{session_id}/correction")
+async def upsert_session_correction(
+    session_id: int,
+    body: CorrectionCreateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_docente_or_admin(current_user)
+    if body.docente_label not in DOCENTE_LABEL_CHOICES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"docente_label debe ser uno de: {', '.join(DOCENTE_LABEL_CHOICES)}",
+        )
+    session = (
+        db.query(HistopathologySession)
+        .filter(HistopathologySession.id == session_id, HistopathologySession.is_active == True)
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesion no encontrada")
+
+    correction = (
+        db.query(HistopathologyCorrection)
+        .filter(HistopathologyCorrection.session_id == session_id)
+        .first()
+    )
+    if correction:
+        correction.docente_label = body.docente_label
+        correction.docente_note = body.docente_note
+        correction.include_in_dataset = body.include_in_dataset
+        correction.corrected_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        correction.docente_user_id = current_user.id
+    else:
+        correction = HistopathologyCorrection(
+            session_id=session_id,
+            trace_id=session.trace_id,
+            image_id=session.image_id,
+            docente_user_id=current_user.id,
+            docente_label=body.docente_label,
+            docente_note=body.docente_note,
+            include_in_dataset=body.include_in_dataset,
+            corrected_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+        db.add(correction)
+    db.commit()
+    db.refresh(correction)
+    return _correction_to_out(correction)
+
+
+@router.delete("/sessions/{session_id}/correction", status_code=204)
+async def delete_session_correction(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_docente_or_admin(current_user)
+    correction = (
+        db.query(HistopathologyCorrection)
+        .filter(HistopathologyCorrection.session_id == session_id)
+        .first()
+    )
+    if not correction:
+        raise HTTPException(status_code=404, detail="Correccion no encontrada")
+    db.delete(correction)
+    db.commit()
+
+
+@router.get("/dataset/manifest")
+async def get_dataset_manifest(
+    image_id: int | None = Query(None),
+    include_uncertain: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_docente_or_admin(current_user)
+    query = (
+        db.query(HistopathologyCorrection, HistopathologySession, MedicalImage)
+        .join(HistopathologySession, HistopathologyCorrection.session_id == HistopathologySession.id)
+        .join(MedicalImage, HistopathologySession.image_id == MedicalImage.id)
+        .filter(
+            HistopathologyCorrection.include_in_dataset == True,
+            HistopathologySession.is_active == True,
+        )
+    )
+    if image_id is not None:
+        query = query.filter(HistopathologySession.image_id == image_id)
+    if not include_uncertain:
+        query = query.filter(HistopathologySession.clase != "incierto")
+
+    rows = query.order_by(HistopathologyCorrection.corrected_at.desc()).all()
+    items = [
+        {
+            "trace_id": correction.trace_id,
+            "session_id": session.id,
+            "image_id": image.id,
+            "image_filename": image.filename,
+            "roi_1": session.roi_1,
+            "roi_2": session.roi_2,
+            "model_clase": session.clase,
+            "model_confidence": session.confidence,
+            "model_probabilities": session.probabilities,
+            "docente_label": correction.docente_label,
+            "docente_note": correction.docente_note,
+            "corrected_at": correction.corrected_at.isoformat() if correction.corrected_at else None,
+            "analyzed_at": session.analyzed_at.isoformat() if session.analyzed_at else None,
+        }
+        for correction, session, image in rows
+    ]
+    return {
+        "count": len(items),
+        "generated_at": _utc_now(),
+        "items": items,
+    }
+
+
+@router.get("/review/sessions")
+async def review_sessions(
+    image_id: int | None = Query(None),
+    docente_label: str | None = Query(None),
+    include_in_dataset: bool | None = Query(None),
+    corrected: bool | None = Query(None),
+    model_clase: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_docente_or_admin(current_user)
+    query = (
+        db.query(HistopathologySession)
+        .outerjoin(HistopathologyCorrection, HistopathologyCorrection.session_id == HistopathologySession.id)
+        .filter(HistopathologySession.is_active == True)
+    )
+    if image_id is not None:
+        query = query.filter(HistopathologySession.image_id == image_id)
+    if model_clase is not None:
+        query = query.filter(HistopathologySession.clase == model_clase)
+    if corrected is True:
+        query = query.filter(HistopathologyCorrection.id.isnot(None))
+    elif corrected is False:
+        query = query.filter(HistopathologyCorrection.id.is_(None))
+    if docente_label is not None:
+        query = query.filter(HistopathologyCorrection.docente_label == docente_label)
+    if include_in_dataset is not None:
+        query = query.filter(HistopathologyCorrection.include_in_dataset == include_in_dataset)
+
+    sessions = (
+        query.order_by(HistopathologySession.analyzed_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "count": len(sessions),
+        "items": [_session_to_detail(s) for s in sessions],
+    }
