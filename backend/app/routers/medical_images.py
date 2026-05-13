@@ -8,6 +8,7 @@ import shutil
 import traceback
 from datetime import datetime
 from io import BytesIO
+from ..auth import get_current_user as jwt_get_current_user
 from ..db import get_db
 from ..models import MedicalImage, User
 
@@ -39,7 +40,7 @@ def _image_payload(image: MedicalImage) -> dict:
         "uploader_name": image.uploader.name if image.uploader else "Desconocido",
     }
 
-def get_current_user(db: Session = Depends(get_db)) -> User:
+def _legacy_get_current_user(db: Session = Depends(get_db)) -> User:
     """Mock function - reemplazar con tu sistema de autenticación real"""
     # Por ahora retorna un usuario de prueba
     user = db.query(User).filter(User.email == "admin@asofamech.com").first()
@@ -55,6 +56,8 @@ def get_current_user(db: Session = Depends(get_db)) -> User:
         db.commit()
         db.refresh(user)
     return user
+
+get_current_user = jwt_get_current_user
 
 @router.post("/upload")
 async def upload_medical_image(
@@ -176,6 +179,9 @@ async def list_local_camelyon17_images(
     """
     Listar laminas CAMELYON17 ya descargadas en el servidor.
     """
+    if current_user.role not in ["docente", "administrador"]:
+        raise HTTPException(status_code=403, detail="Solo docentes y administradores pueden listar laminas locales")
+
     base_dir = os.path.abspath(CAMELYON17_IMAGES_DIR)
     if not os.path.isdir(base_dir):
         return []
@@ -288,8 +294,7 @@ async def list_medical_images(
 @router.get("/view/{image_id}")
 async def view_image(
     image_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Ver/servir una imagen médica optimizada para el navegador
@@ -352,8 +357,7 @@ async def view_image(
 @router.get("/download/{image_id}")
 async def download_image(
     image_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Descargar/servir una imagen médica

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, deleteSCTTest } from "../api";
 import { AppSidebar } from "../components/AppSidebar";
+import { API_BASE, authFetch, clearAuthSession, getAuthToken } from "../authClient";
 import { histopathologyHeaders } from "../histopathologyAccess";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
 const HEATMAP_EDUCATIONAL_TYPES = [
   { value: "referencia", label: "Referencia" },
   { value: "tumoral", label: "Zona tumoral" },
@@ -62,7 +62,8 @@ export function ConfigPage() {
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
-    if (!userData) { navigate("/auth"); return; }
+    const token = localStorage.getItem("auth_token");
+    if (!userData || !token) { clearAuthSession(); navigate("/auth"); return; }
     setUser(JSON.parse(userData));
     const savedRole = localStorage.getItem("role");
     if (savedRole) setRole(savedRole);
@@ -101,7 +102,7 @@ export function ConfigPage() {
   const loadImageLibrary = async () => {
     try {
       setLoadingImages(true);
-      const response = await fetch(`${API_BASE}/api/medical-images/list`);
+      const response = await authFetch("/api/medical-images/list");
       if (response.ok) setImageLibrary(await response.json());
     } catch (error) {
       console.error("Error cargando biblioteca:", error);
@@ -113,7 +114,7 @@ export function ConfigPage() {
   const handleDeleteImage = async (imageId) => {
     if (!confirm("¿Estás seguro de eliminar esta imagen?")) return;
     try {
-      const response = await fetch(`${API_BASE}/api/medical-images/${imageId}`, { method: "DELETE" });
+      const response = await authFetch(`/api/medical-images/${imageId}`, { method: "DELETE" });
       if (response.ok) { showToast("Imagen eliminada exitosamente", "success"); loadImageLibrary(); }
     } catch (error) {
       console.error("Error eliminando imagen:", error);
@@ -124,7 +125,7 @@ export function ConfigPage() {
   const loadLocalCamelyonSlides = async () => {
     try {
       setLoadingCamelyonSlides(true);
-      const response = await fetch(`${API_BASE}/api/medical-images/local/camelyon17`);
+      const response = await authFetch("/api/medical-images/local/camelyon17");
       if (response.ok) {
         const slides = await response.json();
         setLocalCamelyonSlides(slides || []);
@@ -147,7 +148,7 @@ export function ConfigPage() {
       form.append("title", selectedCamelyonSlide.replace(/\.[^.]+$/, ""));
       form.append("pathology_type", "CAMELYON17");
 
-      const response = await fetch(`${API_BASE}/api/medical-images/import-local/camelyon17`, {
+      const response = await authFetch("/api/medical-images/import-local/camelyon17", {
         method: "POST",
         body: form,
       });
@@ -220,7 +221,9 @@ export function ConfigPage() {
     if (!imageId) return;
     setLoadingHeatmapHistory(true);
     try {
-      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${imageId}/history?limit=20`);
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${imageId}/history?limit=20`, {
+        headers: histopathologyHeaders(),
+      });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         if (response.status === 404) {
@@ -242,7 +245,9 @@ export function ConfigPage() {
     if (!traceId) return;
     setLoadingHeatmapTrace(traceId);
     try {
-      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/${traceId}`);
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/${traceId}`, {
+        headers: histopathologyHeaders(),
+      });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
@@ -287,7 +292,9 @@ export function ConfigPage() {
     let keepPolling = true;
     while (keepPolling) {
       await new Promise((resolve) => setTimeout(resolve, 1200));
-      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs/${jobId}`);
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs/${jobId}`, {
+        headers: histopathologyHeaders(),
+      });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
@@ -310,7 +317,9 @@ export function ConfigPage() {
     if (!selectedHeatmapImageId) return;
     setLoadingLatestHeatmap(true);
     try {
-      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${selectedHeatmapImageId}/latest`);
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${selectedHeatmapImageId}/latest`, {
+        headers: histopathologyHeaders(),
+      });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         if (response.status === 404) {
@@ -419,7 +428,7 @@ export function ConfigPage() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("user");
+    clearAuthSession();
     navigate("/");
   };
 
@@ -1137,7 +1146,9 @@ function UploadModal({ onClose, onSuccess, onError }) {
     });
     xhr.addEventListener("error", () => { setUploadPhase("error"); onError("Error de conexión al subir la imagen"); setUploading(false); });
     xhr.addEventListener("abort", () => { setUploadPhase(""); setUploading(false); });
-    xhr.open("POST", "http://localhost:8001/api/medical-images/upload");
+    xhr.open("POST", `${API_BASE}/api/medical-images/upload`);
+    const token = getAuthToken();
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.send(uploadData);
   };
 

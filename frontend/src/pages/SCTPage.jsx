@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { generateSCT, saveSCTTest, listSCTTests, getSCTTest } from "../api";
 import { startSession, flushSession, trackTestCompleted, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
+import { clearAuthSession } from "../authClient";
 
 export function SCTPage() {
   const navigate = useNavigate();
@@ -21,8 +22,11 @@ export function SCTPage() {
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
-    if (!userData) {
+    const token = localStorage.getItem("auth_token");
+    if (!userData || !token) {
+      clearAuthSession();
       navigate("/auth");
+      return;
     } else {
       setUser(JSON.parse(userData));
       const savedRole = localStorage.getItem("role");
@@ -184,7 +188,7 @@ export function SCTPage() {
 
   const handleLogout = () => {
     flushSession();
-    localStorage.removeItem("user");
+    clearAuthSession();
     navigate("/");
   };
 

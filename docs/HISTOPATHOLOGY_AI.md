@@ -1019,17 +1019,17 @@ HISTO_HEATMAP_RATE_LIMIT_WINDOW_SECONDS=60
 
 Por defecto solo corre un heatmap pesado a la vez. Los jobs adicionales quedan
 en cola en memoria hasta que exista un cupo. Ademas, el frontend envia
-`X-Asofamech-Role` y `X-Asofamech-Client-Id` para aplicar limites por rol en el
-prototipo con roles simulados:
+`Authorization: Bearer <JWT>` junto con `X-Asofamech-Client-Id`. El backend toma
+el rol real desde el token y usa ese rol para aplicar limites:
 
 - estudiante: hasta 16 tiles por heatmap y 3 solicitudes por ventana de 60 s;
 - profesor/administrador: hasta 256 tiles por heatmap y 20 solicitudes por
   ventana de 60 s.
 
 Estos controles reducen la probabilidad de saturar GPU/CPU si varios
-estudiantes usan el visor al mismo tiempo. No reemplazan autenticacion real:
-cuando exista JWT/roles backend, el header simulado debe sustituirse por claims
-validados del token.
+estudiantes usan el visor al mismo tiempo. El header de rol del prototipo ya no
+se considera fuente de verdad cuando hay JWT; los claims del token y el usuario
+de base de datos mandan sobre el cliente.
 
 Cache por tile:
 

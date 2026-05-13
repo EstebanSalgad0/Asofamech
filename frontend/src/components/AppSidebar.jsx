@@ -89,15 +89,7 @@ export function AppSidebar({ user, role, activeRoute, onRoleChange, onLogout }) 
             <div className="app-user-role-label">{role}</div>
           </div>
         </div>
-        <select
-          className="app-role-select"
-          value={role}
-          onChange={(e) => onRoleChange(e.target.value)}
-        >
-          <option value="Estudiante">Estudiante</option>
-          <option value="Administrador">Administrador</option>
-          <option value="Profesor">Profesor</option>
-        </select>
+        <div className="app-role-select app-role-display">{role}</div>
         <button onClick={onLogout} className="app-logout-btn">
           <LogoutIcon />
           Cerrar Sesión

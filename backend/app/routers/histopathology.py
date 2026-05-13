@@ -47,7 +47,7 @@ from ..histopathology.schemas import (
     ROIBox,
 )
 from ..models import MedicalImage
-from .medical_images import get_current_user
+from ..auth import get_current_user
 
 
 router = APIRouter(prefix="/api/histopathology", tags=["histopathology"])
@@ -77,6 +77,14 @@ def _configured_confidence_threshold() -> float:
     except ValueError:
         return 0.90
     return parsed if 0.0 < parsed <= 1.0 else 0.90
+
+
+def _require_heatmap_manager(current_user) -> None:
+    if getattr(current_user, "role", None) not in {"docente", "administrador"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo docentes y administradores pueden modificar mapas educativos.",
+        )
 
 
 def _validate_roi_bounds(roi: ROIBox, slide_width: int, slide_height: int) -> None:
@@ -831,7 +839,7 @@ async def create_heatmap_scan_job(
     current_user=Depends(get_current_user),
 ):
     effective_role = normalize_role(
-        http_request.headers.get("x-asofamech-role") or getattr(current_user, "role", None)
+        getattr(current_user, "role", None) or http_request.headers.get("x-asofamech-role")
     )
     max_allowed_tiles = max_tiles_for_role(effective_role)
     if scan_request.max_tiles > max_allowed_tiles:
@@ -991,6 +999,7 @@ async def update_heatmap_educational_metadata_endpoint(
     metadata: HeatmapEducationalMetadataUpdate,
     current_user=Depends(get_current_user),
 ):
+    _require_heatmap_manager(current_user)
     updated = update_heatmap_educational_metadata(
         trace_id,
         {

@@ -160,7 +160,9 @@ export function OpenSeadragonViewer({ imageData }) {
     if (!imageId) return;
 
     try {
-      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${imageId}/latest`);
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${imageId}/latest`, {
+        headers: histopathologyHeaders(),
+      });
       if (response.status === 404) return;
 
       const payload = await response.json().catch(() => null);
@@ -186,7 +188,9 @@ export function OpenSeadragonViewer({ imageData }) {
     if (!imageId) return;
     setLoadingPreparedHeatmaps(true);
     try {
-      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${imageId}/history?limit=6`);
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${imageId}/history?limit=6`, {
+        headers: histopathologyHeaders(),
+      });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         if (response.status === 404) {
@@ -208,7 +212,9 @@ export function OpenSeadragonViewer({ imageData }) {
     if (!traceId) return;
     setLoadingPreparedTrace(traceId);
     try {
-      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/${traceId}`);
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/${traceId}`, {
+        headers: histopathologyHeaders(),
+      });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
@@ -466,7 +472,7 @@ export function OpenSeadragonViewer({ imageData }) {
     try {
       const response = await fetch(`${API_BASE}/api/histopathology/analyze-roi`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: histopathologyHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           image_id: imageData.id,
           roi_1: roi1,
@@ -529,7 +535,9 @@ export function OpenSeadragonViewer({ imageData }) {
 
     while (keepPolling) {
       await new Promise((resolve) => setTimeout(resolve, 1200));
-      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs/${jobId}`);
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs/${jobId}`, {
+        headers: histopathologyHeaders(),
+      });
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {

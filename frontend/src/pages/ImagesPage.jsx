@@ -4,6 +4,7 @@ import { OpenSeadragonViewer } from "../components/OpenSeadragonViewer";
 import { MedicalImageViewer } from "../components/MedicalImageViewer";
 import { startSession, flushSession, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
+import { API_BASE, authFetch, clearAuthSession } from "../authClient";
 
 export function ImagesPage() {
   const navigate = useNavigate();
@@ -15,8 +16,11 @@ export function ImagesPage() {
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
-    if (!userData) {
+    const token = localStorage.getItem("auth_token");
+    if (!userData || !token) {
+      clearAuthSession();
       navigate("/auth");
+      return;
     } else {
       setUser(JSON.parse(userData));
       const savedRole = localStorage.getItem("role");
@@ -35,7 +39,7 @@ export function ImagesPage() {
   const loadImageLibrary = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8001/api/medical-images/list");
+      const response = await authFetch("/api/medical-images/list");
       if (response.ok) {
         const data = await response.json();
         setImageLibrary(data);
@@ -49,8 +53,8 @@ export function ImagesPage() {
 
   const handleImageSelect = (image) => {
     pushActivity("images", `Visualización: ${image.title}`);
-    setSelectedImage({
-      url: `http://localhost:8001/api/medical-images/view/${image.id}`,
+      setSelectedImage({
+      url: `${API_BASE}/api/medical-images/view/${image.id}`,
       ...image
     });
   };
@@ -65,7 +69,7 @@ export function ImagesPage() {
     formData.append("pathology_type", "Histopatologia");
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8001/api/medical-images/upload", {
+      const response = await authFetch("/api/medical-images/upload", {
         method: "POST",
         body: formData,
       });
@@ -80,7 +84,7 @@ export function ImagesPage() {
         title: uploaded.title, file_type: uploaded.file_type,
         file_size: uploaded.file_size, has_dzi: uploaded.has_dzi,
         pathology_type: "Histopatologia",
-        url: `http://localhost:8001/api/medical-images/view/${uploaded.id}`,
+        url: `${API_BASE}/api/medical-images/view/${uploaded.id}`,
       });
     } catch (error) {
       console.error("Error subiendo imagen:", error);
@@ -93,7 +97,7 @@ export function ImagesPage() {
 
   const handleLogout = () => {
     flushSession();
-    localStorage.removeItem("user");
+    clearAuthSession();
     navigate("/");
   };
 

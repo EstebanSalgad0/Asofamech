@@ -11,7 +11,7 @@ Caracter: prototipo academico educativo, no diagnostico clinico.
 | Frontend React/Vite | Implementado | `frontend/src/app.jsx`, `frontend/src/pages/*`, `frontend/src/components/*` | Build exitoso con `npm.cmd run build`; advertencia de bundle JS grande. |
 | Backend FastAPI | Implementado/parcial | `backend/app/main.py`, `backend/app/routers/*` | API modular; crea tablas con SQLAlchemy al iniciar. |
 | Base de datos PostgreSQL | Parcial | `backend/app/models.py`, `backend/app/db.py`, `docker-compose.yml` | Sin migraciones Alembic; algunas tablas no estan integradas al flujo. |
-| Autenticacion y usuarios | Parcial | `AuthPage.jsx`, `AppSidebar.jsx`, `medical_images.py:get_current_user`, `heatmap_access.py` | Login y roles simulados con `localStorage`; backend usa usuario admin mock. Heatmaps aplican limites por rol mediante headers del prototipo, no auth real. |
+| Autenticacion y usuarios | Implementado/parcial | `AuthPage.jsx`, `authClient.js`, `backend/app/auth.py`, `backend/app/routers/auth.py`, `auth_security.py` | Login/registro contra backend, contrasenas PBKDF2, token JWT HS256 y rol validado en API para acciones de imagenes/histopatologia. Persisten pendientes: recuperacion de contrasena, invitaciones, migraciones y endurecimiento productivo. |
 | Chatbot educativo | Parcial | `ChatbotPage.jsx`, `backend/app/routers/chat.py` | Usa Ollama/LLaMA via API local; historial en navegador, no en DB. |
 | RAG / contexto de casos | Parcial | `_build_cases_context` en `chat.py`, tabla `cases` | Busca coincidencias SQL en casos activos; no hay embeddings vectoriales ni carga automatica de `case*.json`. |
 | SCT | Implementado/parcial | `SCTPage.jsx`, `ConfigPage.jsx`, `backend/app/routers/sct.py`, tabla `sct_tests` | Genera, resuelve, guarda, lista y elimina tests; no guarda intentos/respuestas por estudiante. |
@@ -27,25 +27,25 @@ Verificaciones ejecutadas:
 
 | Verificacion | Resultado |
 |---|---|
-| `backend/.venv/Scripts/python.exe -m pytest tests -q` | 51 passed tras agregar tests de historial, metadata educativa, compatibilidad con `latest.json`, resumen compacto, rate limit por rol, `heatmap_store` y `heatmap_jobs` |
+| `backend/.venv/Scripts/python.exe -m pytest tests -q` | 57 passed tras agregar tests de auth/JWT/hash, historial, metadata educativa, compatibilidad con `latest.json`, resumen compacto, rate limit por rol, `heatmap_store` y `heatmap_jobs` |
 | `npm.cmd run build` en `frontend` | Build exitoso; advertencia de chunk JS > 500 kB |
-| `git log --oneline -n 12` | Ultimo commit funcional revisado: `56d83a6 feat: optimiza heatmaps para concurrencia` |
-| `git status --short` | Cambios en: metadata educativa de heatmaps, mapas preparados por nombre, frontend y documentacion |
+| `git log --oneline -n 12` | Ultimo commit funcional revisado antes de este bloque: `075813c feat: etiqueta heatmaps docentes` |
+| `git status --short` | Cambios en: auth/JWT, RBAC inicial, frontend, histopatologia y documentacion |
 
 ---
 
 ## 4.2.5. Informacion para diagrama de actividades
 
 Actor principal: estudiante de Medicina.  
-Inicio del flujo: acceso a la plataforma web y autenticacion simulada.  
+Inicio del flujo: acceso a la plataforma web y autenticacion con token.
 Flujo principal recomendado: ingreso -> dashboard -> seleccion de modulo -> visor histopatologico / SCT / chatbot -> actividad educativa -> retroalimentacion o resultado educativo.  
 Nota de alcance: el sistema debe modelarse como apoyo formativo, no como diagnostico.
 
 | Paso | Responsable | Accion | Entrada | Salida | Estado actual | Evidencia sugerida |
 |---|---|---|---|---|---|---|
 | 1 | Estudiante | Ingresa a la plataforma | URL frontend | Landing o login | Implementado | Captura `/`, `frontend/src/app.jsx` |
-| 2 | Frontend | Muestra login/registro | Email, password, nombre opcional | Usuario en `localStorage` | Parcial | `AuthPage.jsx`; aclarar login simulado |
-| 3 | Frontend | Redirige al dashboard | Usuario local | Dashboard con modulos | Implementado/parcial | `/dashboard`, `DashboardPage.jsx`, `tracker.js` |
+| 2 | Frontend/backend | Muestra login/registro y valida credenciales | Email, password, nombre/rol si registro | JWT + usuario publico en `localStorage` | Implementado/parcial | `AuthPage.jsx`, `/api/auth/login`, `/api/auth/register` |
+| 3 | Frontend | Redirige al dashboard | Usuario + token local | Dashboard con modulos | Implementado/parcial | `/dashboard`, `DashboardPage.jsx`, `authClient.js`, `tracker.js` |
 | 4 | Estudiante | Selecciona modulo de imagenes | Click en "Imagenes IA" | Biblioteca de imagenes | Implementado/parcial | `/dashboard/images`, `ImagesPage.jsx` |
 | 5 | Frontend | Solicita biblioteca | GET `/api/medical-images/list` | Lista de imagenes | Implementado | Captura lista + endpoint |
 | 6 | Backend | Consulta imagenes activas | Tabla `medical_images` | JSON de imagenes | Implementado/parcial | `medical_images.py`, tabla DB |
@@ -154,9 +154,9 @@ Estructura BPMN sugerida: mantener 4 pools maximo en la lamina principal: Estudi
 
 | ID | Epica / modulo | Historia o tarea | Prioridad | Estado | Dependencias | Criterio de aceptacion | Evidencia esperada |
 |---|---|---|---|---|---|---|---|
-| PB-01 | Autenticacion y usuarios | Login/registro frontend | Alta | Parcial | React Router, localStorage | Usuario entra al dashboard | `AuthPage.jsx` |
-| PB-02 | Autenticacion y usuarios | Autenticacion backend real con hash/JWT | Alta | Pendiente | Usuarios DB, seguridad | Token y roles validados en API | Endpoints auth, pruebas |
-| PB-03 | Autenticacion y usuarios | Control de roles real docente/admin | Alta | Pendiente | Auth backend | Acciones admin protegidas | Tests 401/403 |
+| PB-01 | Autenticacion y usuarios | Login/registro frontend | Alta | Implementado/parcial | React Router, localStorage | Usuario entra al dashboard con token | `AuthPage.jsx`, `authClient.js` |
+| PB-02 | Autenticacion y usuarios | Autenticacion backend real con hash/JWT | Alta | Implementado/parcial | Usuarios DB, seguridad | Token y roles validados en API | `/api/auth/*`, `auth_security.py`, tests |
+| PB-03 | Autenticacion y usuarios | Control de roles real docente/admin | Alta | Implementado/parcial | Auth backend | Acciones admin protegidas por token/rol | Imagenes, heatmap metadata, tests auth |
 | PB-04 | Gestion academica | Dashboard con metricas locales | Media | Implementado | tracker.js | Muestra consultas, tiempo y SCT | Captura dashboard |
 | PB-05 | Gestion academica | Persistir metricas por estudiante en DB | Media | Pendiente | Auth, tablas academicas | Historial centralizado | Tablas intentos/logs |
 | PB-06 | Gestion academica | Panel admin para imagenes/SCT | Alta | Parcial | ConfigPage, endpoints | Admin lista/sube/elimina recursos | Captura config |
@@ -193,7 +193,7 @@ Estructura BPMN sugerida: mantener 4 pools maximo en la lamina principal: Estudi
 | PB-37 | Backend / API | Routers modulares | Alta | Implementado | FastAPI | Rutas activas en `/docs` | `main.py`, `routers/*` |
 | PB-38 | Backend / API | Healthchecks de IA/DB | Media | Parcial | `/health`, `/status` | Estado observable | `/health`, `/status` |
 | PB-39 | Frontend / interfaz | Rutas principales y sidebar | Alta | Implementado | React Router | Navegacion estable | `app.jsx`, `AppSidebar.jsx` |
-| PB-40 | Frontend / interfaz | Usar `VITE_API_BASE` en imagenes/config | Media | Pendiente | api.js | Sin URLs hardcodeadas | Refactor fetch |
+| PB-40 | Frontend / interfaz | Usar `VITE_API_BASE` en imagenes/config | Media | Implementado/parcial | `authClient.js` | Fetches principales de imagenes/config centralizados; DZI mantiene ruta publica | Refactor fetch |
 | PB-41 | Pruebas y validacion | Tests ROI/QC/auditoria | Media | Implementado | pytest | 8 tests pasan | `backend/tests/*` |
 | PB-42 | Pruebas y validacion | Tests API chat/SCT/imagenes | Alta | Pendiente | pytest/TestClient | Contratos verificados | Suite API |
 | PB-43 | Pruebas y validacion | E2E frontend | Media | Pendiente | Playwright/Cypress | Login, SCT, chat, visor | Reporte E2E |
@@ -208,7 +208,7 @@ Estructura BPMN sugerida: mantener 4 pools maximo en la lamina principal: Estudi
 
 | Columna | Descripcion | Ejemplos de tareas |
 |---|---|---|
-| Backlog | Alcance proyectado aun no iniciado | Auth real, persistir ROI, intentos SCT, heatmap completo |
+| Backlog | Alcance proyectado aun no iniciado | Persistir ROI, intentos SCT, heatmap completo, migraciones |
 | Por hacer | Tareas priorizadas proximas | Seed de casos, sanitizar chat, tests API |
 | En desarrollo | Cambios activos o no confirmados | Documentacion academica, capturas y validacion externa |
 | En revision | Requiere prueba/captura/documentacion | Build frontend, tests ROI/QC, status modelo |
@@ -227,13 +227,14 @@ Estructura BPMN sugerida: mantener 4 pools maximo en la lamina principal: Estudi
 | I6 | ROI histopatologica | ROI 1/ROI 2, extraccion patch, validaciones | Analisis ROI backend/frontend | Implementado/parcial | `OpenSeadragonViewer.jsx`, tests ROI |
 | I7 | IA visual CONCH | CONCH, checkpoints, QC, auditoria | Clasificador educativo ROI 3 clases | Parcial/avanzado | artifacts, audit log, `/status` |
 | I8 | Heatmap ROI asincronico | Jobs async (`heatmap_jobs.py`), persistencia (`heatmap_store.py`), historial por imagen, metadata educativa, limites por rol (`heatmap_access.py`), polling frontend, barra progreso, selector tile_size, mapas preparados por nombre, mejor tile como ROI 2, panel admin en configuracion para precalculo acotado | Heatmap acotado a ROI con progreso, persistencia, historial, etiquetas docentes, rate limit y preparacion docente | Implementado/parcial | audit log scan, overlay, panel config, artifacts/histopathology/heatmaps/ |
-| I9 | Documentacion/defensa | Docs histopatologia, roadmap, DB | Material para informe | Parcial | `docs/*` |
+| I9 | Auth/RBAC inicial | Router `/api/auth`, PBKDF2, JWT HS256, rol backend, headers Authorization en imagenes/histopatologia, sidebar sin selector manipulable | Sesion real inicial y permisos docentes/admin menos manipulables | Implementado/parcial | `auth.py`, `auth_security.py`, `AuthPage.jsx`, `authClient.js`, tests auth |
+| I10 | Documentacion/defensa | Docs histopatologia, roadmap, DB | Material para informe | Parcial | `docs/*` |
 
 Bloqueos tecnicos detectados:
 
 | Bloqueo | Impacto | Estado |
 |---|---|---|
-| Auth real ausente | Roles y permisos no defendibles como seguridad | Pendiente |
+| Auth real inicial | Ya existe JWT/hash/RBAC basico, pero faltan refresh tokens, recuperacion, invitaciones, Alembic y pruebas API end-to-end | Parcial |
 | Dependencia Ollama/modelo | Chat/SCT fallan si Ollama no esta activo | Parcial |
 | Token/cache CONCH | IA visual puede no iniciar si checkpoint no esta disponible | Bloqueado externo/parcial |
 | WSI grandes | Subida/procesamiento requiere OpenSlide, disco y tiempo | Parcial |
@@ -246,7 +247,7 @@ Bloqueos tecnicos detectados:
 |---|---|---|---|---|
 | Rutas React | Frontend | Implementado | `app.jsx` | Landing, auth, dashboard, chat, SCT, images, config |
 | Dashboard | Gestion academica | Parcial | `DashboardPage.jsx`, `tracker.js` | Metricas locales |
-| Login | Auth | Parcial | `AuthPage.jsx` | No backend/JWT |
+| Login | Auth | Implementado/parcial | `AuthPage.jsx`, `/api/auth/*` | JWT inicial; faltan recuperacion e invitaciones |
 | Chat | Chatbot/RAG | Parcial | `chat.py`, `ChatbotPage.jsx` | RAG SQL simple |
 | SCT CRUD | SCT | Implementado | `/api/sct/*`, `sct_tests` | Sin intentos por estudiante |
 | Biblioteca imagenes | Imagenes | Implementado/parcial | `/api/medical-images/list` | Requiere DB con datos |
@@ -267,7 +268,7 @@ Bloqueos tecnicos detectados:
 | Modulo | Tecnologia principal | Funcionalidades implementadas | Estado actual | Evidencia disponible | Limitaciones |
 |---|---|---|---|---|---|
 | Frontend | React 18 + Vite | Rutas, dashboard, chatbot, SCT, imagenes, config | Implementado/parcial | Build exitoso, `frontend/src` | Auth local, URLs hardcodeadas en imagenes/config |
-| Backend | FastAPI + SQLAlchemy | Routers chat, casos, SCT, imagenes, histopatologia | Implementado/parcial | `/health`, routers | Sin auth real, sin migraciones |
+| Backend | FastAPI + SQLAlchemy | Routers auth, chat, casos, SCT, imagenes, histopatologia | Implementado/parcial | `/health`, routers | Auth JWT inicial; sin migraciones |
 | Base de datos | PostgreSQL 15 | Usuarios, imagenes, casos, docs, chat logs, SCT tests | Parcial | `models.py` | `documents`/`chat_logs` no usados, sin Alembic |
 | Visor histopatologico | OpenSeadragon + Fabric | DZI, tiles, zoom, visor raster | Implementado/parcial | `OpenSeadragonViewer.jsx`, `MedicalImageViewer.jsx` | Persistencia de anotaciones incompleta |
 | Seleccion ROI | OpenSeadragon overlay + FastAPI | ROI 1/2, validacion, extraccion patch | Implementado/parcial | `roi.py`, tests | ROI no se guarda en DB |
@@ -282,9 +283,9 @@ Bloqueos tecnicos detectados:
 | Objetivo | Proveer interfaz educativa para estudiantes/docentes: dashboard, chatbot, SCT, imagenes, configuracion. |
 | Tecnologias | React 18, Vite, React Router, OpenSeadragon, Fabric, CSS global. |
 | Archivos | `frontend/src/app.jsx`, `main.jsx`, `api.js`, `pages/*`, `components/*`, `styles.css`. |
-| Funcionalidades implementadas | Landing, auth simulada, dashboard, sidebar, chat UI, SCT UI, biblioteca/visor, panel config. |
-| Parciales | Acceso por rol local, metricas localStorage, historial chat local, llamadas imagenes hardcodeadas. |
-| Pendientes | Auth real, API client centralizado para imagenes/casos, tests frontend, sanitizacion robusta. |
+| Funcionalidades implementadas | Landing, auth JWT inicial, dashboard, sidebar, chat UI, SCT UI, biblioteca/visor, panel config. |
+| Parciales | Sesion/token en localStorage, metricas localStorage, historial chat local, DZI publico para compatibilidad con OpenSeadragon. |
+| Pendientes | Refresh token/cookies seguras, API client centralizado para casos/SCT, tests frontend, sanitizacion robusta. |
 | Endpoints relacionados | `/api/chat`, `/api/sct/*`, `/api/medical-images/*`, `/api/histopathology/*`. |
 | Flujo de datos | UI -> fetch HTTP -> FastAPI -> DB/IA/filesystem -> JSON -> UI. |
 | Estado | Implementado/parcial. |
@@ -299,8 +300,8 @@ Bloqueos tecnicos detectados:
 | Tecnologias | FastAPI, SQLAlchemy, Pydantic, httpx, OpenSlide, Pillow, PyTorch opcional. |
 | Archivos | `backend/app/main.py`, `routers/*`, `histopathology/*`, `db.py`, `models.py`. |
 | Funcionalidades implementadas | Health, CORS, creacion tablas, routers chat/casos/SCT/imagenes/histopatologia, static uploads. |
-| Parciales | Permisos mock, errores basicos, servicios mezclados en routers. |
-| Pendientes | Auth/JWT, migraciones, jobs asincronicos, rate limit, tests API. |
+| Parciales | Auth JWT inicial sin refresh/invitaciones, errores basicos, servicios mezclados en routers. |
+| Pendientes | Migraciones, cola durable, rate limit global, tests API end-to-end. |
 | Estado | Implementado/parcial. |
 | Evidencias | FastAPI `/docs`, endpoints, logs Uvicorn, tests pytest. |
 
@@ -391,6 +392,9 @@ Bloqueos tecnicos detectados:
 | Metodo | Endpoint | Descripcion | Entrada esperada | Salida esperada | Estado | Modulo asociado |
 |---|---|---|---|---|---|---|
 | GET | `/health` | Estado backend | - | `{status:"ok"}` | Implementado | Backend |
+| POST | `/api/auth/register` | Registra usuario | email, password, name, role | JWT + usuario publico | Implementado/parcial | Auth |
+| POST | `/api/auth/login` | Inicia sesion | email, password | JWT + usuario publico | Implementado/parcial | Auth |
+| GET | `/api/auth/me` | Valida token actual | Bearer token | Usuario publico | Implementado/parcial | Auth |
 | POST | `/api/chat` | Consulta chatbot | `{text}` | `{messages:[{text}]}` | Parcial | Chat/RAG |
 | GET | `/api/cases` | Lista casos | - | Lista casos | Implementado | Casos |
 | POST | `/api/cases` | Crea caso | title, description, body | Caso creado | Implementado API | Casos |
@@ -423,7 +427,7 @@ Bloqueos tecnicos detectados:
 
 | Tabla | Proposito | Campos principales | Relaciones | Estado |
 |---|---|---|---|---|
-| `users` | Usuarios | id, email, name, password_hash, role, created_at | 1:N con `medical_images` | Parcial; auth no real |
+| `users` | Usuarios | id, email, name, password_hash, role, created_at | 1:N con `medical_images` | Implementado/parcial; auth JWT inicial |
 | `medical_images` | Metadata imagenes | filename, title, file_type, file_size, file_path, dzi_path, uploaded_by | FK `uploaded_by -> users.id` | Implementado/parcial |
 | `cases` | Casos clinicos para RAG SQL | title, description, body, is_active | Sin FK | Implementado API/parcial flujo |
 | `documents` | Documentos para RAG futuro | title, content, tags | Sin FK | Pendiente/no usado |
@@ -564,7 +568,7 @@ El diseno del modulo distingue dos niveles de uso:
 | Consumo de GPU/CPU | El modelo CONCH requiere inferencia por cada tile; sin GPU puede ser lento para ROI grande. | Alto en produccion; moderado con max_tiles acotado | Limite `max_tiles`, semaforo de workers, rate limit por rol |
 | Concurrencia sin persistencia de jobs | Jobs en memoria se pierden al reiniciar el servidor; el cliente queda en polling indefinido. | Medio | Resultado ya persistido en filesystem; pendiente: cola durable (Redis, DB) |
 | WSI muy grandes | Laminillas completas de 100,000+ px por lado generan miles de tiles; no acotados al ROI del estudiante. | Alto | ROI 1 acotado obligatorio; heatmap completo reservado para admin |
-| Saturacion de workers | Multiples estudiantes solicitando heatmaps simultaneamente pueden colapsar la memoria o el modelo. | Alto si sin limites | `HISTO_MAX_CONCURRENT_HEATMAP_JOBS`, `HISTO_STUDENT_HEATMAP_JOBS_PER_WINDOW`; pendiente: auth real/JWT |
+| Saturacion de workers | Multiples estudiantes solicitando heatmaps simultaneamente pueden colapsar la memoria o el modelo. | Alto si sin limites | `HISTO_MAX_CONCURRENT_HEATMAP_JOBS`, `HISTO_STUDENT_HEATMAP_JOBS_PER_WINDOW`, rol validado por JWT; pendiente: cola durable |
 | Uso no diagnostico | Clasificacion educativa no validada clinicamente; puede mostrar falsos positivos/negativos. | Critico si se malinterpreta | Advertencia visible en UI; log de auditoria por trace_id; disclaimer en resultado |
 | Dependencia de checkpoint CONCH | Si el checkpoint no esta disponible, el modelo no carga y todos los heatmaps fallan. | Alto | `/api/histopathology/status` indica `model_ready=false`; boton analizar deshabilitado |
 | Tamano del bundle frontend | Bundle JS > 500 kB (warning Vite); OpenSeadragon es grande. | Bajo/medio en educativo | Advertencia conocida; puede mitigarse con code splitting futuro |
@@ -594,7 +598,7 @@ Secciones que deben redactarse como implementacion parcial:
 
 | Seccion | Motivo |
 |---|---|
-| Autenticacion/usuarios | Login local y backend mock, sin JWT ni permisos reales |
+| Autenticacion/usuarios | JWT/hash/RBAC inicial implementado; faltan refresh token, recuperacion e invitaciones |
 | Gestion academica | Dashboard/metricas locales, sin persistencia institucional |
 | RAG | Recuperacion SQL por texto, sin vector DB ni ingestion documental completa |
 | IA visual | Funcional para ROI educativa, pero no validacion clinica ni lamina completa |
@@ -605,7 +609,7 @@ Secciones o funcionalidades pendientes/proyectadas:
 
 | Pendiente | No afirmar como terminado |
 |---|---|
-| Autenticacion real, JWT, RBAC | No declarar seguridad productiva |
+| Autenticacion productiva completa | No declarar seguridad productiva: falta refresh/cookies seguras, politicas de invitacion y auditoria de sesiones |
 | Persistencia de ROI | No afirmar almacenamiento central de ROI |
 | Intentos/respuestas SCT por estudiante | No afirmar trazabilidad academica completa |
 | ChatLog | Tabla existe, endpoint no la usa |
