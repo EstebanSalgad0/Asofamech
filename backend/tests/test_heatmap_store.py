@@ -58,8 +58,10 @@ class HeatmapStoreTestCase(unittest.TestCase):
         artifacts = heatmap_store.save_heatmap_result(result)
         self.assertIn("trace_path", artifacts)
         self.assertIn("latest_path", artifacts)
+        self.assertIn("history_path", artifacts)
         self.assertTrue(Path(artifacts["trace_path"]).exists())
         self.assertTrue(Path(artifacts["latest_path"]).exists())
+        self.assertTrue(Path(artifacts["history_path"]).exists())
 
     def test_save_marks_persisted_flag(self):
         result = self._make_result(image_id=3, trace_id="trace-flag")
@@ -84,6 +86,61 @@ class HeatmapStoreTestCase(unittest.TestCase):
         old = heatmap_store.load_heatmap_by_trace("trace-old")
         self.assertIsNotNone(old)
         self.assertEqual(old["trace_id"], "trace-old")
+
+    def test_history_lists_newest_first_for_image(self):
+        heatmap_store.save_heatmap_result(self._make_result(image_id=9, trace_id="trace-old"))
+        heatmap_store.save_heatmap_result(self._make_result(image_id=9, trace_id="trace-new"))
+        history = heatmap_store.load_heatmap_history_for_image(9)
+        self.assertEqual([item["trace_id"] for item in history], ["trace-new", "trace-old"])
+
+    def test_history_is_scoped_by_image(self):
+        heatmap_store.save_heatmap_result(self._make_result(image_id=10, trace_id="trace-a"))
+        heatmap_store.save_heatmap_result(self._make_result(image_id=11, trace_id="trace-b"))
+        history = heatmap_store.load_heatmap_history_for_image(10)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["trace_id"], "trace-a")
+
+    def test_history_limit_is_applied(self):
+        for n in range(5):
+            heatmap_store.save_heatmap_result(self._make_result(image_id=12, trace_id=f"trace-{n}"))
+        history = heatmap_store.load_heatmap_history_for_image(12, limit=3)
+        self.assertEqual(len(history), 3)
+        self.assertEqual(history[0]["trace_id"], "trace-4")
+
+    def test_history_falls_back_to_legacy_latest(self):
+        result = self._make_result(image_id=14, trace_id="trace-legacy-latest")
+        artifacts = heatmap_store.save_heatmap_result(result)
+        Path(artifacts["history_path"]).unlink()
+        history = heatmap_store.load_heatmap_history_for_image(14)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["trace_id"], "trace-legacy-latest")
+
+    def test_history_replaces_duplicate_trace(self):
+        result_a = self._make_result(image_id=13, trace_id="trace-dup")
+        result_a["tile_count"] = 4
+        result_b = self._make_result(image_id=13, trace_id="trace-dup")
+        result_b["tile_count"] = 8
+        heatmap_store.save_heatmap_result(result_a)
+        heatmap_store.save_heatmap_result(result_b)
+        history = heatmap_store.load_heatmap_history_for_image(13)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["tile_count"], 8)
+
+    def test_history_compacts_best_tile(self):
+        result = self._make_result(image_id=15, trace_id="trace-compact")
+        result["summary"]["best_tile"] = {
+            "index": 2,
+            "roi": {"x": 10, "y": 20, "width": 512, "height": 512},
+            "class": "metastasico",
+            "tumor_score": 0.91,
+            "probabilities": {"metastasico": 0.91},
+            "roi_quality": {"large": "payload"},
+        }
+        heatmap_store.save_heatmap_result(result)
+        best_tile = heatmap_store.load_heatmap_history_for_image(15)[0]["summary"]["best_tile"]
+        self.assertEqual(best_tile["class"], "metastasico")
+        self.assertNotIn("probabilities", best_tile)
+        self.assertNotIn("roi_quality", best_tile)
 
     def test_concurrent_saves_do_not_corrupt(self):
         errors = []
@@ -110,6 +167,8 @@ class HeatmapStoreTestCase(unittest.TestCase):
         self.assertEqual(len(errors), 0, f"Errores en escritura concurrente: {errors}")
         loaded = heatmap_store.load_latest_heatmap_for_image(100)
         self.assertIsNotNone(loaded)
+        history = heatmap_store.load_heatmap_history_for_image(100)
+        self.assertEqual(len(history), 6)
 
 
 if __name__ == "__main__":

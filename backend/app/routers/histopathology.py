@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -17,6 +17,7 @@ from ..histopathology.heatmap_jobs import (
     utc_now as job_utc_now,
 )
 from ..histopathology.heatmap_store import (
+    load_heatmap_history_for_image,
     load_heatmap_by_trace,
     load_latest_heatmap_for_image,
     save_heatmap_result,
@@ -879,6 +880,29 @@ async def get_latest_heatmap(
         raise HTTPException(status_code=404, detail="No hay heatmap guardado para esta imagen")
 
     return heatmap
+
+
+@router.get("/heatmaps/image/{image_id}/history")
+async def get_heatmap_history(
+    image_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    image = (
+        db.query(MedicalImage)
+        .filter(MedicalImage.id == image_id, MedicalImage.is_active == True)
+        .first()
+    )
+    if not image:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
+
+    items = load_heatmap_history_for_image(image_id, limit=limit)
+    return {
+        "image_id": image_id,
+        "count": len(items),
+        "items": items,
+    }
 
 
 @router.get("/heatmaps/{trace_id}")
