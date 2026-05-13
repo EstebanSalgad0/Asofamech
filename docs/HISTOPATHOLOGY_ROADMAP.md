@@ -218,7 +218,8 @@ Estado implementado:
 - limite configurable de jobs simultaneos con `HISTO_MAX_CONCURRENT_HEATMAP_JOBS`;
 - cache JSON por tile/coordenada/modelo para evitar recalcular CONCH;
 - panel docente/admin en `ConfigPage.jsx` para generar o recuperar el ultimo
-  heatmap acotado de una imagen DZI sin pedir que cada estudiante lo calcule.
+  heatmap acotado de una imagen DZI sin pedir que cada estudiante lo calcule;
+- historial JSON por imagen para recuperar mapas previos por `trace_id`.
 
 Pendiente para cerrar la fase completa:
 

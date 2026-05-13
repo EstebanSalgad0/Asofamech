@@ -25,7 +25,10 @@ export function ConfigPage() {
   const [heatmapMaxTiles, setHeatmapMaxTiles] = useState(64);
   const [heatmapJob, setHeatmapJob] = useState(null);
   const [latestHeatmap, setLatestHeatmap] = useState(null);
+  const [heatmapHistory, setHeatmapHistory] = useState([]);
   const [loadingLatestHeatmap, setLoadingLatestHeatmap] = useState(false);
+  const [loadingHeatmapHistory, setLoadingHeatmapHistory] = useState(false);
+  const [loadingHeatmapTrace, setLoadingHeatmapTrace] = useState(null);
   const [generatingHeatmap, setGeneratingHeatmap] = useState(false);
 
   const [sctTests, setSctTests] = useState([]);
@@ -69,6 +72,14 @@ export function ConfigPage() {
       setSelectedHeatmapImageId(String(firstDzi.id));
     }
   }, [imageLibrary, selectedHeatmapImageId]);
+
+  useEffect(() => {
+    if (!selectedHeatmapImageId) {
+      setHeatmapHistory([]);
+      return;
+    }
+    loadHeatmapHistory(selectedHeatmapImageId);
+  }, [selectedHeatmapImageId]);
 
   const loadImageLibrary = async () => {
     try {
@@ -151,6 +162,11 @@ export function ConfigPage() {
     return `${(value * 100).toFixed(1)}%`;
   };
 
+  const formatDateTime = (value) => {
+    if (!value) return "Sin fecha";
+    return new Date(value).toLocaleString("es-CL");
+  };
+
   const updateHeatmapRoi = (field, value) => {
     const parsedValue = Number.parseInt(value || "0", 10);
     const parsed = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
@@ -161,6 +177,53 @@ export function ConfigPage() {
     const parsedValue = Number.parseInt(value || "1", 10);
     const parsed = Number.isFinite(parsedValue) ? Math.max(1, Math.min(256, parsedValue)) : 1;
     setHeatmapMaxTiles(parsed);
+  };
+
+  const applyHeatmapPayload = (payload) => {
+    setLatestHeatmap(payload);
+    if (payload?.roi) setHeatmapRoi(payload.roi);
+    if (payload?.tile_size) setHeatmapTileSize(payload.tile_size);
+    if (payload?.requested_max_tiles) setHeatmapMaxTiles(payload.requested_max_tiles);
+  };
+
+  const loadHeatmapHistory = async (imageId = selectedHeatmapImageId) => {
+    if (!imageId) return;
+    setLoadingHeatmapHistory(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${imageId}/history?limit=20`);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        if (response.status === 404) {
+          setHeatmapHistory([]);
+          return;
+        }
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+      setHeatmapHistory(payload?.items || []);
+    } catch (error) {
+      console.warn("No se pudo cargar historial de heatmaps:", error);
+      setHeatmapHistory([]);
+    } finally {
+      setLoadingHeatmapHistory(false);
+    }
+  };
+
+  const handleLoadHeatmapTrace = async (traceId) => {
+    if (!traceId) return;
+    setLoadingHeatmapTrace(traceId);
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/${traceId}`);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+      applyHeatmapPayload(payload);
+      showToast("Heatmap historico cargado", "success");
+    } catch (error) {
+      showToast(error.message, "error", 7000);
+    } finally {
+      setLoadingHeatmapTrace(null);
+    }
   };
 
   const pollHeatmapJob = async (jobId) => {
@@ -174,7 +237,8 @@ export function ConfigPage() {
       }
       setHeatmapJob(payload);
       if (payload.status === "completed") {
-        setLatestHeatmap(payload.result);
+        applyHeatmapPayload(payload.result);
+        await loadHeatmapHistory(payload.result?.image_id || selectedHeatmapImageId);
         setGeneratingHeatmap(false);
         keepPolling = false;
       }
@@ -199,10 +263,8 @@ export function ConfigPage() {
         }
         throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
       }
-      setLatestHeatmap(payload);
-      if (payload.roi) setHeatmapRoi(payload.roi);
-      if (payload.tile_size) setHeatmapTileSize(payload.tile_size);
-      if (payload.requested_max_tiles) setHeatmapMaxTiles(payload.requested_max_tiles);
+      applyHeatmapPayload(payload);
+      await loadHeatmapHistory(selectedHeatmapImageId);
       showToast("Heatmap guardado cargado", "success");
     } catch (error) {
       showToast(error.message, "error", 7000);
@@ -458,6 +520,7 @@ export function ConfigPage() {
                         onChange={(event) => {
                           setSelectedHeatmapImageId(event.target.value);
                           setLatestHeatmap(null);
+                          setHeatmapHistory([]);
                           setHeatmapJob(null);
                         }}
                         disabled={generatingHeatmap || heatmapImages.length === 0}
@@ -597,6 +660,56 @@ export function ConfigPage() {
                         Aun no se ha cargado un resultado persistido para la imagen seleccionada.
                       </div>
                     )}
+
+                    <div className="cfg-heatmap-history">
+                      <div className="cfg-heatmap-history-head">
+                        <div className="cfg-heatmap-summary-title">Historial de mapas</div>
+                        <button
+                          type="button"
+                          className="cfg-view-btn"
+                          onClick={() => loadHeatmapHistory()}
+                          disabled={!selectedHeatmapImageId || loadingHeatmapHistory}
+                        >
+                          {loadingHeatmapHistory ? "Actualizando..." : "Actualizar"}
+                        </button>
+                      </div>
+
+                      {loadingHeatmapHistory ? (
+                        <div className="cfg-heatmap-muted">Cargando historial...</div>
+                      ) : heatmapHistory.length === 0 ? (
+                        <div className="cfg-heatmap-muted">Sin mapas historicos para esta imagen.</div>
+                      ) : (
+                        <div className="cfg-heatmap-history-list">
+                          {heatmapHistory.map((item) => {
+                            const itemSummary = item.summary || {};
+                            const itemRoi = item.roi || {};
+                            return (
+                              <button
+                                type="button"
+                                key={item.trace_id}
+                                className="cfg-heatmap-history-item"
+                                onClick={() => handleLoadHeatmapTrace(item.trace_id)}
+                                disabled={loadingHeatmapTrace === item.trace_id}
+                              >
+                                <span className="cfg-heatmap-history-main">
+                                  <strong>{formatPercent(itemSummary.max_tumor_score)}</strong>
+                                  <span>{formatDateTime(item.analyzed_at)}</span>
+                                </span>
+                                <span className="cfg-heatmap-history-meta">
+                                  {item.tile_count} tiles · tile {item.tile_size || "N/D"} · positivos {itemSummary.classified_metastatic_tiles ?? 0}
+                                </span>
+                                <span className="cfg-heatmap-history-meta">
+                                  ROI x={itemRoi.x ?? "?"}, y={itemRoi.y ?? "?"}, w={itemRoi.width ?? "?"}, h={itemRoi.height ?? "?"}
+                                </span>
+                                <span className="cfg-heatmap-history-trace">
+                                  {loadingHeatmapTrace === item.trace_id ? "Cargando..." : item.trace_id}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -960,6 +960,7 @@ Persistencia:
 ```text
 artifacts/histopathology/heatmaps/traces/{trace_id}.json
 artifacts/histopathology/heatmaps/images/{image_id}/latest.json
+artifacts/histopathology/heatmaps/images/{image_id}/history.json
 ```
 
 Endpoints de consulta:
@@ -968,6 +969,7 @@ Endpoints de consulta:
 POST /api/histopathology/heatmaps/jobs
 GET /api/histopathology/heatmaps/jobs/{job_id}
 GET /api/histopathology/heatmaps/image/{image_id}/latest
+GET /api/histopathology/heatmaps/image/{image_id}/history?limit=20
 GET /api/histopathology/heatmaps/{trace_id}
 ```
 
@@ -980,9 +982,11 @@ La pantalla de configuracion incorpora un panel docente/admin para preparar
 heatmaps acotados sobre imagenes con DZI. Desde ahi se elige la lamina, se
 definen coordenadas ROI, `tile_size` y `max_tiles`, se lanza el mismo job
 asincronico y se revisa el ultimo resultado persistido con trace, cache,
-tiles positivos y mejor tile. Esto permite precalcular regiones de practica
-antes de que entren estudiantes, sin convertir todavia el flujo en heatmap de
-lamina completa.
+tiles positivos y mejor tile. El panel tambien consulta un historial por imagen
+para recuperar mapas anteriores mediante `trace_id`; esto permite preparar
+varias regiones docentes, por ejemplo tumor, tejido sano y zona mixta, antes de
+que entren estudiantes, sin convertir todavia el flujo en heatmap de lamina
+completa.
 
 Control de carga:
 
