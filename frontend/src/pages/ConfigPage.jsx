@@ -5,6 +5,20 @@ import { AppSidebar } from "../components/AppSidebar";
 import { histopathologyHeaders } from "../histopathologyAccess";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
+const HEATMAP_EDUCATIONAL_TYPES = [
+  { value: "referencia", label: "Referencia" },
+  { value: "tumoral", label: "Zona tumoral" },
+  { value: "sano", label: "Zona sana" },
+  { value: "mixto", label: "Zona mixta" },
+  { value: "estroma", label: "Estroma/no evaluable" },
+  { value: "falso_positivo", label: "Falso positivo" },
+  { value: "discusion", label: "Discusion docente" },
+];
+const DEFAULT_HEATMAP_METADATA = {
+  label: "",
+  type: "referencia",
+  note: "",
+};
 
 export function ConfigPage() {
   const navigate = useNavigate();
@@ -30,7 +44,9 @@ export function ConfigPage() {
   const [loadingLatestHeatmap, setLoadingLatestHeatmap] = useState(false);
   const [loadingHeatmapHistory, setLoadingHeatmapHistory] = useState(false);
   const [loadingHeatmapTrace, setLoadingHeatmapTrace] = useState(null);
+  const [savingHeatmapMetadata, setSavingHeatmapMetadata] = useState(false);
   const [generatingHeatmap, setGeneratingHeatmap] = useState(false);
+  const [heatmapMetadata, setHeatmapMetadata] = useState(DEFAULT_HEATMAP_METADATA);
 
   const [sctTests, setSctTests] = useState([]);
   const [loadingSCT, setLoadingSCT] = useState(true);
@@ -168,6 +184,10 @@ export function ConfigPage() {
     return new Date(value).toLocaleString("es-CL");
   };
 
+  const educationalTypeLabel = (value) => (
+    HEATMAP_EDUCATIONAL_TYPES.find((item) => item.value === value)?.label || "Referencia"
+  );
+
   const updateHeatmapRoi = (field, value) => {
     const parsedValue = Number.parseInt(value || "0", 10);
     const parsed = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
@@ -180,11 +200,20 @@ export function ConfigPage() {
     setHeatmapMaxTiles(parsed);
   };
 
+  const updateHeatmapMetadata = (field, value) => {
+    setHeatmapMetadata((prev) => ({ ...prev, [field]: value }));
+  };
+
   const applyHeatmapPayload = (payload) => {
     setLatestHeatmap(payload);
     if (payload?.roi) setHeatmapRoi(payload.roi);
     if (payload?.tile_size) setHeatmapTileSize(payload.tile_size);
     if (payload?.requested_max_tiles) setHeatmapMaxTiles(payload.requested_max_tiles);
+    setHeatmapMetadata({
+      label: payload?.educational?.label || "",
+      type: payload?.educational?.type || "referencia",
+      note: payload?.educational?.note || "",
+    });
   };
 
   const loadHeatmapHistory = async (imageId = selectedHeatmapImageId) => {
@@ -224,6 +253,33 @@ export function ConfigPage() {
       showToast(error.message, "error", 7000);
     } finally {
       setLoadingHeatmapTrace(null);
+    }
+  };
+
+  const handleSaveHeatmapMetadata = async () => {
+    if (!latestHeatmap?.trace_id || savingHeatmapMetadata) return;
+    setSavingHeatmapMetadata(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/${latestHeatmap.trace_id}/educational`, {
+        method: "PATCH",
+        headers: histopathologyHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          educational_label: heatmapMetadata.label,
+          educational_note: heatmapMetadata.note,
+          educational_type: heatmapMetadata.type,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+      applyHeatmapPayload(payload);
+      await loadHeatmapHistory(payload.image_id || selectedHeatmapImageId);
+      showToast("Etiqueta educativa guardada", "success");
+    } catch (error) {
+      showToast(error.message, "error", 7000);
+    } finally {
+      setSavingHeatmapMetadata(false);
     }
   };
 
@@ -288,6 +344,9 @@ export function ConfigPage() {
           tile_size: heatmapTileSize,
           stride: heatmapTileSize,
           max_tiles: heatmapMaxTiles,
+          educational_label: heatmapMetadata.label,
+          educational_note: heatmapMetadata.note,
+          educational_type: heatmapMetadata.type,
         }),
       });
       const payload = await response.json().catch(() => null);
@@ -523,6 +582,7 @@ export function ConfigPage() {
                           setLatestHeatmap(null);
                           setHeatmapHistory([]);
                           setHeatmapJob(null);
+                          setHeatmapMetadata(DEFAULT_HEATMAP_METADATA);
                         }}
                         disabled={generatingHeatmap || heatmapImages.length === 0}
                       >
@@ -590,7 +650,53 @@ export function ConfigPage() {
                       </div>
                     </div>
 
+                    <div className="cfg-heatmap-metadata-form">
+                      <div className="cfg-heatmap-field">
+                        <label className="cfg-modal-label">Nombre educativo</label>
+                        <input
+                          type="text"
+                          className="cfg-modal-input"
+                          value={heatmapMetadata.label}
+                          onChange={(event) => updateHeatmapMetadata("label", event.target.value)}
+                          placeholder="Ej: Zona tumoral clara"
+                          disabled={generatingHeatmap}
+                        />
+                      </div>
+                      <div className="cfg-heatmap-field">
+                        <label className="cfg-modal-label">Tipo</label>
+                        <select
+                          className="cfg-modal-input"
+                          value={heatmapMetadata.type}
+                          onChange={(event) => updateHeatmapMetadata("type", event.target.value)}
+                          disabled={generatingHeatmap}
+                        >
+                          {HEATMAP_EDUCATIONAL_TYPES.map((item) => (
+                            <option key={item.value} value={item.value}>{item.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="cfg-heatmap-field wide">
+                        <label className="cfg-modal-label">Nota docente</label>
+                        <textarea
+                          className="cfg-modal-textarea cfg-heatmap-note"
+                          value={heatmapMetadata.note}
+                          onChange={(event) => updateHeatmapMetadata("note", event.target.value)}
+                          placeholder="Ej: Comparar con ROI sana y revisar celulares tumorales."
+                          rows="2"
+                          disabled={generatingHeatmap}
+                        />
+                      </div>
+                    </div>
+
                     <div className="cfg-heatmap-actions">
+                      <button
+                        type="button"
+                        className="cfg-view-btn"
+                        onClick={handleSaveHeatmapMetadata}
+                        disabled={!latestHeatmap?.trace_id || savingHeatmapMetadata || generatingHeatmap}
+                      >
+                        {savingHeatmapMetadata ? "Guardando..." : "Guardar etiqueta"}
+                      </button>
                       <button
                         type="button"
                         className="cfg-view-btn"
@@ -639,6 +745,15 @@ export function ConfigPage() {
                     {latestHeatmap ? (
                       <div className="cfg-heatmap-summary">
                         <div className="cfg-heatmap-summary-title">Ultimo mapa guardado</div>
+                        <div className="cfg-heatmap-educational">
+                          <span className={`cfg-heatmap-type type-${latestHeatmap.educational?.type || "referencia"}`}>
+                            {educationalTypeLabel(latestHeatmap.educational?.type)}
+                          </span>
+                          <strong>{latestHeatmap.educational?.label || "Mapa preparado sin nombre"}</strong>
+                          {latestHeatmap.educational?.note && (
+                            <p>{latestHeatmap.educational.note}</p>
+                          )}
+                        </div>
                         <div className="cfg-heatmap-kv"><span>Trace</span><strong>{latestHeatmap.trace_id}</strong></div>
                         <div className="cfg-heatmap-kv"><span>Tiles</span><strong>{latestHeatmap.tile_count}</strong></div>
                         <div className="cfg-heatmap-kv"><span>Max P(metastasico)</span><strong>{formatPercent(heatmapSummary.max_tumor_score)}</strong></div>
@@ -684,6 +799,7 @@ export function ConfigPage() {
                           {heatmapHistory.map((item) => {
                             const itemSummary = item.summary || {};
                             const itemRoi = item.roi || {};
+                            const itemEducational = item.educational || {};
                             return (
                               <button
                                 type="button"
@@ -693,9 +809,15 @@ export function ConfigPage() {
                                 disabled={loadingHeatmapTrace === item.trace_id}
                               >
                                 <span className="cfg-heatmap-history-main">
-                                  <strong>{formatPercent(itemSummary.max_tumor_score)}</strong>
+                                  <strong>{itemEducational.label || "Mapa preparado"}</strong>
                                   <span>{formatDateTime(item.analyzed_at)}</span>
                                 </span>
+                                <span className="cfg-heatmap-history-meta">
+                                  {educationalTypeLabel(itemEducational.type)} - Max P {formatPercent(itemSummary.max_tumor_score)}
+                                </span>
+                                {itemEducational.note && (
+                                  <span className="cfg-heatmap-history-note">{itemEducational.note}</span>
+                                )}
                                 <span className="cfg-heatmap-history-meta">
                                   {item.tile_count} tiles · tile {item.tile_size || "N/D"} · positivos {itemSummary.classified_metastatic_tiles ?? 0}
                                 </span>

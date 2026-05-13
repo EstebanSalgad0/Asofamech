@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 DEFAULT_HEATMAP_DIR = "artifacts/histopathology/heatmaps"
 _WRITE_LOCK = threading.Lock()
+DEFAULT_EDUCATIONAL_TYPE = "referencia"
 
 
 def get_heatmap_dir() -> Path:
@@ -39,6 +40,30 @@ def _compact_best_tile(best_tile: Any) -> Any:
     }
 
 
+def _clean_text(value: Any, max_length: int) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if len(text) > max_length:
+        return text[:max_length].rstrip()
+    return text
+
+
+def normalize_heatmap_educational(metadata: Dict[str, Any] | None) -> Dict[str, str]:
+    payload = metadata or {}
+    label = _clean_text(payload.get("label") or payload.get("educational_label"), 120)
+    note = _clean_text(payload.get("note") or payload.get("educational_note"), 600)
+    educational_type = _clean_text(
+        payload.get("type") or payload.get("educational_type") or DEFAULT_EDUCATIONAL_TYPE,
+        40,
+    ).lower() or DEFAULT_EDUCATIONAL_TYPE
+    return {
+        "label": label,
+        "note": note,
+        "type": educational_type,
+    }
+
+
 def _history_item(result: Dict[str, Any], artifacts: Dict[str, str]) -> Dict[str, Any]:
     summary = result.get("summary") or {}
     return {
@@ -59,6 +84,7 @@ def _history_item(result: Dict[str, Any], artifacts: Dict[str, str]) -> Dict[str
             "cache_hit_rate": summary.get("cache_hit_rate", 0.0),
             "best_tile": _compact_best_tile(summary.get("best_tile")),
         },
+        "educational": normalize_heatmap_educational(result.get("educational")),
         "artifacts": artifacts,
     }
 
@@ -83,8 +109,10 @@ def save_heatmap_result(result: Dict[str, Any]) -> Dict[str, str]:
         "latest_path": str(latest_path),
         "history_path": str(history_path),
     }
+    educational = normalize_heatmap_educational(result.get("educational"))
     stored_result = {
         **result,
+        "educational": educational,
         "persisted": True,
         "artifacts": artifacts,
     }
@@ -134,4 +162,59 @@ def load_heatmap_history_for_image(image_id: int, limit: int = 20) -> List[Dict[
     if not isinstance(history, list):
         return []
     safe_limit = max(1, min(int(limit), 100))
-    return history[:safe_limit]
+    return [
+        {
+            **item,
+            "educational": normalize_heatmap_educational(item.get("educational")),
+        }
+        for item in history[:safe_limit]
+    ]
+
+
+def update_heatmap_educational_metadata(
+    trace_id: str,
+    educational: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    trace_path = _trace_path(trace_id)
+    if not trace_path.exists():
+        return None
+
+    with _WRITE_LOCK:
+        if not trace_path.exists():
+            return None
+
+        stored_result = json.loads(trace_path.read_text(encoding="utf-8"))
+        stored_result["educational"] = normalize_heatmap_educational(educational)
+        image_id = int(stored_result["image_id"])
+        latest_path = _image_index_path(image_id)
+        history_path = _image_history_path(image_id)
+        artifacts = stored_result.get("artifacts") or {
+            "trace_path": str(trace_path),
+            "latest_path": str(latest_path),
+            "history_path": str(history_path),
+        }
+        artifacts.setdefault("trace_path", str(trace_path))
+        artifacts.setdefault("latest_path", str(latest_path))
+        artifacts.setdefault("history_path", str(history_path))
+        stored_result["artifacts"] = artifacts
+
+        payload = json.dumps(stored_result, ensure_ascii=True, sort_keys=True, indent=2)
+        trace_path.write_text(payload, encoding="utf-8")
+
+        if latest_path.exists():
+            latest = json.loads(latest_path.read_text(encoding="utf-8"))
+            if latest.get("trace_id") == trace_id:
+                latest_path.write_text(payload, encoding="utf-8")
+
+        history = [
+            item for item in _load_history_unlocked(history_path)
+            if item.get("trace_id") != trace_id
+        ]
+        history.insert(0, _history_item(stored_result, artifacts))
+        history_path.parent.mkdir(parents=True, exist_ok=True)
+        history_path.write_text(
+            json.dumps(history[:100], ensure_ascii=True, sort_keys=True, indent=2),
+            encoding="utf-8",
+        )
+
+    return stored_result

@@ -69,6 +69,19 @@ class HeatmapStoreTestCase(unittest.TestCase):
         loaded = heatmap_store.load_heatmap_by_trace("trace-flag")
         self.assertTrue(loaded.get("persisted") is True)
 
+    def test_save_persists_educational_metadata(self):
+        result = self._make_result(image_id=4, trace_id="trace-educational")
+        result["educational"] = {
+            "label": "Zona tumoral clara",
+            "note": "Usar como ejemplo de region metastasica.",
+            "type": "tumoral",
+        }
+        heatmap_store.save_heatmap_result(result)
+        loaded = heatmap_store.load_heatmap_by_trace("trace-educational")
+        history = heatmap_store.load_heatmap_history_for_image(4)
+        self.assertEqual(loaded["educational"]["label"], "Zona tumoral clara")
+        self.assertEqual(history[0]["educational"]["type"], "tumoral")
+
     def test_latest_overwritten_by_newer_result(self):
         result_a = self._make_result(image_id=7, trace_id="trace-a")
         result_a["tile_count"] = 10
@@ -114,6 +127,7 @@ class HeatmapStoreTestCase(unittest.TestCase):
         history = heatmap_store.load_heatmap_history_for_image(14)
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["trace_id"], "trace-legacy-latest")
+        self.assertEqual(history[0]["educational"]["type"], "referencia")
 
     def test_history_replaces_duplicate_trace(self):
         result_a = self._make_result(image_id=13, trace_id="trace-dup")
@@ -141,6 +155,31 @@ class HeatmapStoreTestCase(unittest.TestCase):
         self.assertEqual(best_tile["class"], "metastasico")
         self.assertNotIn("probabilities", best_tile)
         self.assertNotIn("roi_quality", best_tile)
+
+    def test_update_educational_metadata_updates_trace_latest_and_history(self):
+        result = self._make_result(image_id=16, trace_id="trace-update-meta")
+        heatmap_store.save_heatmap_result(result)
+        updated = heatmap_store.update_heatmap_educational_metadata(
+            "trace-update-meta",
+            {
+                "educational_label": "Zona sana",
+                "educational_note": "Control negativo para comparar.",
+                "educational_type": "sano",
+            },
+        )
+        latest = heatmap_store.load_latest_heatmap_for_image(16)
+        history = heatmap_store.load_heatmap_history_for_image(16)
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated["educational"]["label"], "Zona sana")
+        self.assertEqual(latest["educational"]["note"], "Control negativo para comparar.")
+        self.assertEqual(history[0]["educational"]["type"], "sano")
+
+    def test_update_missing_educational_metadata_returns_none(self):
+        updated = heatmap_store.update_heatmap_educational_metadata(
+            "trace-missing",
+            {"educational_label": "No existe"},
+        )
+        self.assertIsNone(updated)
 
     def test_concurrent_saves_do_not_corrupt(self):
         errors = []
