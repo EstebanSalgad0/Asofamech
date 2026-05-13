@@ -152,6 +152,7 @@ export function OpenSeadragonViewer({ imageData }) {
 
       setHeatmap(payload);
       setHeatmapSource('saved');
+      if (payload?.tile_size) setTileSizeOption(payload.tile_size);
     } catch (err) {
       console.warn('No se pudo cargar el heatmap guardado:', err);
     }
@@ -475,6 +476,7 @@ export function OpenSeadragonViewer({ imageData }) {
       if (payload.status === 'completed') {
         setHeatmap(payload.result);
         setHeatmapSource(payload.result?.persisted ? 'saved' : 'session');
+        if (payload.result?.tile_size) setTileSizeOption(payload.result.tile_size);
         setScanningHeatmap(false);
         keepPolling = false;
       }
@@ -811,7 +813,7 @@ export function OpenSeadragonViewer({ imageData }) {
               </button>
 
               <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#94a3b8', fontSize: 11, flexShrink: 0 }}>Tam. tile:</span>
+                <span style={{ color: '#94a3b8', fontSize: 11, flexShrink: 0 }}>Tile nuevo:</span>
                 {[512, 1024].map((size) => (
                   <button
                     key={size}
@@ -958,6 +960,10 @@ export function OpenSeadragonViewer({ imageData }) {
                     Origen: {heatmapSource === 'saved' ? 'guardado' : 'sesion actual'}
                   </div>
                 )}
+                <div style={{ color: '#cbd5e1' }}>
+                  Tile del mapa: {heatmap.tile_size || 'N/D'} px
+                  {heatmap.stride ? ` (stride ${heatmap.stride}px)` : ''}
+                </div>
                 <div style={{ color: '#cbd5e1' }}>Tiles analizados: {heatmap.tile_count}</div>
                 <div style={{ color: '#cbd5e1' }}>
                   Tiles metastasicos: {heatmap.summary?.classified_metastatic_tiles ?? 0}

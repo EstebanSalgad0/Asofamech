@@ -976,6 +976,14 @@ una imagen y permite ocultarlo sin borrar el artefacto. Para ejecucion normal
 desde la UI se usa un job asincronico en memoria: el frontend consulta progreso
 hasta recibir `completed`, y luego pinta el resultado persistido.
 
+La pantalla de configuracion incorpora un panel docente/admin para preparar
+heatmaps acotados sobre imagenes con DZI. Desde ahi se elige la lamina, se
+definen coordenadas ROI, `tile_size` y `max_tiles`, se lanza el mismo job
+asincronico y se revisa el ultimo resultado persistido con trace, cache,
+tiles positivos y mejor tile. Esto permite precalcular regiones de practica
+antes de que entren estudiantes, sin convertir todavia el flujo en heatmap de
+lamina completa.
+
 Control de carga:
 
 ```text
@@ -995,7 +1003,7 @@ La clave usa `image_id`, coordenadas de tile, tamano del tile y firma del modelo
 actual. Si el mismo tile ya fue analizado con el mismo checkpoint/umbral, el
 backend reutiliza probabilidades, QC y score sin volver a pasar por CONCH.
 
-Limitacion actual: este heatmap sigue acotado a ROI 1 y los jobs viven en
+Limitacion actual: este heatmap sigue acotado a una ROI y los jobs viven en
 memoria del proceso backend. Para lamina completa falta persistir jobs en base
 de datos/cola real y eventualmente cachear embeddings, no solo scores por tile.
 
