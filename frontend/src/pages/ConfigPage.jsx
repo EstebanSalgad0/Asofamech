@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, deleteSCTTest } from "../api";
 import { AppSidebar } from "../components/AppSidebar";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
+
 export function ConfigPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -17,6 +19,14 @@ export function ConfigPage() {
   const [selectedCamelyonSlide, setSelectedCamelyonSlide] = useState("");
   const [loadingCamelyonSlides, setLoadingCamelyonSlides] = useState(false);
   const [importingCamelyonSlide, setImportingCamelyonSlide] = useState(false);
+  const [selectedHeatmapImageId, setSelectedHeatmapImageId] = useState("");
+  const [heatmapRoi, setHeatmapRoi] = useState({ x: 52781, y: 150360, width: 1536, height: 1536 });
+  const [heatmapTileSize, setHeatmapTileSize] = useState(512);
+  const [heatmapMaxTiles, setHeatmapMaxTiles] = useState(64);
+  const [heatmapJob, setHeatmapJob] = useState(null);
+  const [latestHeatmap, setLatestHeatmap] = useState(null);
+  const [loadingLatestHeatmap, setLoadingLatestHeatmap] = useState(false);
+  const [generatingHeatmap, setGeneratingHeatmap] = useState(false);
 
   const [sctTests, setSctTests] = useState([]);
   const [loadingSCT, setLoadingSCT] = useState(true);
@@ -48,10 +58,22 @@ export function ConfigPage() {
     loadSCTTestList();
   }, []);
 
+  useEffect(() => {
+    const firstDzi = imageLibrary.find((image) => image.has_dzi);
+    const selectedStillExists = imageLibrary.some((image) => image.has_dzi && String(image.id) === selectedHeatmapImageId);
+    if (!firstDzi) {
+      if (selectedHeatmapImageId) setSelectedHeatmapImageId("");
+      return;
+    }
+    if (!selectedHeatmapImageId || !selectedStillExists) {
+      setSelectedHeatmapImageId(String(firstDzi.id));
+    }
+  }, [imageLibrary, selectedHeatmapImageId]);
+
   const loadImageLibrary = async () => {
     try {
       setLoadingImages(true);
-      const response = await fetch("http://localhost:8001/api/medical-images/list");
+      const response = await fetch(`${API_BASE}/api/medical-images/list`);
       if (response.ok) setImageLibrary(await response.json());
     } catch (error) {
       console.error("Error cargando biblioteca:", error);
@@ -63,7 +85,7 @@ export function ConfigPage() {
   const handleDeleteImage = async (imageId) => {
     if (!confirm("¿Estás seguro de eliminar esta imagen?")) return;
     try {
-      const response = await fetch(`http://localhost:8001/api/medical-images/${imageId}`, { method: "DELETE" });
+      const response = await fetch(`${API_BASE}/api/medical-images/${imageId}`, { method: "DELETE" });
       if (response.ok) { showToast("Imagen eliminada exitosamente", "success"); loadImageLibrary(); }
     } catch (error) {
       console.error("Error eliminando imagen:", error);
@@ -74,7 +96,7 @@ export function ConfigPage() {
   const loadLocalCamelyonSlides = async () => {
     try {
       setLoadingCamelyonSlides(true);
-      const response = await fetch("http://localhost:8001/api/medical-images/local/camelyon17");
+      const response = await fetch(`${API_BASE}/api/medical-images/local/camelyon17`);
       if (response.ok) {
         const slides = await response.json();
         setLocalCamelyonSlides(slides || []);
@@ -97,7 +119,7 @@ export function ConfigPage() {
       form.append("title", selectedCamelyonSlide.replace(/\.[^.]+$/, ""));
       form.append("pathology_type", "CAMELYON17");
 
-      const response = await fetch("http://localhost:8001/api/medical-images/import-local/camelyon17", {
+      const response = await fetch(`${API_BASE}/api/medical-images/import-local/camelyon17`, {
         method: "POST",
         body: form,
       });
@@ -112,6 +134,109 @@ export function ConfigPage() {
       showToast(error.message, "error", 7000);
     } finally {
       setImportingCamelyonSlide(false);
+    }
+  };
+
+  const describeApiError = (payload, fallback) => {
+    if (!payload) return fallback;
+    if (typeof payload.detail === "string") return payload.detail;
+    if (Array.isArray(payload.detail)) {
+      return payload.detail.map((item) => item.msg || item.detail || JSON.stringify(item)).join("; ");
+    }
+    return fallback;
+  };
+
+  const formatPercent = (value) => {
+    if (typeof value !== "number") return "N/D";
+    return `${(value * 100).toFixed(1)}%`;
+  };
+
+  const updateHeatmapRoi = (field, value) => {
+    const parsedValue = Number.parseInt(value || "0", 10);
+    const parsed = Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : 0;
+    setHeatmapRoi((prev) => ({ ...prev, [field]: parsed }));
+  };
+
+  const updateHeatmapMaxTiles = (value) => {
+    const parsedValue = Number.parseInt(value || "1", 10);
+    const parsed = Number.isFinite(parsedValue) ? Math.max(1, Math.min(256, parsedValue)) : 1;
+    setHeatmapMaxTiles(parsed);
+  };
+
+  const pollHeatmapJob = async (jobId) => {
+    let keepPolling = true;
+    while (keepPolling) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs/${jobId}`);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+      setHeatmapJob(payload);
+      if (payload.status === "completed") {
+        setLatestHeatmap(payload.result);
+        setGeneratingHeatmap(false);
+        keepPolling = false;
+      }
+      if (payload.status === "failed") {
+        setGeneratingHeatmap(false);
+        throw new Error(payload.error || "El job de heatmap fallo.");
+      }
+    }
+  };
+
+  const handleLoadLatestHeatmap = async () => {
+    if (!selectedHeatmapImageId) return;
+    setLoadingLatestHeatmap(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/image/${selectedHeatmapImageId}/latest`);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        if (response.status === 404) {
+          setLatestHeatmap(null);
+          showToast("Esta imagen aun no tiene heatmap guardado", "error", 4500);
+          return;
+        }
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+      setLatestHeatmap(payload);
+      if (payload.roi) setHeatmapRoi(payload.roi);
+      if (payload.tile_size) setHeatmapTileSize(payload.tile_size);
+      if (payload.requested_max_tiles) setHeatmapMaxTiles(payload.requested_max_tiles);
+      showToast("Heatmap guardado cargado", "success");
+    } catch (error) {
+      showToast(error.message, "error", 7000);
+    } finally {
+      setLoadingLatestHeatmap(false);
+    }
+  };
+
+  const handleGenerateBaseHeatmap = async () => {
+    if (!selectedHeatmapImageId || generatingHeatmap) return;
+    setGeneratingHeatmap(true);
+    setHeatmapJob(null);
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image_id: Number(selectedHeatmapImageId),
+          roi: heatmapRoi,
+          tile_size: heatmapTileSize,
+          stride: heatmapTileSize,
+          max_tiles: heatmapMaxTiles,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
+      }
+      setHeatmapJob(payload);
+      await pollHeatmapJob(payload.job_id);
+      showToast("Heatmap base generado y guardado", "success", 5000);
+    } catch (error) {
+      setGeneratingHeatmap(false);
+      showToast(error.message, "error", 7000);
     }
   };
 
@@ -189,6 +314,17 @@ export function ConfigPage() {
   };
 
   if (!user) return null;
+
+  const heatmapImages = imageLibrary.filter((image) => image.has_dzi);
+  const selectedHeatmapImage = heatmapImages.find((image) => String(image.id) === selectedHeatmapImageId);
+  const heatmapSummary = latestHeatmap?.summary || {};
+  const bestHeatmapRoi = heatmapSummary.best_tile?.roi;
+  const heatmapJobProgress = Math.round((heatmapJob?.progress || 0) * 100);
+  const canGenerateBaseHeatmap = Boolean(selectedHeatmapImageId)
+    && heatmapRoi.width > 0
+    && heatmapRoi.height > 0
+    && heatmapMaxTiles > 0
+    && !generatingHeatmap;
 
   const TABS = [
     { id: "images", label: "Gestión de Imágenes", icon: "🖼️" },
@@ -298,6 +434,170 @@ export function ConfigPage() {
                   >
                     {importingCamelyonSlide ? "Importando..." : "Importar"}
                   </button>
+                </div>
+              </div>
+
+              <div className="cfg-heatmap-admin">
+                <div className="cfg-heatmap-head">
+                  <div>
+                    <div className="cfg-heatmap-title">Heatmaps preparados para estudiantes</div>
+                    <div className="cfg-heatmap-desc">
+                      Genera un mapa acotado desde el servidor y lo deja persistido como ultimo heatmap de la imagen.
+                    </div>
+                  </div>
+                  <span className="cfg-badge cfg-badge-blue">Histopatologia</span>
+                </div>
+
+                <div className="cfg-heatmap-grid">
+                  <div className="cfg-heatmap-panel">
+                    <div className="cfg-heatmap-field wide">
+                      <label className="cfg-modal-label">Imagen con DZI</label>
+                      <select
+                        className="cfg-modal-input"
+                        value={selectedHeatmapImageId}
+                        onChange={(event) => {
+                          setSelectedHeatmapImageId(event.target.value);
+                          setLatestHeatmap(null);
+                          setHeatmapJob(null);
+                        }}
+                        disabled={generatingHeatmap || heatmapImages.length === 0}
+                      >
+                        {heatmapImages.length === 0 && <option value="">Sin imagenes DZI</option>}
+                        {heatmapImages.map((image) => (
+                          <option key={image.id} value={image.id}>
+                            #{image.id} - {image.title || image.filename}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedHeatmapImage && (
+                      <div className="cfg-heatmap-selected">
+                        <span>{selectedHeatmapImage.filename}</span>
+                        <span>{formatFileSize(selectedHeatmapImage.file_size || 0)}</span>
+                      </div>
+                    )}
+
+                    <div className="cfg-heatmap-fields">
+                      {["x", "y", "width", "height"].map((field) => (
+                        <div key={field} className="cfg-heatmap-field">
+                          <label className="cfg-modal-label">{field}</label>
+                          <input
+                            type="number"
+                            min={field === "width" || field === "height" ? "1" : "0"}
+                            className="cfg-modal-input"
+                            value={heatmapRoi[field]}
+                            onChange={(event) => updateHeatmapRoi(field, event.target.value)}
+                            disabled={generatingHeatmap}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="cfg-heatmap-options">
+                      <div>
+                        <div className="cfg-modal-label">Tile</div>
+                        <div className="cfg-heatmap-segment">
+                          {[512, 1024].map((size) => (
+                            <button
+                              key={size}
+                              type="button"
+                              className={heatmapTileSize === size ? "active" : ""}
+                              onClick={() => setHeatmapTileSize(size)}
+                              disabled={generatingHeatmap}
+                            >
+                              {size}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="cfg-heatmap-field">
+                        <label className="cfg-modal-label">Max tiles</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="256"
+                          className="cfg-modal-input"
+                          value={heatmapMaxTiles}
+                          onChange={(event) => updateHeatmapMaxTiles(event.target.value)}
+                          disabled={generatingHeatmap}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="cfg-heatmap-actions">
+                      <button
+                        type="button"
+                        className="cfg-view-btn"
+                        onClick={handleLoadLatestHeatmap}
+                        disabled={!selectedHeatmapImageId || loadingLatestHeatmap || generatingHeatmap}
+                      >
+                        {loadingLatestHeatmap ? "Cargando..." : "Cargar ultimo mapa"}
+                      </button>
+                      <button
+                        type="button"
+                        className="cfg-action-btn"
+                        onClick={handleGenerateBaseHeatmap}
+                        disabled={!canGenerateBaseHeatmap}
+                      >
+                        {generatingHeatmap ? "Generando..." : "Generar mapa base"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="cfg-heatmap-panel">
+                    {heatmapJob ? (
+                      <div className="cfg-heatmap-progress">
+                        <div className="cfg-heatmap-progress-top">
+                          <span className={`cfg-heatmap-status status-${heatmapJob.status}`}>
+                            {heatmapJob.status === "queued" && "En cola"}
+                            {heatmapJob.status === "running" && "Procesando"}
+                            {heatmapJob.status === "completed" && "Completado"}
+                            {heatmapJob.status === "failed" && "Error"}
+                            {!["queued", "running", "completed", "failed"].includes(heatmapJob.status) && heatmapJob.status}
+                          </span>
+                          <span>{heatmapJob.processed_tiles || 0}/{heatmapJob.total_tiles || "?"} tiles</span>
+                        </div>
+                        <div className="cfg-heatmap-bar">
+                          <div style={{ width: `${heatmapJob.status === "completed" ? 100 : heatmapJobProgress}%` }} />
+                        </div>
+                        {heatmapJob.status === "failed" && (
+                          <div className="cfg-heatmap-error">{heatmapJob.error || "No se pudo generar el heatmap."}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="cfg-heatmap-muted">
+                        No hay job activo. Puedes cargar el ultimo mapa guardado o generar uno nuevo para esta imagen.
+                      </div>
+                    )}
+
+                    {latestHeatmap ? (
+                      <div className="cfg-heatmap-summary">
+                        <div className="cfg-heatmap-summary-title">Ultimo mapa guardado</div>
+                        <div className="cfg-heatmap-kv"><span>Trace</span><strong>{latestHeatmap.trace_id}</strong></div>
+                        <div className="cfg-heatmap-kv"><span>Tiles</span><strong>{latestHeatmap.tile_count}</strong></div>
+                        <div className="cfg-heatmap-kv"><span>Max P(metastasico)</span><strong>{formatPercent(heatmapSummary.max_tumor_score)}</strong></div>
+                        <div className="cfg-heatmap-kv"><span>Tiles positivos</span><strong>{heatmapSummary.classified_metastatic_tiles ?? 0}</strong></div>
+                        <div className="cfg-heatmap-kv">
+                          <span>Cache</span>
+                          <strong>
+                            {heatmapSummary.cache_hits ?? 0} hit / {heatmapSummary.cache_misses ?? 0} miss ({formatPercent(heatmapSummary.cache_hit_rate)})
+                          </strong>
+                        </div>
+                        <div className="cfg-heatmap-kv"><span>Persistencia</span><strong>{latestHeatmap.persisted ? "Guardado" : "No confirmado"}</strong></div>
+                        {bestHeatmapRoi && (
+                          <div className="cfg-heatmap-best">
+                            Mejor tile: x={bestHeatmapRoi.x}, y={bestHeatmapRoi.y}, w={bestHeatmapRoi.width}, h={bestHeatmapRoi.height}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="cfg-heatmap-muted">
+                        Aun no se ha cargado un resultado persistido para la imagen seleccionada.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

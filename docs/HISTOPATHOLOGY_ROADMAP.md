@@ -216,14 +216,16 @@ Estado implementado:
 - recuperacion automatica del ultimo mapa guardado al abrir una imagen;
 - jobs asincronicos en memoria para ejecutar heatmaps con progreso;
 - limite configurable de jobs simultaneos con `HISTO_MAX_CONCURRENT_HEATMAP_JOBS`;
-- cache JSON por tile/coordenada/modelo para evitar recalcular CONCH.
+- cache JSON por tile/coordenada/modelo para evitar recalcular CONCH;
+- panel docente/admin en `ConfigPage.jsx` para generar o recuperar el ultimo
+  heatmap acotado de una imagen DZI sin pedir que cada estudiante lo calcule.
 
 Pendiente para cerrar la fase completa:
 
 - ejecutar el escaneo por bandas/lotes en laminas completas;
 - persistir jobs en base de datos o cola real;
 - cachear embeddings por coordenada si se requiere recalibrar el clasificador;
-- convertir scores guardados en heatmap persistente.
+- convertir scores guardados en heatmap persistente de lamina completa.
 
 Flujo:
 
