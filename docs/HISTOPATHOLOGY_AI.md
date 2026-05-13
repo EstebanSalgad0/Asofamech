@@ -992,10 +992,26 @@ Control de carga:
 
 ```text
 HISTO_MAX_CONCURRENT_HEATMAP_JOBS=1
+HISTO_STUDENT_MAX_HEATMAP_TILES=16
+HISTO_PRIVILEGED_MAX_HEATMAP_TILES=256
+HISTO_STUDENT_HEATMAP_JOBS_PER_WINDOW=3
+HISTO_PRIVILEGED_HEATMAP_JOBS_PER_WINDOW=20
+HISTO_HEATMAP_RATE_LIMIT_WINDOW_SECONDS=60
 ```
 
 Por defecto solo corre un heatmap pesado a la vez. Los jobs adicionales quedan
-en cola en memoria hasta que exista un cupo.
+en cola en memoria hasta que exista un cupo. Ademas, el frontend envia
+`X-Asofamech-Role` y `X-Asofamech-Client-Id` para aplicar limites por rol en el
+prototipo con roles simulados:
+
+- estudiante: hasta 16 tiles por heatmap y 3 solicitudes por ventana de 60 s;
+- profesor/administrador: hasta 256 tiles por heatmap y 20 solicitudes por
+  ventana de 60 s.
+
+Estos controles reducen la probabilidad de saturar GPU/CPU si varios
+estudiantes usan el visor al mismo tiempo. No reemplazan autenticacion real:
+cuando exista JWT/roles backend, el header simulado debe sustituirse por claims
+validados del token.
 
 Cache por tile:
 
