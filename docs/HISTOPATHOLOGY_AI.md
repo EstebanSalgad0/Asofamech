@@ -334,8 +334,17 @@ otros patrones que pueden producir falsos positivos.
 El manifiesto versionable esperado contiene:
 
 ```csv
-patch_id,source,slide_id,path,label,hard_negative_type,x,y,width,height,split,qc_status,qc_tissue_fraction,qc_nuclear_fraction,qc_white_fraction,annotation_status
+patch_id,source,slide_id,path,label,hard_negative_type,x,y,width,height,split,qc_status,qc_tissue_fraction,qc_nuclear_fraction,qc_white_fraction,qc_stroma_fraction,annotation_status,label_source
 ```
+
+`label_source` indica de donde viene la verdad usada para entrenar:
+
+- `annotation_official`: patch positivo cuyo centro cae dentro de un poligono tumoral XML oficial.
+- `annotation_official_non_tumor`: patch negativo muestreado fuera de poligonos tumorales oficiales.
+- `negative_slide`: patch negativo desde una lamina oficialmente negativa.
+- `slide_label_weak`: patch de una lamina positiva sin coordenada tumoral fuerte.
+- `heuristic_qc`: negativo inferido por reglas QC/hard-negative mining.
+- `operator_review`: ROI corregida desde el panel de revision docente/admin.
 
 ### 9.1 Generar patches y manifiesto
 
@@ -404,6 +413,36 @@ El conversor genera:
 
 - `camelyon17_tumor_rois.csv`: bounding boxes de poligonos `Tumor`.
 - `camelyon17_targets.csv`: etiquetas binarias por lamina (`negative=0`, `itc/micro/macro=1`).
+
+Tambien existe un generador directo de manifiesto oficial CAMELYON17. Este lee
+los XML ASAP, muestrea coordenadas positivas dentro de poligonos tumorales,
+muestrea negativos fuera de esos poligonos y marca cada fila con `label_source`.
+Por defecto solo crea el CSV de coordenadas; si se agrega `--save-patches`,
+tambien extrae los PNG.
+
+```powershell
+.\.venv\Scripts\python.exe -m histopathology_offline.build_camelyon17_official_manifest `
+  --images-dir data\camelyon17\images `
+  --annotations-dir data\camelyon17\annotations `
+  --manifest artifacts\histopathology\manifests\camelyon17_official_manifest.csv `
+  --summary artifacts\histopathology\reports\camelyon17_official_manifest_summary.json `
+  --positive-per-slide 48 `
+  --negative-per-positive-slide 48 `
+  --negative-per-negative-slide 48 `
+  --patch-size 256 `
+  --seed 29
+```
+
+Para guardar patches fisicos:
+
+```powershell
+.\.venv\Scripts\python.exe -m histopathology_offline.build_camelyon17_official_manifest `
+  --images-dir data\camelyon17\images `
+  --annotations-dir data\camelyon17\annotations `
+  --manifest artifacts\histopathology\manifests\camelyon17_official_manifest.csv `
+  --patch-output-dir artifacts\histopathology\camelyon17_official_patches `
+  --save-patches
+```
 
 Luego se puede extraer una muestra de patches positivos reales:
 
