@@ -24,6 +24,7 @@ MANIFEST_COLUMNS = [
     "qc_white_fraction",
     "qc_stroma_fraction",
     "annotation_status",
+    "label_source",
 ]
 
 
@@ -46,6 +47,7 @@ class PatchManifestRow:
     qc_white_fraction: str = ""
     qc_stroma_fraction: str = ""
     annotation_status: str = ""
+    label_source: str = ""
 
     @classmethod
     def from_dict(cls, payload: dict) -> "PatchManifestRow":
@@ -67,6 +69,7 @@ class PatchManifestRow:
             qc_white_fraction=payload.get("qc_white_fraction", ""),
             qc_stroma_fraction=payload.get("qc_stroma_fraction", ""),
             annotation_status=payload.get("annotation_status", ""),
+            label_source=payload.get("label_source", ""),
         )
 
     def to_dict(self) -> dict:
@@ -88,6 +91,7 @@ class PatchManifestRow:
             "qc_white_fraction": self.qc_white_fraction,
             "qc_stroma_fraction": self.qc_stroma_fraction,
             "annotation_status": self.annotation_status,
+            "label_source": self.label_source,
         }
 
 

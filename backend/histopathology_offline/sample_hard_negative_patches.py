@@ -235,8 +235,23 @@ def save_manifest_row(
             qc_white_fraction=format_metric(metrics["white_fraction"]),
             qc_stroma_fraction=format_metric(metrics["stroma_fraction"]),
             annotation_status=annotation_status,
+            label_source=label_source_for_row(
+                slide_label=slide.label,
+                row_label=label,
+                annotation_status=annotation_status,
+            ),
         )
     )
+
+
+def label_source_for_row(slide_label: int, row_label: int, annotation_status: str) -> str:
+    if annotation_status == "annotated_positive":
+        return "annotation_official"
+    if row_label == 0 and slide_label == 0:
+        return "negative_slide"
+    if annotation_status == "weak_positive_slide_label":
+        return "slide_label_weak"
+    return "heuristic_qc"
 
 
 def sample_random_patch(reader: SlideReader, patch_size: int, rng: random.Random):

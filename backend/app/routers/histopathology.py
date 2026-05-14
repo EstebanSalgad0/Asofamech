@@ -1282,6 +1282,7 @@ async def get_dataset_manifest(
             "model_confidence": session.confidence,
             "model_probabilities": session.probabilities,
             "docente_label": correction.docente_label,
+            "label_source": "operator_review",
             "docente_note": correction.docente_note,
             "corrected_at": correction.corrected_at.isoformat() if correction.corrected_at else None,
             "analyzed_at": session.analyzed_at.isoformat() if session.analyzed_at else None,

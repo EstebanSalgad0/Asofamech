@@ -35,6 +35,10 @@ Ya existe una version funcional ampliada:
 - DZI dinamico para WSI `.tif/.svs` grandes sin subir varios GB por navegador;
 - primer escaneo tipo heatmap sobre ROI 1, dividiendo en tiles y pintando
   sospecha metastasica en el visor.
+- manifiesto de dataset con `label_source` para distinguir etiquetas oficiales,
+  debiles, heuristicas y revisadas por operador;
+- generador `build_camelyon17_official_manifest.py` para crear CSV reproducible
+  desde XML oficiales CAMELYON17 y laminas negativas locales.
 
 Limitacion principal actual:
 
@@ -156,11 +160,13 @@ Tareas:
 - Crear un manifiesto versionable de patches:
 
 ```csv
-patch_id,source,slide_id,path,label,hard_negative_type,x,y,width,height,split
+patch_id,source,slide_id,path,label,hard_negative_type,x,y,width,height,split,qc_status,qc_tissue_fraction,qc_nuclear_fraction,qc_white_fraction,qc_stroma_fraction,annotation_status,label_source
 ```
 
 - Extraer patches positivos desde zonas tumorales anotadas.
-- Extraer patches negativos desde tejido normal y hard negatives.
+- Extraer patches negativos desde tejido normal, laminas negativas y hard negatives.
+- Registrar `label_source` para no mezclar verdad oficial, etiqueta debil de
+  lamina, heuristica QC y revision humana.
 - Guardar patches fuera de Git en `backend/data` o `backend/artifacts`.
 - Extraer embeddings CONCH por lotes.
 - Entrenar una cabeza binaria nueva:
@@ -423,8 +429,10 @@ Tiempo estimado:
 ## Orden recomendado de ejecucion
 
 1. Congelar el estado actual como baseline.
-2. Crear manifiesto de patches y dataset local.
-3. Extraer hard negatives desde SLN-Breast y/o CAMELYON.
+2. Crear manifiesto de patches y dataset local. Implementado inicialmente con
+   `label_source`.
+3. Extraer hard negatives desde SLN-Breast y/o CAMELYON. Implementado para
+   muestras locales y extendido con generador oficial CAMELYON17.
 4. Extraer embeddings CONCH para el nuevo dataset.
 5. Entrenar nueva cabeza binaria.
 6. Evaluar contra PCam, SLN-Breast y hard negatives.
@@ -479,13 +487,12 @@ Mitigaciones:
 La siguiente tarea tecnica deberia ser:
 
 ```text
-Crear pipeline de dataset hard negative:
-1. leer laminas SLN-Breast/CAMELYON;
-2. muestrear patches positivos y negativos;
-3. guardar manifiesto CSV;
-4. extraer embeddings CONCH;
-5. entrenar una nueva cabeza;
-6. comparar contra el checkpoint PCam actual.
+Usar el manifiesto oficial CAMELYON17 como entrada de entrenamiento:
+1. generar camelyon17_official_manifest.csv con mas laminas locales;
+2. extraer o materializar patches si hace falta;
+3. extraer embeddings CONCH por split;
+4. entrenar una nueva cabeza 3-class;
+5. comparar contra Stage 6 y reportar por label_source/hard_negative_type.
 ```
 
 Ese paso es el que mas probablemente mejorara el comportamiento que observamos:
