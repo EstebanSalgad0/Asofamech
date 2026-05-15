@@ -47,10 +47,12 @@ function formatPercent(value) {
 function formatClassName(value) {
   const labels = {
     no_metastasico: 'No metastasico',
+    no_metastasico_probable: 'Prob. no metastasico',
     metastasico: 'Metastasico',
     estroma: 'Estroma',
     roi_no_evaluable: 'ROI no evaluable',
     incierto: 'Incierto',
+    baja_sospecha_no_metastasica: 'Baja sospecha',
   };
   return labels[value] || value || 'N/D';
 }
@@ -952,6 +954,11 @@ export function OpenSeadragonViewer({ imageData }) {
                   {typeof modelStatus.confidence_threshold === 'number' && (
                     <div style={{ color: '#cbd5e1' }}>Umbral: {formatPercent(modelStatus.confidence_threshold)}</div>
                   )}
+                  {typeof modelStatus.low_suspicion_no_metastatic_min === 'number' && typeof modelStatus.low_suspicion_tumor_max === 'number' && (
+                    <div style={{ color: '#cbd5e1' }}>
+                      Baja sospecha: No met. {'>='} {formatPercent(modelStatus.low_suspicion_no_metastatic_min)} y Met. {'<='} {formatPercent(modelStatus.low_suspicion_tumor_max)}
+                    </div>
+                  )}
                   {!modelReady && modelStatus.reason && (
                     <div style={{ color: '#fde68a', marginTop: 6 }}>{modelStatus.reason}</div>
                   )}
@@ -1254,6 +1261,9 @@ export function OpenSeadragonViewer({ imageData }) {
                   Tiles metastasicos: {heatmap.summary?.classified_metastatic_tiles ?? 0}
                 </div>
                 <div style={{ color: '#cbd5e1' }}>
+                  Baja sospecha: {heatmap.summary?.probable_non_metastatic_tiles ?? 0}
+                </div>
+                <div style={{ color: '#cbd5e1' }}>
                   Max P(metastasico): {formatPercent(heatmap.summary?.max_tumor_score)}
                 </div>
                 {heatmap.summary?.best_tile?.roi && (
@@ -1316,7 +1326,7 @@ export function OpenSeadragonViewer({ imageData }) {
                   {[
                     ['#ef4444', 'alta'],
                     ['#f59e0b', 'media'],
-                    ['#22c55e', 'baja'],
+                    ['#22c55e', 'baja sospecha'],
                     ['#94a3b8', 'no evaluable'],
                   ].map(([color, label]) => (
                     <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1434,6 +1444,7 @@ export function OpenSeadragonViewer({ imageData }) {
                     const claseColor = {
                       metastasico: '#ef4444',
                       no_metastasico: '#22c55e',
+                      no_metastasico_probable: '#16a34a',
                       incierto: '#f59e0b',
                       roi_no_evaluable: '#94a3b8',
                     }[s.clase] || '#94a3b8';

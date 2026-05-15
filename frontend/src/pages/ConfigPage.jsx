@@ -767,6 +767,7 @@ export function ConfigPage() {
                         <div className="cfg-heatmap-kv"><span>Tiles</span><strong>{latestHeatmap.tile_count}</strong></div>
                         <div className="cfg-heatmap-kv"><span>Max P(metastasico)</span><strong>{formatPercent(heatmapSummary.max_tumor_score)}</strong></div>
                         <div className="cfg-heatmap-kv"><span>Tiles positivos</span><strong>{heatmapSummary.classified_metastatic_tiles ?? 0}</strong></div>
+                        <div className="cfg-heatmap-kv"><span>Baja sospecha</span><strong>{heatmapSummary.probable_non_metastatic_tiles ?? 0}</strong></div>
                         <div className="cfg-heatmap-kv">
                           <span>Cache</span>
                           <strong>
@@ -828,7 +829,7 @@ export function ConfigPage() {
                                   <span className="cfg-heatmap-history-note">{itemEducational.note}</span>
                                 )}
                                 <span className="cfg-heatmap-history-meta">
-                                  {item.tile_count} tiles · tile {item.tile_size || "N/D"} · positivos {itemSummary.classified_metastatic_tiles ?? 0}
+                                  {item.tile_count} tiles · tile {item.tile_size || "N/D"} · positivos {itemSummary.classified_metastatic_tiles ?? 0} · baja sospecha {itemSummary.probable_non_metastatic_tiles ?? 0}
                                 </span>
                                 <span className="cfg-heatmap-history-meta">
                                   ROI x={itemRoi.x ?? "?"}, y={itemRoi.y ?? "?"}, w={itemRoi.width ?? "?"}, h={itemRoi.height ?? "?"}

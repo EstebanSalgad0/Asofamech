@@ -15,6 +15,7 @@ const DOCENTE_LABEL_OPTIONS = [
 const CLASE_OPTIONS = [
   { value: "metastasico", label: "Metastásico" },
   { value: "no_metastasico", label: "No metastásico" },
+  { value: "no_metastasico_probable", label: "Prob. no metastásico" },
   { value: "incierto", label: "Incierto" },
   { value: "roi_no_evaluable", label: "ROI no evaluable" },
 ];
@@ -23,6 +24,7 @@ function formatClassName(v) {
   const map = {
     metastasico: "Metastásico",
     no_metastasico: "No metastásico",
+    no_metastasico_probable: "Prob. no metastásico",
     incierto: "Incierto",
     roi_no_evaluable: "ROI no evaluable",
   };
@@ -39,6 +41,7 @@ function claseColor(v) {
     {
       metastasico: "#ef4444",
       no_metastasico: "#22c55e",
+      no_metastasico_probable: "#16a34a",
       incierto: "#f59e0b",
       roi_no_evaluable: "#94a3b8",
     }[v] || "#94a3b8"

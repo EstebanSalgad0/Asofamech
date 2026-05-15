@@ -32,3 +32,22 @@ class TriClassifierHead(nn.Module if nn is not None else object):
 
     def forward(self, features):
         return self.classifier(features)
+
+
+class TriMLPClassifierHead(nn.Module if nn is not None else object):
+    """Small non-linear 3-class head over frozen CONCH embeddings."""
+
+    def __init__(self, feature_dim: int, hidden_dim: int = 128, dropout: float = 0.20):
+        if nn is None:
+            raise RuntimeError("PyTorch is required to instantiate TriMLPClassifierHead")
+
+        super().__init__()
+        self.classifier = nn.Sequential(
+            nn.Linear(feature_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, 3),
+        )
+
+    def forward(self, features):
+        return self.classifier(features)

@@ -59,6 +59,9 @@ EDUCATIONAL_WARNING = (
     "ganglio linfatico tipo CAMELYON/PCam y puede abstenerse ante estroma."
 )
 
+LOW_SUSPICION_STATUS = "baja_sospecha_no_metastasica"
+LOW_SUSPICION_CLASS = "no_metastasico_probable"
+
 
 def _dump_schema(value):
     if hasattr(value, "model_dump"):
@@ -79,6 +82,108 @@ def _configured_confidence_threshold() -> float:
     except ValueError:
         return 0.90
     return parsed if 0.0 < parsed <= 1.0 else 0.90
+
+
+def _configured_low_suspicion_no_metastatic_min() -> float:
+    value = os.getenv("HISTO_LOW_SUSPICION_NO_METASTATIC_MIN")
+    if value is None:
+        return 0.55
+    try:
+        parsed = float(value)
+    except ValueError:
+        return 0.55
+    return parsed if 0.0 < parsed <= 1.0 else 0.55
+
+
+def _configured_low_suspicion_tumor_max() -> float:
+    value = os.getenv("HISTO_LOW_SUSPICION_TUMOR_MAX")
+    if value is None:
+        return 0.25
+    try:
+        parsed = float(value)
+    except ValueError:
+        return 0.25
+    return parsed if 0.0 <= parsed < 1.0 else 0.25
+
+
+def _is_low_suspicion_non_metastatic(raw_prediction: dict) -> bool:
+    probabilities = raw_prediction.get("probabilities") or {}
+    no_metastatic = float(probabilities.get("no_metastasico", 0.0) or 0.0)
+    tumor = float(probabilities.get("metastasico", 0.0) or 0.0)
+    return (
+        raw_prediction.get("predicted_class") == "no_metastasico"
+        and no_metastatic >= _configured_low_suspicion_no_metastatic_min()
+        and tumor <= _configured_low_suspicion_tumor_max()
+    )
+
+
+def _decision_from_prediction(raw_prediction: dict, confidence_threshold: float) -> dict:
+    model_predicted_class = raw_prediction["predicted_class"]
+    status = "clasificado"
+    predicted_class = model_predicted_class
+    reason = None
+    recommendation = None
+    prediction = raw_prediction
+
+    if model_predicted_class == "estroma":
+        status = "roi_no_evaluable"
+        predicted_class = "roi_no_evaluable"
+        reason = (
+            "ROI no evaluable: el clasificador 3-class detecto predominio de "
+            "patron estromal."
+        )
+        recommendation = (
+            "Seleccione otra ROI con mayor celularidad tumoral o registre esta "
+            "region como estroma/no evaluable."
+        )
+        prediction = {
+            **raw_prediction,
+            "predicted_class": "roi_no_evaluable",
+            "model_predicted_class": model_predicted_class,
+        }
+    elif raw_prediction["confidence"] < confidence_threshold:
+        if _is_low_suspicion_non_metastatic(raw_prediction):
+            status = LOW_SUSPICION_STATUS
+            predicted_class = LOW_SUSPICION_CLASS
+            reason = (
+                "Baja sospecha metastasica: la clase dominante es no metastasica "
+                "y la probabilidad tumoral es baja, pero no alcanza el umbral de "
+                "confianza para una clasificacion cerrada."
+            )
+            recommendation = (
+                "Use esta salida como orientacion educativa. Si se requiere una "
+                "etiqueta firme, revise la ROI o confirme con una region mas "
+                "representativa."
+            )
+            prediction = {
+                **raw_prediction,
+                "predicted_class": LOW_SUSPICION_CLASS,
+                "model_predicted_class": model_predicted_class,
+            }
+        else:
+            status = "resultado_incierto"
+            predicted_class = "incierto"
+            reason = (
+                "Ninguna clase supera el umbral de confianza configurado "
+                f"({confidence_threshold:.2f})."
+            )
+            recommendation = (
+                "Seleccione una ROI con mayor densidad celular y menos fondo, estroma "
+                "o artefactos; si persiste, registre el resultado como incierto."
+            )
+            prediction = {
+                **raw_prediction,
+                "predicted_class": "incierto",
+                "model_predicted_class": model_predicted_class,
+            }
+
+    return {
+        "status": status,
+        "predicted_class": predicted_class,
+        "reason": reason,
+        "recommendation": recommendation,
+        "prediction": prediction,
+    }
 
 
 def _require_heatmap_manager(current_user) -> None:
@@ -198,6 +303,8 @@ def _model_metadata(inference_service) -> dict:
         "labels": inference_service.labels,
         "class_mapping": inference_service.class_mapping,
         "confidence_threshold": inference_service.confidence_threshold,
+        "low_suspicion_no_metastatic_min": _configured_low_suspicion_no_metastatic_min(),
+        "low_suspicion_tumor_max": _configured_low_suspicion_tumor_max(),
         "training_mode": inference_service.training_mode,
         "validation": inference_service.validation,
     }
@@ -210,6 +317,8 @@ def _heatmap_model_signature(inference_service) -> str:
             str(inference_service.checkpoint_ref),
             str(inference_service.num_classes),
             str(inference_service.confidence_threshold),
+            str(_configured_low_suspicion_no_metastatic_min()),
+            str(_configured_low_suspicion_tumor_max()),
         ]
     )
 
@@ -338,18 +447,12 @@ def _execute_heatmap_scan(
             continue
 
         raw_prediction = inference_service.predict_patch(patch_rgb)
-        status = "clasificado"
-        predicted_class = raw_prediction["predicted_class"]
-        reason = None
-
-        if predicted_class == "estroma":
-            status = "roi_no_evaluable"
-            predicted_class = "roi_no_evaluable"
+        decision = _decision_from_prediction(raw_prediction, inference_service.confidence_threshold)
+        status = decision["status"]
+        predicted_class = decision["predicted_class"]
+        reason = decision["reason"]
+        if raw_prediction["predicted_class"] == "estroma":
             reason = "Tile marcado como estroma por la cabeza 3-class."
-        elif raw_prediction["confidence"] < inference_service.confidence_threshold:
-            status = "resultado_incierto"
-            predicted_class = "incierto"
-            reason = "Ninguna clase supera el umbral de confianza configurado."
 
         probabilities = raw_prediction["probabilities"]
         tile_result = {
@@ -380,6 +483,14 @@ def _execute_heatmap_scan(
         tile for tile in tile_results
         if tile.get("class") == "metastasico"
     ]
+    classified_non_metastatic = [
+        tile for tile in tile_results
+        if tile.get("class") == "no_metastasico"
+    ]
+    probable_non_metastatic = [
+        tile for tile in tile_results
+        if tile.get("class") == LOW_SUSPICION_CLASS
+    ]
     uncertain_high = [
         tile for tile in tile_results
         if tile.get("status") == "resultado_incierto" and tile.get("tumor_score", 0.0) >= 0.50
@@ -398,6 +509,8 @@ def _execute_heatmap_scan(
         "tiles": tile_results,
         "summary": {
             "classified_metastatic_tiles": len(classified_tumor),
+            "classified_non_metastatic_tiles": len(classified_non_metastatic),
+            "probable_non_metastatic_tiles": len(probable_non_metastatic),
             "uncertain_high_tumor_tiles": len(uncertain_high),
             "best_tile": best_tile,
             "max_tumor_score": best_tile.get("tumor_score", 0.0) if best_tile else 0.0,
@@ -542,6 +655,8 @@ async def histopathology_status():
             "labels": inference_service.labels,
             "class_mapping": inference_service.class_mapping,
             "confidence_threshold": inference_service.confidence_threshold,
+            "low_suspicion_no_metastatic_min": _configured_low_suspicion_no_metastatic_min(),
+            "low_suspicion_tumor_max": _configured_low_suspicion_tumor_max(),
             "roi_quality_thresholds": get_quality_thresholds().__dict__,
             "training_mode": inference_service.training_mode,
             "validation": inference_service.validation,
@@ -559,6 +674,8 @@ async def histopathology_status():
             "audit_log_path": str(get_audit_log_path()),
             "class_mapping": DEFAULT_LABELS,
             "confidence_threshold": _configured_confidence_threshold(),
+            "low_suspicion_no_metastatic_min": _configured_low_suspicion_no_metastatic_min(),
+            "low_suspicion_tumor_max": _configured_low_suspicion_tumor_max(),
             "roi_quality_thresholds": get_quality_thresholds().__dict__,
             "required_env": [
                 "HISTO_CLASSIFIER_CHECKPOINT",
@@ -576,6 +693,8 @@ async def histopathology_status():
             "audit_log_path": str(get_audit_log_path()),
             "class_mapping": DEFAULT_LABELS,
             "confidence_threshold": _configured_confidence_threshold(),
+            "low_suspicion_no_metastatic_min": _configured_low_suspicion_no_metastatic_min(),
+            "low_suspicion_tumor_max": _configured_low_suspicion_tumor_max(),
             "roi_quality_thresholds": get_quality_thresholds().__dict__,
             "warning": EDUCATIONAL_WARNING,
         }
@@ -772,45 +891,12 @@ async def analyze_roi2(
         return response_payload
 
     raw_prediction = inference_service.predict_patch(patch_rgb)
-    status = "clasificado"
-    predicted_class = raw_prediction["predicted_class"]
-    reason = None
-    recommendation = None
-    prediction = raw_prediction
-
-    if raw_prediction["predicted_class"] == "estroma":
-        status = "roi_no_evaluable"
-        predicted_class = "roi_no_evaluable"
-        reason = (
-            "ROI no evaluable: el clasificador 3-class detecto predominio de "
-            "patron estromal."
-        )
-        recommendation = (
-            "Seleccione otra ROI con mayor celularidad tumoral o registre esta "
-            "region como estroma/no evaluable."
-        )
-        prediction = {
-            **raw_prediction,
-            "predicted_class": "roi_no_evaluable",
-            "model_predicted_class": raw_prediction["predicted_class"],
-        }
-
-    if status == "clasificado" and raw_prediction["confidence"] < inference_service.confidence_threshold:
-        status = "resultado_incierto"
-        predicted_class = "incierto"
-        reason = (
-            "Ninguna clase supera el umbral de confianza configurado "
-            f"({inference_service.confidence_threshold:.2f})."
-        )
-        recommendation = (
-            "Seleccione una ROI con mayor densidad celular y menos fondo, estroma "
-            "o artefactos; si persiste, registre el resultado como incierto."
-        )
-        prediction = {
-            **raw_prediction,
-            "predicted_class": "incierto",
-            "model_predicted_class": raw_prediction["predicted_class"],
-        }
+    decision = _decision_from_prediction(raw_prediction, inference_service.confidence_threshold)
+    status = decision["status"]
+    predicted_class = decision["predicted_class"]
+    reason = decision["reason"]
+    recommendation = decision["recommendation"]
+    prediction = decision["prediction"]
 
     response_payload = {
         "trace_id": trace_id,
