@@ -31,6 +31,8 @@ Ya existe una version funcional ampliada:
 - control de calidad de ROI con compuerta de stroma dominante;
 - salida `clasificado`, `resultado_incierto` o `roi_no_evaluable`;
 - UI que muestra estado del modelo, umbral, probabilidades, QC y advertencia educativa;
+- salida educativa intermedia `baja_sospecha_no_metastasica` para ROIs
+  evaluables con `P(no_metastasico)` moderada y `P(metastasico)` baja;
 - importacion local de laminas CAMELYON17 ya descargadas en servidor;
 - DZI dinamico para WSI `.tif/.svs` grandes sin subir varios GB por navegador;
 - primer escaneo tipo heatmap sobre ROI 1, dividiendo en tiles y pintando
@@ -43,20 +45,28 @@ Ya existe una version funcional ampliada:
 Limitacion principal actual:
 
 ```text
-CONCH + cabeza 3-class Stage 6 funciona como clasificador educativo de ROI y ya
-detecta metastasis en regiones tumorales anotadas de CAMELYON17, pero aun no es
-un sistema robusto de lamina completa. Puede fallar en regiones mixtas, stroma,
-fibrosis, inflamacion, artefactos o tejido linfoide no representativo.
+CONCH + cabeza 3-class Stage 8 corregida funciona como clasificador educativo
+de ROI y ya detecta metastasis en regiones tumorales anotadas de CAMELYON17,
+pero aun no es un sistema robusto de lamina completa. Puede fallar en regiones
+mixtas, stroma, fibrosis, inflamacion, artefactos o tejido linfoide no
+representativo.
 ```
 
 Resultado practico mas reciente:
 
 ```text
-Stage 6 3-class CAMELYON17 ampliado:
-accuracy test=0.836
-macro F1=0.827
-ROC-AUC tumor OVR=0.942
-stroma->tumor=11/50 = 22%
+Stage 8 3-class CAMELYON17 corregido y balanceado:
+accuracy test=0.852
+macro F1=0.744
+ROC-AUC tumor OVR=0.973
+recall tumor=0.806
+precision tumor=0.859
+recall stroma=0.820
+stroma->tumor=9/50 = 18%
+
+Comparado contra Stage 6 sobre el mismo test Stage 8 corregido:
+Stage 6: acc=.854, macroF1=.743, AUC=.967, recall tumor=.791, stroma->tumor=22%
+Stage 8: acc=.852, macroF1=.744, AUC=.973, recall tumor=.806, stroma->tumor=18%
 
 Validacion visual controlada:
 patient_017_node_2.tif, ROI dentro de XML tumoral oficial
@@ -488,13 +498,38 @@ La siguiente tarea tecnica deberia ser:
 
 ```text
 Usar el manifiesto oficial CAMELYON17 como entrada de entrenamiento:
-1. generar camelyon17_official_manifest.csv con mas laminas locales;
-2. extraer o materializar patches si hace falta;
-3. extraer embeddings CONCH por split;
-4. entrenar una nueva cabeza 3-class;
-5. comparar contra Stage 6 y reportar por label_source/hard_negative_type.
+1. generar camelyon17_official_manifest.csv con mas laminas locales; hecho.
+2. extraer o materializar patches si hace falta; hecho.
+3. extraer embeddings CONCH por split; hecho.
+4. entrenar una nueva cabeza 3-class; hecho.
+5. comparar contra Stage 6 y reportar por label_source/hard_negative_type; hecho parcialmente.
 ```
 
 Ese paso es el que mas probablemente mejorara el comportamiento que observamos:
 regiones estromales o no tumorales que el clasificador inicial marcaba como
 metastasicas.
+
+Resultado de la primera tanda oficial: `official_plus_stage6_weighted` bajo
+`stroma->tumor` en test de 22% a 16%, pero redujo recall tumoral de 86% a
+72.4%. Tambien se probo `class_weight_power=0.5`, manifiestos balanceados, una
+cabeza MLP y seleccion de checkpoint por metrica; esa tanda no supero a Stage 6.
+
+Resultado de la tanda con datos nuevos Stage 8: se descargaron 6 XML positivos
+nuevos, 6 laminas candidatas adicionales, se corrigio la seleccion usando
+`stages.csv` y se excluyeron como negativos los slides positivos sin XML local.
+El checkpoint `tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt`
+mejora AUC, macro F1, recall/precision tumoral, recall de estroma y reduce
+`stroma->tumor` de 22% a 18% contra Stage 6 en el mismo test corregido. Queda
+como candidato activo para validacion visual en el backend.
+
+La siguiente accion tecnica debe ser:
+
+```text
+1. levantar backend/Docker con el checkpoint Stage 8 corregido;
+2. repetir validacion visual en laminas tumorales y zonas sanas conocidas;
+3. registrar falsos positivos reales desde el visor como hard negatives;
+4. revisar ROIs de baja sospecha y confirmar si deben quedar como sanas,
+   inciertas o no evaluables;
+5. mantener un test fijo por coordenadas oficiales para no comparar contra tests movidos;
+6. si Stage 8 se comporta mejor en la app, dejarlo como checkpoint activo y continuar con cache/cola durable de heatmaps.
+```

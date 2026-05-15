@@ -2,7 +2,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from .classifier_head import BinaryClassifierHead, TriClassifierHead
+from .classifier_head import BinaryClassifierHead, TriClassifierHead, TriMLPClassifierHead
 from .conch_feature_extractor import ConchConfig, ConchFeatureExtractor, ModelUnavailableError
 
 
@@ -85,10 +85,17 @@ class HistopathologyInferenceService:
         self.training_mode = checkpoint.get("training_mode", "unknown")
         self.validation = checkpoint.get("validation")
         self.created_at = checkpoint.get("created_at")
+        self.head_type = checkpoint.get("head_type", "linear")
         if self.num_classes == 2:
             self.head = BinaryClassifierHead(feature_dim).to(self.device)
         elif self.num_classes == 3:
-            self.head = TriClassifierHead(feature_dim).to(self.device)
+            if self.head_type == "mlp":
+                hyperparameters = checkpoint.get("hyperparameters") or {}
+                hidden_dim = int(checkpoint.get("head_hidden_dim") or hyperparameters.get("hidden_dim") or 128)
+                dropout = float(checkpoint.get("head_dropout") or hyperparameters.get("dropout") or 0.20)
+                self.head = TriMLPClassifierHead(feature_dim, hidden_dim=hidden_dim, dropout=dropout).to(self.device)
+            else:
+                self.head = TriClassifierHead(feature_dim).to(self.device)
         else:
             raise ModelUnavailableError(
                 f"Unsupported classifier class count: {self.num_classes}"

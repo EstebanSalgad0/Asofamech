@@ -22,7 +22,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.histopathology.ml.classifier_head import TriClassifierHead
+from app.histopathology.ml.classifier_head import TriClassifierHead, TriMLPClassifierHead
 from histopathology_offline.manifest_dataset import PatchManifestRow, read_manifest
 
 STROMA_TYPES: frozenset[str] = frozenset({"stroma", "stroma_low_cellularity"})
@@ -60,10 +60,31 @@ def parse_args():
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=13)
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
+    parser.add_argument("--head-type", default="linear", choices=["linear", "mlp"])
+    parser.add_argument("--hidden-dim", type=int, default=128)
+    parser.add_argument("--dropout", type=float, default=0.20)
+    parser.add_argument(
+        "--selection-metric",
+        default="val_loss",
+        choices=["val_loss", "macro_f1", "tumor_f1", "tumor_recall_minus_stroma_fp"],
+        help=(
+            "Criterio para escoger el mejor epoch. val_loss minimiza perdida; "
+            "las otras opciones maximizan metricas de validacion."
+        ),
+    )
     parser.add_argument(
         "--class-weights",
         action="store_true",
         help="Aplicar pesos inversamente proporcionales a la frecuencia de clase.",
+    )
+    parser.add_argument(
+        "--class-weight-power",
+        type=float,
+        default=1.0,
+        help=(
+            "Suaviza los pesos de clase cuando --class-weights esta activo. "
+            "1.0 usa pesos inversos completos; 0.5 usa raiz cuadrada; 0.0 equivale a pesos uniformes."
+        ),
     )
     return parser.parse_args()
 
@@ -164,11 +185,20 @@ def load_optional_split(torch, manifest_rows, embeddings_dir, split):
         return None
 
 
-def compute_class_weights(torch, labels):
+def compute_class_weights(torch, labels, power: float = 1.0):
     counts = torch.bincount(labels, minlength=NUM_CLASSES).float()
     counts = torch.clamp(counts, min=1.0)
     total = counts.sum()
-    return total / (NUM_CLASSES * counts)
+    weights = total / (NUM_CLASSES * counts)
+    if power == 1.0:
+        return weights
+    return torch.pow(weights, power)
+
+
+def build_head(head_type: str, feature_dim: int, hidden_dim: int, dropout: float):
+    if head_type == "mlp":
+        return TriMLPClassifierHead(feature_dim, hidden_dim=hidden_dim, dropout=dropout)
+    return TriClassifierHead(feature_dim)
 
 
 def run_epoch(head, loader, optimizer, criterion, device):
@@ -331,6 +361,22 @@ def summarize_metrics(metrics_api, y_true, y_pred, y_score_tumor) -> dict:
     }
 
 
+def selection_score(metrics: dict | None, val_loss: float, selection_metric: str) -> float:
+    if selection_metric == "val_loss":
+        return -float(val_loss)
+    if not metrics:
+        return float("-inf")
+    if selection_metric == "macro_f1":
+        return float(metrics["macro_f1"])
+    if selection_metric == "tumor_f1":
+        return float(metrics["per_class"]["metastasico"]["f1"])
+    if selection_metric == "tumor_recall_minus_stroma_fp":
+        tumor_recall = float(metrics["per_class"]["metastasico"]["recall"])
+        stroma_fp = float(metrics["stroma_tumor_confusion"]["stroma_as_tumor_rate"])
+        return tumor_recall - stroma_fp
+    return -float(val_loss)
+
+
 def class_distribution(rows: list[PatchManifestRow]) -> dict:
     dist: dict = {name: 0 for name in CLASS_NAMES.values()}
     for row in rows:
@@ -343,6 +389,12 @@ def main():
     args = parse_args()
     if args.epochs < 1:
         raise SystemExit("--epochs debe ser mayor a cero.")
+    if args.hidden_dim < 1:
+        raise SystemExit("--hidden-dim debe ser mayor a cero.")
+    if not 0.0 <= args.dropout < 1.0:
+        raise SystemExit("--dropout debe estar en el rango [0, 1).")
+    if args.class_weight_power < 0:
+        raise SystemExit("--class-weight-power debe ser mayor o igual a cero.")
 
     torch, nn, DataLoader, TensorDataset, metrics_api = load_runtime_dependencies()
     set_seed(torch, args.seed)
@@ -380,25 +432,56 @@ def main():
         test_x, test_y, test_rows, test_path = test_split
         test_loader = DataLoader(TensorDataset(test_x, test_y), batch_size=args.batch_size, shuffle=False)
 
-    head = TriClassifierHead(train_x.shape[1]).to(device)
-    weight = compute_class_weights(torch, train_y).to(device) if args.class_weights else None
+    head = build_head(args.head_type, train_x.shape[1], args.hidden_dim, args.dropout).to(device)
+    weight = (
+        compute_class_weights(torch, train_y, args.class_weight_power).to(device)
+        if args.class_weights
+        else None
+    )
     criterion = nn.CrossEntropyLoss(weight=weight)
     optimizer = torch.optim.AdamW(head.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     best_state = None
     best_val_loss = float("inf")
+    best_selection_score = float("-inf")
     best_epoch = None
     history = []
 
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch(head, train_loader, optimizer, criterion, device)
         val_loss = validation_loss(torch, head, val_loader, criterion, device)
-        history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+        val_metrics_for_selection = None
+        if args.selection_metric != "val_loss":
+            val_true_epoch, val_pred_epoch, val_score_epoch = predict(torch, head, val_loader, device)
+            val_metrics_for_selection = summarize_metrics(
+                metrics_api,
+                val_true_epoch,
+                val_pred_epoch,
+                val_score_epoch,
+            )
+        score = selection_score(val_metrics_for_selection, val_loss, args.selection_metric)
+        history_row = {
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "selection_metric": args.selection_metric,
+            "selection_score": score,
+        }
+        if val_metrics_for_selection:
+            history_row["val_accuracy"] = val_metrics_for_selection["accuracy"]
+            history_row["val_macro_f1"] = val_metrics_for_selection["macro_f1"]
+            history_row["val_tumor_recall"] = val_metrics_for_selection["per_class"]["metastasico"]["recall"]
+            history_row["val_stroma_as_tumor_rate"] = val_metrics_for_selection["stroma_tumor_confusion"][
+                "stroma_as_tumor_rate"
+            ]
+        history.append(history_row)
         print(
             f"[histopathology-3class] epoch={epoch}/{args.epochs} "
-            f"train_loss={train_loss:.4f} val_loss={val_loss:.4f}"
+            f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
+            f"selection_score={score:.4f}"
         )
-        if val_loss < best_val_loss:
+        if score > best_selection_score:
+            best_selection_score = score
             best_val_loss = val_loss
             best_epoch = epoch
             best_state = {k: v.cpu() for k, v in head.state_dict().items()}
@@ -419,12 +502,17 @@ def main():
         "feature_dim": int(train_x.shape[1]),
         "num_classes": NUM_CLASSES,
         "class_names": CLASS_NAMES,
+        "head_type": args.head_type,
+        "head_hidden_dim": args.hidden_dim if args.head_type == "mlp" else None,
+        "head_dropout": args.dropout if args.head_type == "mlp" else None,
         "stroma_types_used": sorted(STROMA_TYPES),
-        "training_mode": "frozen_conch_linear_probe_3class",
+        "training_mode": f"frozen_conch_{args.head_type}_probe_3class",
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "validation": {
             "best_epoch": best_epoch,
             "best_val_loss": best_val_loss,
+            "selection_metric": args.selection_metric,
+            "best_selection_score": best_selection_score,
         },
         "hyperparameters": {
             "epochs": args.epochs,
@@ -433,7 +521,12 @@ def main():
             "weight_decay": args.weight_decay,
             "seed": args.seed,
             "device": device,
+            "head_type": args.head_type,
+            "hidden_dim": args.hidden_dim if args.head_type == "mlp" else None,
+            "dropout": args.dropout if args.head_type == "mlp" else None,
+            "selection_metric": args.selection_metric,
             "class_weights": args.class_weights,
+            "class_weight_power": args.class_weight_power,
         },
         "embedding_files": {
             "train": str(train_path),
@@ -447,6 +540,8 @@ def main():
         "history": history,
         "best_epoch": best_epoch,
         "best_val_loss": best_val_loss,
+        "selection_metric": args.selection_metric,
+        "best_selection_score": best_selection_score,
         "val": val_metrics,
         "test": test_metrics,
         "checkpoint": str(output),

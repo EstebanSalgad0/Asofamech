@@ -116,7 +116,7 @@ La tuberia escribe:
 Configura el checkpoint entrenado antes de levantar FastAPI:
 
 ```powershell
-$env:HISTO_CLASSIFIER_CHECKPOINT = "C:\ruta\absoluta\Asofamech\backend\artifacts\histopathology\checkpoints\tri_head_camelyon17_stage3b_stroma.pt"
+$env:HISTO_CLASSIFIER_CHECKPOINT = "C:\ruta\absoluta\Asofamech\backend\artifacts\histopathology\checkpoints\tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt"
 $env:HISTO_CONCH_CHECKPOINT_REF = "hf_hub:MahmoodLab/conch"
 $env:HISTO_AUDIT_LOG_PATH = "artifacts/histopathology/audit_log.jsonl"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
@@ -129,10 +129,10 @@ Invoke-RestMethod -Uri http://localhost:8001/api/histopathology/status -Method G
 ```
 
 El endpoint debe responder `model_ready=true` cuando el checkpoint de la cabeza
-binaria y CONCH esten disponibles. En Docker, la ruta esperada del checkpoint es:
+3-class y CONCH esten disponibles. En Docker, la ruta esperada del checkpoint es:
 
 ```text
-/app/artifacts/histopathology-pcam-cuda/checkpoints/binary_head_pcam.pt
+/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt
 ```
 
 En ejecucion local, la ruta se define con `HISTO_CLASSIFIER_CHECKPOINT`.
@@ -146,10 +146,12 @@ y liviana.
 
 Variables y mounts configurados en `docker-compose.yml`:
 
-- `HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage3b_stroma.pt`
+- `HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt`
 - `HISTO_CONCH_CHECKPOINT_REF=hf_hub:MahmoodLab/conch`
 - `HISTO_AUDIT_LOG_PATH=/app/artifacts/histopathology/audit_log.jsonl`
 - `HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD=0.90`
+- `HISTO_LOW_SUSPICION_NO_METASTATIC_MIN=0.55`
+- `HISTO_LOW_SUSPICION_TUMOR_MAX=0.25`
 - `HISTO_SAVE_DEBUG_PATCHES=true`
 - `HISTO_DEBUG_PATCH_DIR=/app/artifacts/histopathology/debug_patches`
 - `./backend/artifacts:/app/artifacts`
@@ -878,6 +880,171 @@ Lectura: Stage 6 mejora de forma clara el equilibrio practico frente al modelo
 (`ROC-AUC tumor OVR=0.715` en val), probablemente por diferencia de laminas y
 composicion del split; aun asi, el test ampliado muestra mejor sensibilidad
 tumoral y mejor separacion de estroma.
+
+Stage 7 experimental: manifiesto oficial + stroma Stage 6:
+
+Se genero un manifiesto oficial desde las 29 laminas CAMELYON17 locales y 11 XML
+tumorales:
+
+```text
+camelyon17_official_manifest.csv
+slides: 29
+positive_rows: 528
+negative_rows: 1392
+label_source:
+  annotation_official: 528
+  annotation_official_non_tumor: 528
+  negative_slide: 864
+```
+
+Luego se combino con `camelyon17_manifest_stage6_expanded_stroma.csv` para no
+perder la clase `estroma`:
+
+```text
+camelyon17_manifest_official_plus_stage6_stroma.csv
+total: 3550 patches
+train: no_metastasico=1437, metastasico=588, estroma=363
+val:   no_metastasico=310,  metastasico=294, estroma=50
+test:  no_metastasico=262,  metastasico=196, estroma=50
+```
+
+Artefactos generados:
+
+```text
+artifacts/histopathology/camelyon17_official_patches/
+artifacts/histopathology/embeddings-camelyon17-official/
+artifacts/histopathology/embeddings-camelyon17-official-plus-stage6-stroma/
+artifacts/histopathology/checkpoints/tri_head_camelyon17_official_plus_stage6_stroma.pt
+artifacts/histopathology/checkpoints/tri_head_camelyon17_official_plus_stage6_stroma_weight050.pt
+artifacts/histopathology/checkpoints/tri_head_camelyon17_official_plus_stage6_stroma_unweighted.pt
+```
+
+Comparacion test:
+
+```text
+modelo                                acc   macroF1  AUC tumor  recall tumor  precision tumor  stroma->tumor
+stage6_actual                         .836  .827     .942       .860          .843             22%
+official+stage6 weighted              .801  .736     .945       .724          .916             16%
+official+stage6 weight_power=0.5      .789  .716     .939       .730          .877             26%
+official+stage6 unweighted            .809  .727     .937       .755          .846             36%
+balanced_v1 unweighted                .793  .709     .935       .750          .831             36%
+balanced_v1 weighted                  .774  .698     .937       .724          .871             28%
+balanced_v2 unweighted                .795  .693     .935       .847          .748             56%
+stage6 MLP                            .686  .687     .816       .570          .781             28%
+stage6 macro_f1 selected              .732  .728     .829       .710          .755             32%
+```
+
+Lectura: el nuevo dataset oficial mejora la trazabilidad y aumenta precision
+tumoral en la variante con pesos completos, pero esa tanda no reemplazaba todavia
+al checkpoint Stage 6: perdia sensibilidad tumoral y macro F1. La variante con
+`class_weight_power=0.5` confirma que suavizar pesos no basta para recuperar el
+equilibrio. Tambien se probaron manifiestos balanceados, seleccion de checkpoint
+por metrica y una cabeza MLP pequena. Ninguna corrida supero el equilibrio
+global de Stage 6 en esa tanda.
+
+Stage 8: datos CAMELYON17 nuevos con `stages.csv` como verdad:
+
+Se agregaron 6 laminas positivas con XML oficial y 6 laminas candidatas para
+negativos/hard negatives:
+
+```text
+positivas con XML:
+patient_010_node_4, patient_012_node_0, patient_044_node_4,
+patient_052_node_1, patient_075_node_4, patient_096_node_0
+
+candidatas negativas descargadas:
+patient_010_node_0, patient_012_node_1, patient_044_node_0,
+patient_052_node_0, patient_075_node_0, patient_096_node_1
+```
+
+Correccion importante: una lamina sin XML no equivale automaticamente a una
+lamina sana. Se uso `data/camelyon17/stages.csv` como fuente de verdad para no
+etiquetar como negativo un slide positivo sin anotacion local. Con esa revision,
+`patient_010_node_0` y `patient_052_node_0` fueron excluidas de la mineria
+negativa porque figuran como positivas en `stages.csv`.
+
+Artefactos generados:
+
+```text
+data/annotations/camelyon17_tumor_rois_stage8.csv
+data/annotations/camelyon17_targets_stage8.csv
+artifacts/histopathology/manifests/camelyon17_official_manifest_stage8_corrected.csv
+artifacts/histopathology/manifests/camelyon17_manifest_stage8_new_hard_negatives.csv
+artifacts/histopathology/manifests/camelyon17_manifest_stage8_corrected_balanced_v1.csv
+artifacts/histopathology/embeddings-camelyon17-stage8-corrected-balanced-v1/
+artifacts/histopathology/checkpoints/tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt
+artifacts/histopathology/reports/tri_head_camelyon17_stage8_corrected_balanced_v1_weighted_metrics.json
+```
+
+Distribucion del manifiesto balanceado:
+
+```text
+train: no_metastasico=900, metastasico=924, estroma=374
+val:   no_metastasico=310, metastasico=246, estroma=50
+test:  no_metastasico=550, metastasico=196, estroma=50
+```
+
+Comparacion justa sobre el mismo test Stage 8 corregido:
+
+```text
+modelo                         acc   macroF1  AUC tumor  recall tumor  precision tumor  recall stroma  stroma->tumor
+stage6_actual                  .854  .743     .967       .791          .847             .780           22%
+stage8_corrected_weighted      .852  .744     .973       .806          .859             .820           18%
+```
+
+Lectura: Stage 8 corregido no es un salto gigante, pero si es una mejora real
+en las senales que importaban para este problema: sube AUC, macro F1, recall
+tumoral, precision tumoral, recall de estroma y baja la confusion
+`stroma->tumor` de 22% a 18% en el mismo test. Por eso queda como checkpoint
+activo recomendado para la siguiente validacion visual, aunque aun no debe
+presentarse como modelo robusto final.
+
+Calibracion educativa de baja sospecha:
+
+El umbral principal `HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD=0.90` se mantiene
+para llamar una ROI `metastasico` o `no_metastasico` de forma cerrada. Para no
+ocultar zonas evaluables con baja probabilidad tumoral, el backend agrega una
+salida intermedia:
+
+```text
+status: baja_sospecha_no_metastasica
+class:  no_metastasico_probable
+```
+
+Condicion por defecto:
+
+```text
+P(no_metastasico) >= 0.55
+P(metastasico) <= 0.25
+ROI evaluable por QC
+```
+
+Esta salida no reemplaza una etiqueta firme ni es diagnostica; sirve para que
+el visor y el heatmap diferencien zonas de baja sospecha de zonas realmente
+inciertas o no evaluables.
+
+Herramientas agregadas para iterar:
+
+```powershell
+.\.venv\Scripts\python.exe -m histopathology_offline.balance_patch_manifest `
+  --manifest artifacts\histopathology\manifests\camelyon17_manifest_official_plus_stage6_stroma.csv `
+  --output artifacts\histopathology\manifests\camelyon17_manifest_official_plus_stage6_balanced_v1.csv `
+  --cap train:no_metastasico=800 `
+  --seed 31
+
+.\.venv\Scripts\python.exe -m histopathology_offline.train_manifest_head_3class `
+  --manifest artifacts\histopathology\manifests\camelyon17_manifest_stage6_expanded_stroma.csv `
+  --embeddings-dir artifacts\histopathology\embeddings-camelyon17-stage6-expanded-stroma `
+  --head-type linear `
+  --selection-metric macro_f1
+```
+
+El entrenador soporta ahora:
+
+- `--class-weight-power`: suaviza pesos de clase.
+- `--head-type mlp`: prueba una cabeza no lineal pequena.
+- `--selection-metric`: permite seleccionar el mejor epoch por `val_loss`,
+  `macro_f1`, `tumor_f1` o `tumor_recall_minus_stroma_fp`.
 
 Los patches, embeddings, checkpoints y reportes quedan bajo `backend/artifacts`
 o `backend/data`, ambos ignorados por Git.
