@@ -46,6 +46,20 @@ class Document(Base):
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)       # texto que luego se puede usar para RAG
     tags = Column(String(200), nullable=True)
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding = Column(JSON, nullable=False)
+    token_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    document = relationship("Document", back_populates="chunks")
 
 class ChatLog(Base):
     __tablename__ = "chat_logs"
@@ -54,6 +68,28 @@ class ChatLog(Base):
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PlatformRule(Base):
+    __tablename__ = "platform_rules"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    scope = Column(String(80), nullable=False, default="chat")  # chat, rag, sct, global
+    content = Column(Text, nullable=False)
+    priority = Column(Integer, nullable=False, default=100)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AIConfiguration(Base):
+    __tablename__ = "ai_configurations"
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(120), unique=True, nullable=False, index=True)
+    value = Column(Text, nullable=False)
+    value_type = Column(String(40), nullable=False, default="string")
+    description = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class SCTTest(Base):
     __tablename__ = "sct_tests"

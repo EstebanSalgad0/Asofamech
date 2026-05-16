@@ -190,7 +190,11 @@ export function ChatbotPage() {
     try {
       const data = await sendChatMessage(inputText);
       const allBotTexts = (data.messages || []).map((m) => m.text || "").join("\n\n");
-      const botMsg = { sender: "bot", text: allBotTexts, time: getTimestamp() };
+      const ragSources = (data.rag_sources || []).map((source) => source.title).filter(Boolean);
+      const sourcesText = ragSources.length
+        ? `\n\nFuentes RAG usadas: ${ragSources.join(", ")}`
+        : "";
+      const botMsg = { sender: "bot", text: `${allBotTexts}${sourcesText}`, time: getTimestamp() };
       trackConsultation();
       pushActivity("chat", newTitle);
       const withResponse = { ...updatedConv, updatedAt: new Date().toISOString(), messages: [...updatedConv.messages, botMsg] };

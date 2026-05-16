@@ -1,18 +1,22 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-import httpx
 import json
-import os
 import logging
+import os
 import re
 import unicodedata
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from ..auth import get_optional_current_user
 from ..db import get_db
-from ..models import Case
+from ..models import Case, ChatLog, User
+from .admin import get_active_rule_text, get_ai_config_map, parse_bool
+from .rag import build_rag_context, retrieve_rag_hits
 
-# Configurar logging
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -28,7 +32,7 @@ OUT_OF_SCOPE_RESPONSE = (
 )
 AMBIGUOUS_SCOPE_RESPONSE = (
     "Puedo ayudarte si la consulta esta relacionada con medicina o salud. "
-    "¿Puedes reformularla indicando el contexto medico, clinico o educativo?"
+    "Puedes reformularla indicando el contexto medico, clinico o educativo."
 )
 GREETING_TERMS = {"hola", "buenas", "gracias", "ayuda"}
 SCOPE_MEDICAL = "medical"
@@ -43,10 +47,7 @@ class ChatRequest(BaseModel):
 
 def _normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value.lower())
-    without_accents = "".join(
-        char for char in normalized if not unicodedata.combining(char)
-    )
-    return without_accents
+    return "".join(char for char in normalized if not unicodedata.combining(char))
 
 
 def _is_greeting_only(question: str) -> bool:
@@ -55,9 +56,9 @@ def _is_greeting_only(question: str) -> bool:
     return bool(tokens) and tokens.issubset(GREETING_TERMS)
 
 
-def _build_scope_classifier_payload(question: str) -> dict:
+def _build_scope_classifier_payload(question: str, model: str = LLM_MODEL) -> dict:
     return {
-        "model": LLM_MODEL,
+        "model": model,
         "messages": [
             {
                 "role": "system",
@@ -132,9 +133,14 @@ def _parse_scope_decision(content: str) -> str:
     return scope
 
 
-async def _post_ollama_chat(client: httpx.AsyncClient, payload: dict, purpose: str) -> dict:
-    logger.info(f"Enviando {purpose} a Ollama URL: {OLLAMA_URL}/api/chat")
-    resp = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
+async def _post_ollama_chat(
+    client: httpx.AsyncClient,
+    payload: dict,
+    purpose: str,
+    ollama_url: str = OLLAMA_URL,
+) -> dict:
+    logger.info(f"Enviando {purpose} a Ollama URL: {ollama_url}/api/chat")
+    resp = await client.post(f"{ollama_url}/api/chat", json=payload)
     logger.info(f"Ollama respondio {purpose} con status: {resp.status_code}")
     logger.info(f"Respuesta {purpose}: {resp.text[:200]}")
 
@@ -153,20 +159,27 @@ async def _post_ollama_chat(client: httpx.AsyncClient, payload: dict, purpose: s
         ) from exc
 
 
-async def _classify_medical_scope(client: httpx.AsyncClient, question: str) -> str:
+async def _classify_medical_scope(
+    client: httpx.AsyncClient,
+    question: str,
+    model: str = LLM_MODEL,
+    ollama_url: str = OLLAMA_URL,
+) -> str:
     if _is_greeting_only(question):
         return SCOPE_MEDICAL
 
-    payload = _build_scope_classifier_payload(question)
-    data = await _post_ollama_chat(client, payload, "clasificacion de alcance")
+    payload = _build_scope_classifier_payload(question, model=model)
+    data = await _post_ollama_chat(
+        client,
+        payload,
+        "clasificacion de alcance",
+        ollama_url=ollama_url,
+    )
     content = data.get("message", {}).get("content", "").strip()
     return _parse_scope_decision(content)
 
 
 def _build_cases_context(question: str, db: Session) -> str:
-    """
-    Busca casos clínicos relacionados para enriquecer la respuesta educativa.
-    """
     tokens = [
         word.strip(".,;:!?()[]{}\"' ").lower()
         for word in question.split()
@@ -213,7 +226,11 @@ def _build_cases_context(question: str, db: Session) -> str:
     return "\n\n".join(context_blocks)
 
 
-def _build_system_prompt(cases_context: str = "") -> str:
+def _build_system_prompt(
+    cases_context: str = "",
+    rag_context: str = "",
+    active_rules: str = "",
+) -> str:
     system_prompt = (
         "Eres un asistente medico educativo de alcance general. Responde en espanol "
         "solo sobre temas medicos y de salud: enfermedades, sintomas, signos, "
@@ -239,39 +256,97 @@ def _build_system_prompt(cases_context: str = "") -> str:
             f"{cases_context}"
         )
 
+    if rag_context:
+        system_prompt += (
+            "\n\nUsa tambien estas fuentes documentales recuperadas por RAG. "
+            "Prioriza esta informacion cuando sea pertinente y menciona de forma breve "
+            "que la respuesta se apoya en material cargado en la plataforma:\n"
+            f"{rag_context}"
+        )
+
+    if active_rules:
+        system_prompt += (
+            "\n\nReglas administrativas activas que debes respetar:\n"
+            f"{active_rules}"
+        )
+
     return system_prompt
 
 
+def _config_value(config: dict[str, str], key: str, default: str) -> str:
+    value = config.get(key)
+    return str(value) if value is not None else default
+
+
+def _config_float(config: dict[str, str], key: str, default: float) -> float:
+    try:
+        return float(config.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _config_int(config: dict[str, str], key: str, default: int) -> int:
+    try:
+        return int(config.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
 @router.post("/chat")
-async def chat(req: ChatRequest, db: Session = Depends(get_db)):
+async def chat(
+    req: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
+):
     user_text = req.text.strip()
     if not user_text:
-        raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío.")
+        raise HTTPException(status_code=400, detail="El mensaje no puede estar vacio.")
 
     try:
+        config = get_ai_config_map(db)
+        model = _config_value(config, "llm_model", LLM_MODEL)
+        ollama_url = _config_value(config, "ollama_url", OLLAMA_URL)
+        scope_filter_enabled = parse_bool(config.get("scope_filter_enabled"), True)
+        rag_enabled = parse_bool(config.get("rag_enabled"), True)
+        max_context_documents = max(1, min(_config_int(config, "max_context_documents", 4), 8))
+
         async with httpx.AsyncClient(timeout=180.0) as client:
-            scope = await _classify_medical_scope(client, user_text)
-            if scope == SCOPE_NON_MEDICAL:
-                return {"messages": [{"text": OUT_OF_SCOPE_RESPONSE}]}
-            if scope == SCOPE_AMBIGUOUS:
-                return {"messages": [{"text": AMBIGUOUS_SCOPE_RESPONSE}]}
+            if scope_filter_enabled:
+                scope = await _classify_medical_scope(
+                    client,
+                    user_text,
+                    model=model,
+                    ollama_url=ollama_url,
+                )
+                if scope == SCOPE_NON_MEDICAL:
+                    return {"messages": [{"text": OUT_OF_SCOPE_RESPONSE}], "rag_sources": []}
+                if scope == SCOPE_AMBIGUOUS:
+                    return {"messages": [{"text": AMBIGUOUS_SCOPE_RESPONSE}], "rag_sources": []}
 
             cases_context = _build_cases_context(user_text, db)
-            system_prompt = _build_system_prompt(cases_context)
+            rag_hits = retrieve_rag_hits(db, user_text, max_context_documents) if rag_enabled else []
+            rag_context = build_rag_context(rag_hits)
+            active_rules = get_active_rule_text(db)
+            system_prompt = _build_system_prompt(cases_context, rag_context, active_rules)
             payload = {
-                "model": LLM_MODEL,
+                "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_text},
                 ],
                 "stream": False,
                 "options": {
-                    "temperature": 0.7,
-                    "top_p": 0.9,
+                    "temperature": _config_float(config, "temperature", 0.7),
+                    "top_p": _config_float(config, "top_p", 0.9),
                     "num_ctx": 8192,
                 },
             }
-            ollama_data = await _post_ollama_chat(client, payload, "respuesta de chat")
+            ollama_data = await _post_ollama_chat(
+                client,
+                payload,
+                "respuesta de chat",
+                ollama_url=ollama_url,
+            )
 
             assistant_text = ollama_data.get("message", {}).get("content", "").strip()
             if not assistant_text:
@@ -280,20 +355,41 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
                     "Intenta reformular tu pregunta."
                 )
 
-            # Mantener contrato esperado por frontend: lista de mensajes con clave text.
-            return {"messages": [{"text": assistant_text}]}
-            
-    except httpx.HTTPError as e:
-        logger.error(f"Excepción al conectar con Ollama: {type(e).__name__}: {e}")
+            db.add(
+                ChatLog(
+                    user_id=str(current_user.id) if current_user else "anon",
+                    question=user_text,
+                    answer=assistant_text,
+                )
+            )
+            db.commit()
+
+            return {
+                "messages": [{"text": assistant_text}],
+                "rag_sources": [
+                    {
+                        "id": hit.id,
+                        "title": hit.title,
+                        "tags": hit.tags,
+                        "score": hit.score,
+                        "chunk_id": hit.chunk_id,
+                        "chunk_index": hit.chunk_index,
+                    }
+                    for hit in rag_hits
+                ],
+            }
+
+    except httpx.HTTPError as exc:
+        logger.error(f"Excepcion al conectar con Ollama: {type(exc).__name__}: {exc}")
         raise HTTPException(
             status_code=502,
-            detail=f"Error al contactar al servidor Ollama: {e}",
-        )
+            detail=f"Error al contactar al servidor Ollama: {exc}",
+        ) from exc
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Excepción inesperada: {type(e).__name__}: {e}")
+    except Exception as exc:
+        logger.error(f"Excepcion inesperada: {type(exc).__name__}: {exc}")
         raise HTTPException(
             status_code=502,
-            detail=f"Error inesperado: {e}",
-        )
+            detail=f"Error inesperado: {exc}",
+        ) from exc

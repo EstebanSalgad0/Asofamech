@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from app import auth_security
+from app.routers import auth
 
 
 class AuthSecurityTestCase(unittest.TestCase):
@@ -53,6 +54,13 @@ class AuthSecurityTestCase(unittest.TestCase):
         self.assertEqual(auth_security.display_role("docente"), "Profesor")
         self.assertEqual(auth_security.display_role("profesor"), "Profesor")
         self.assertEqual(auth_security.display_role("student"), "Estudiante")
+
+    def test_password_strength_requires_length_letters_and_numbers(self):
+        with self.assertRaises(Exception):
+            auth._validate_password_strength("solo letras")
+        with self.assertRaises(Exception):
+            auth._validate_password_strength("12345678")
+        self.assertIsNone(auth._validate_password_strength("clave123"))
 
 
 if __name__ == "__main__":
