@@ -62,30 +62,6 @@ export async function reindexAllRagDocuments() {
   return parseJsonResponse(res, "No se pudo reindexar el corpus RAG");
 }
 
-export async function listAdminRules() {
-  const res = await authFetch("/api/admin/rules");
-  return parseJsonResponse(res, "No se pudieron cargar las reglas");
-}
-
-export async function saveAdminRule(rule, ruleId = null) {
-  const res = await authFetch(ruleId ? `/api/admin/rules/${ruleId}` : "/api/admin/rules", {
-    method: ruleId ? "PUT" : "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(rule),
-  });
-  return parseJsonResponse(res, "No se pudo guardar la regla");
-}
-
-export async function toggleAdminRule(ruleId) {
-  const res = await authFetch(`/api/admin/rules/${ruleId}/toggle`, { method: "PATCH" });
-  return parseJsonResponse(res, "No se pudo cambiar el estado de la regla");
-}
-
-export async function deleteAdminRule(ruleId) {
-  const res = await authFetch(`/api/admin/rules/${ruleId}`, { method: "DELETE" });
-  return parseJsonResponse(res, "No se pudo eliminar la regla");
-}
-
 export async function getAIConfig() {
   const res = await authFetch("/api/admin/ai-config");
   return parseJsonResponse(res, "No se pudo cargar la configuracion IA");

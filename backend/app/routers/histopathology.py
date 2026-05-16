@@ -24,6 +24,7 @@ from ..histopathology.heatmap_jobs import (
     utc_now as job_utc_now,
 )
 from ..histopathology.heatmap_store import (
+    delete_heatmap_by_trace,
     load_heatmap_history_for_image,
     load_heatmap_by_trace,
     load_latest_heatmap_for_image,
@@ -1177,6 +1178,17 @@ async def get_heatmap_by_trace(
         raise HTTPException(status_code=404, detail="Heatmap no encontrado")
 
     return heatmap
+
+
+@router.delete("/heatmaps/{trace_id}", status_code=204)
+async def delete_heatmap(
+    trace_id: str,
+    current_user=Depends(get_current_user),
+):
+    _require_heatmap_manager(current_user)
+    deleted = delete_heatmap_by_trace(trace_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Heatmap no encontrado")
 
 
 @router.get("/sessions")

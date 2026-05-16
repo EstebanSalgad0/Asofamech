@@ -2,21 +2,17 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   createRagDocument,
-  deleteAdminRule,
   deleteRagDocument,
   deleteSCTTest,
   generateSCT,
   getAIConfig,
   getIntegrationStatus,
   getSCTTest,
-  listAdminRules,
   listRagDocuments,
   listSCTTests,
   reindexAllRagDocuments,
   reindexRagDocument,
-  saveAdminRule,
   saveSCTTest,
-  toggleAdminRule,
   updateAIConfig,
   updateRagDocument,
 } from "../api";
@@ -39,14 +35,6 @@ const DEFAULT_HEATMAP_METADATA = {
   note: "",
 };
 const DEFAULT_RAG_DOCUMENT = { title: "", tags: "", content: "" };
-const DEFAULT_RULE = {
-  name: "",
-  scope: "chat",
-  content: "",
-  priority: 100,
-  is_active: true,
-};
-
 export function ConfigPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -80,11 +68,6 @@ export function ConfigPage() {
   const [editingRagDocumentId, setEditingRagDocumentId] = useState(null);
   const [savingRagDocument, setSavingRagDocument] = useState(false);
   const [indexingRag, setIndexingRag] = useState(false);
-  const [adminRules, setAdminRules] = useState([]);
-  const [loadingRules, setLoadingRules] = useState(false);
-  const [ruleForm, setRuleForm] = useState(DEFAULT_RULE);
-  const [editingRuleId, setEditingRuleId] = useState(null);
-  const [savingRule, setSavingRule] = useState(false);
   const [aiConfigItems, setAiConfigItems] = useState([]);
   const [loadingAIConfig, setLoadingAIConfig] = useState(false);
   const [savingAIConfig, setSavingAIConfig] = useState(false);
@@ -125,7 +108,6 @@ export function ConfigPage() {
 
   useEffect(() => {
     if (role === "Administrador") {
-      loadAdminRules();
       loadAIConfig();
       loadIntegrationStatus();
     }
@@ -328,80 +310,6 @@ export function ConfigPage() {
     }
   };
 
-  const loadAdminRules = async () => {
-    setLoadingRules(true);
-    try {
-      setAdminRules(await listAdminRules());
-    } catch (error) {
-      console.warn("No se pudieron cargar reglas:", error);
-    } finally {
-      setLoadingRules(false);
-    }
-  };
-
-  const updateRuleForm = (field, value) => {
-    setRuleForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const resetRuleForm = () => {
-    setRuleForm(DEFAULT_RULE);
-    setEditingRuleId(null);
-  };
-
-  const handleSaveRule = async (event) => {
-    event.preventDefault();
-    setSavingRule(true);
-    try {
-      await saveAdminRule(
-        {
-          ...ruleForm,
-          priority: Number.parseInt(ruleForm.priority || "100", 10),
-          is_active: Boolean(ruleForm.is_active),
-        },
-        editingRuleId
-      );
-      showToast("Regla guardada", "success");
-      resetRuleForm();
-      await loadAdminRules();
-    } catch (error) {
-      showToast(error.message || "No se pudo guardar la regla", "error", 7000);
-    } finally {
-      setSavingRule(false);
-    }
-  };
-
-  const handleEditRule = (rule) => {
-    setEditingRuleId(rule.id);
-    setRuleForm({
-      name: rule.name || "",
-      scope: rule.scope || "chat",
-      content: rule.content || "",
-      priority: rule.priority ?? 100,
-      is_active: Boolean(rule.is_active),
-    });
-  };
-
-  const handleToggleRule = async (ruleId) => {
-    try {
-      await toggleAdminRule(ruleId);
-      await loadAdminRules();
-    } catch (error) {
-      showToast(error.message || "No se pudo cambiar el estado de la regla", "error", 7000);
-    }
-  };
-
-  const handleDeleteRule = async (ruleId) => {
-    if (!confirm("Quieres eliminar esta regla?")) return;
-    try {
-      await deleteAdminRule(ruleId);
-      showToast("Regla eliminada", "success");
-      await loadAdminRules();
-      if (editingRuleId === ruleId) resetRuleForm();
-    } catch (error) {
-      showToast(error.message || "No se pudo eliminar la regla", "error", 7000);
-    }
-  };
-
   const loadAIConfig = async () => {
     setLoadingAIConfig(true);
     try {
@@ -514,6 +422,24 @@ export function ConfigPage() {
       showToast(error.message, "error", 7000);
     } finally {
       setLoadingHeatmapTrace(null);
+    }
+  };
+
+  const handleDeleteHeatmap = async (traceId) => {
+    if (!confirm("¿Eliminar este mapa del historial? Esta acción no se puede deshacer.")) return;
+    try {
+      const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/${traceId}`, {
+        method: "DELETE",
+        headers: histopathologyHeaders(),
+      });
+      if (!response.ok && response.status !== 204) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail || `Error HTTP ${response.status}`);
+      }
+      showToast("Mapa eliminado del historial", "success");
+      await loadHeatmapHistory();
+    } catch (error) {
+      showToast(error.message, "error", 7000);
     }
   };
 
@@ -723,7 +649,6 @@ export function ConfigPage() {
     { id: "images", label: "Gestión de imágenes", icon: "IMG" },
     { id: "rag", label: "Documentos RAG", icon: "RAG" },
     ...(role === "Administrador" ? [
-      { id: "rules", label: "Reglas", icon: "REG" },
       { id: "ai", label: "Configuración IA", icon: "IA" },
     ] : []),
     { id: "sct", label: "Tests SCT", icon: "SCT" },
@@ -1077,33 +1002,42 @@ export function ConfigPage() {
                             const itemRoi = item.roi || {};
                             const itemEducational = item.educational || {};
                             return (
-                              <button
-                                type="button"
-                                key={item.trace_id}
-                                className="cfg-heatmap-history-item"
-                                onClick={() => handleLoadHeatmapTrace(item.trace_id)}
-                                disabled={loadingHeatmapTrace === item.trace_id}
-                              >
-                                <span className="cfg-heatmap-history-main">
-                                  <strong>{itemEducational.label || "Mapa preparado"}</strong>
-                                  <span>{formatDateTime(item.analyzed_at)}</span>
-                                </span>
-                                <span className="cfg-heatmap-history-meta">
-                                  {educationalTypeLabel(itemEducational.type)} - Max P {formatPercent(itemSummary.max_tumor_score)}
-                                </span>
-                                {itemEducational.note && (
-                                  <span className="cfg-heatmap-history-note">{itemEducational.note}</span>
-                                )}
-                                <span className="cfg-heatmap-history-meta">
-                                  {item.tile_count} tiles · tile {item.tile_size || "N/D"} · positivos {itemSummary.classified_metastatic_tiles ?? 0} · baja sospecha {itemSummary.probable_non_metastatic_tiles ?? 0}
-                                </span>
-                                <span className="cfg-heatmap-history-meta">
-                                  ROI x={itemRoi.x ?? "?"}, y={itemRoi.y ?? "?"}, w={itemRoi.width ?? "?"}, h={itemRoi.height ?? "?"}
-                                </span>
-                                <span className="cfg-heatmap-history-trace">
-                                  {loadingHeatmapTrace === item.trace_id ? "Cargando..." : item.trace_id}
-                                </span>
-                              </button>
+                              <div key={item.trace_id} className="cfg-heatmap-history-row">
+                                <button
+                                  type="button"
+                                  className="cfg-heatmap-history-item"
+                                  onClick={() => handleLoadHeatmapTrace(item.trace_id)}
+                                  disabled={loadingHeatmapTrace === item.trace_id}
+                                >
+                                  <span className="cfg-heatmap-history-main">
+                                    <strong>{itemEducational.label || "Mapa preparado"}</strong>
+                                    <span>{formatDateTime(item.analyzed_at)}</span>
+                                  </span>
+                                  <span className="cfg-heatmap-history-meta">
+                                    {educationalTypeLabel(itemEducational.type)} - Max P {formatPercent(itemSummary.max_tumor_score)}
+                                  </span>
+                                  {itemEducational.note && (
+                                    <span className="cfg-heatmap-history-note">{itemEducational.note}</span>
+                                  )}
+                                  <span className="cfg-heatmap-history-meta">
+                                    {item.tile_count} tiles · tile {item.tile_size || "N/D"} · positivos {itemSummary.classified_metastatic_tiles ?? 0} · baja sospecha {itemSummary.probable_non_metastatic_tiles ?? 0}
+                                  </span>
+                                  <span className="cfg-heatmap-history-meta">
+                                    ROI x={itemRoi.x ?? "?"}, y={itemRoi.y ?? "?"}, w={itemRoi.width ?? "?"}, h={itemRoi.height ?? "?"}
+                                  </span>
+                                  <span className="cfg-heatmap-history-trace">
+                                    {loadingHeatmapTrace === item.trace_id ? "Cargando..." : item.trace_id}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cfg-danger-btn cfg-heatmap-delete-btn"
+                                  onClick={() => handleDeleteHeatmap(item.trace_id)}
+                                  title="Eliminar este mapa"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
                             );
                           })}
                         </div>
@@ -1264,78 +1198,13 @@ export function ConfigPage() {
             </div>
           )}
 
-          {activeTab === "rules" && role === "Administrador" && (
-            <div className="cfg-section">
-              <div className="cfg-section-top">
-                <div>
-                  <div className="cfg-section-title">Reglas de funcionamiento</div>
-                  <div className="cfg-section-desc">
-                    Define reglas activas para respuestas, RAG y flujos conversacionales del sistema.
-                  </div>
-                </div>
-              </div>
-
-              <div className="cfg-two-col">
-                <form className="cfg-admin-panel" onSubmit={handleSaveRule}>
-                  <div className="cfg-panel-title">{editingRuleId ? "Editar regla" : "Nueva regla"}</div>
-                  <label className="cfg-modal-label">Nombre</label>
-                  <input className="cfg-modal-input" value={ruleForm.name} onChange={(event) => updateRuleForm("name", event.target.value)} required />
-                  <label className="cfg-modal-label">Ambito</label>
-                  <select className="cfg-modal-input" value={ruleForm.scope} onChange={(event) => updateRuleForm("scope", event.target.value)}>
-                    <option value="global">Global</option>
-                    <option value="chat">Chat</option>
-                    <option value="rag">RAG</option>
-                    <option value="sct">SCT</option>
-                  </select>
-                  <label className="cfg-modal-label">Prioridad</label>
-                  <input className="cfg-modal-input" type="number" min="0" max="999" value={ruleForm.priority} onChange={(event) => updateRuleForm("priority", event.target.value)} />
-                  <label className="cfg-checkbox-line">
-                    <input type="checkbox" checked={ruleForm.is_active} onChange={(event) => updateRuleForm("is_active", event.target.checked)} />
-                    Regla activa
-                  </label>
-                  <label className="cfg-modal-label">Contenido</label>
-                  <textarea className="cfg-modal-textarea cfg-admin-textarea" value={ruleForm.content} onChange={(event) => updateRuleForm("content", event.target.value)} required />
-                  <div className="cfg-inline-actions">
-                    <button className="cfg-submit-btn" type="submit" disabled={savingRule}>{savingRule ? "Guardando..." : "Guardar regla"}</button>
-                    {editingRuleId && <button className="cfg-cancel-btn" type="button" onClick={resetRuleForm}>Cancelar</button>}
-                  </div>
-                </form>
-
-                <div className="cfg-admin-panel">
-                  <div className="cfg-panel-title">Reglas registradas</div>
-                  {loadingRules ? (
-                    <div className="cfg-loading">Cargando reglas...</div>
-                  ) : adminRules.length === 0 ? (
-                    <div className="cfg-empty compact"><div className="cfg-empty-title">Sin reglas</div></div>
-                  ) : (
-                    <div className="cfg-admin-list">
-                      {adminRules.map((rule) => (
-                        <div key={rule.id} className="cfg-admin-item">
-                          <div>
-                            <strong>{rule.name}</strong>
-                            <span>{rule.scope} | prioridad {rule.priority} | {rule.is_active ? "activa" : "inactiva"}</span>
-                          </div>
-                          <div className="cfg-inline-actions">
-                            <button className="cfg-view-btn" type="button" onClick={() => handleEditRule(rule)}>Editar</button>
-                            <button className="cfg-view-btn" type="button" onClick={() => handleToggleRule(rule.id)}>{rule.is_active ? "Desactivar" : "Activar"}</button>
-                            <button className="cfg-danger-btn" type="button" onClick={() => handleDeleteRule(rule.id)}>Eliminar</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
           {activeTab === "ai" && role === "Administrador" && (
             <div className="cfg-section">
               <div className="cfg-section-top">
                 <div>
                   <div className="cfg-section-title">Configuración de IA</div>
                   <div className="cfg-section-desc">
-                    Administra modelo, conexion con Ollama/Rasa, activacion RAG y parametros de respuesta.
+                    Administra modelo, conexion con Ollama, activacion RAG y parametros de respuesta.
                   </div>
                 </div>
                 <div className="cfg-inline-actions">
@@ -1376,14 +1245,12 @@ export function ConfigPage() {
                 <div className="cfg-admin-panel">
                   <div className="cfg-panel-title">Estado de integracion</div>
                   {!integrationStatus ? (
-                    <div className="cfg-heatmap-muted">Ejecuta la verificacion para revisar Llama 3, Rasa y RAG.</div>
+                    <div className="cfg-heatmap-muted">Ejecuta la verificacion para revisar Llama 3 y RAG.</div>
                   ) : (
                     <div className="cfg-status-list">
                       <div className="cfg-status-row"><span>Llama/Ollama</span><strong>{integrationStatus.llama3?.reachable ? "Disponible" : "No confirmado"}</strong></div>
                       <div className="cfg-status-row"><span>RAG</span><strong>{integrationStatus.rag?.enabled ? `${integrationStatus.rag.documents_count} documentos` : "Inactivo"}</strong></div>
                       <div className="cfg-status-row"><span>Retriever</span><strong>{integrationStatus.rag?.retriever || "No informado"}</strong></div>
-                      <div className="cfg-status-row"><span>Rasa</span><strong>{integrationStatus.rasa?.configured ? (integrationStatus.rasa.reachable ? "Disponible" : "Configurado sin respuesta") : "No habilitado"}</strong></div>
-                      <div className="cfg-status-row"><span>Reglas activas</span><strong>{integrationStatus.rules?.active_count ?? 0}</strong></div>
                     </div>
                   )}
                 </div>

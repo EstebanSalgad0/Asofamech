@@ -218,3 +218,44 @@ def update_heatmap_educational_metadata(
         )
 
     return stored_result
+
+
+def delete_heatmap_by_trace(trace_id: str) -> bool:
+    trace_path = _trace_path(trace_id)
+    if not trace_path.exists():
+        return False
+
+    with _WRITE_LOCK:
+        if not trace_path.exists():
+            return False
+
+        stored = json.loads(trace_path.read_text(encoding="utf-8"))
+        image_id = int(stored.get("image_id", 0))
+
+        trace_path.unlink()
+
+        history_path = _image_history_path(image_id)
+        remaining_history: List[Dict[str, Any]] = []
+        if history_path.exists():
+            raw = json.loads(history_path.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                remaining_history = [h for h in raw if h.get("trace_id") != trace_id]
+            history_path.write_text(
+                json.dumps(remaining_history, ensure_ascii=True, sort_keys=True, indent=2),
+                encoding="utf-8",
+            )
+
+        latest_path = _image_index_path(image_id)
+        if latest_path.exists():
+            latest = json.loads(latest_path.read_text(encoding="utf-8"))
+            if latest.get("trace_id") == trace_id:
+                if remaining_history:
+                    next_trace_path = _trace_path(remaining_history[0].get("trace_id", ""))
+                    if next_trace_path.exists():
+                        latest_path.write_text(next_trace_path.read_text(encoding="utf-8"), encoding="utf-8")
+                    else:
+                        latest_path.unlink()
+                else:
+                    latest_path.unlink()
+
+    return True

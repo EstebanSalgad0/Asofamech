@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import require_admin
 from ..db import get_db
-from ..models import AIConfiguration, Document, PlatformRule, User
+from ..models import AIConfiguration, Document, User
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -50,34 +50,7 @@ DEFAULT_AI_CONFIG = {
         "value_type": "integer",
         "description": "Cantidad maxima de documentos RAG enviados al prompt.",
     },
-    "rasa_enabled": {
-        "value": os.getenv("RASA_ENABLED", "false"),
-        "value_type": "boolean",
-        "description": "Indica si Rasa participa como gestor conversacional.",
-    },
-    "rasa_url": {
-        "value": os.getenv("RASA_URL", "http://rasa:5005"),
-        "value_type": "string",
-        "description": "URL esperada del servicio Rasa si se habilita.",
-    },
 }
-
-
-class RuleIn(BaseModel):
-    name: str = Field(min_length=3, max_length=200)
-    scope: str = Field(default="chat", max_length=80)
-    content: str = Field(min_length=5)
-    priority: int = Field(default=100, ge=0, le=999)
-    is_active: bool = True
-
-
-class RuleOut(RuleIn):
-    id: int
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-    class Config:
-        orm_mode = True
 
 
 class AIConfigItem(BaseModel):
@@ -106,19 +79,6 @@ def get_ai_config_map(db: Session) -> dict[str, str]:
     return config
 
 
-def get_active_rule_text(db: Session, scopes: tuple[str, ...] = ("global", "chat", "rag")) -> str:
-    rules = (
-        db.query(PlatformRule)
-        .filter(PlatformRule.is_active == True)
-        .filter(PlatformRule.scope.in_(scopes))
-        .order_by(PlatformRule.priority.asc(), PlatformRule.id.asc())
-        .all()
-    )
-    if not rules:
-        return ""
-    return "\n".join(f"- {rule.name}: {rule.content}" for rule in rules)
-
-
 def _upsert_config_item(db: Session, payload: AIConfigItem) -> AIConfiguration:
     item = db.query(AIConfiguration).filter(AIConfiguration.key == payload.key).first()
     if not item:
@@ -128,82 +88,6 @@ def _upsert_config_item(db: Session, payload: AIConfigItem) -> AIConfiguration:
     item.value_type = payload.value_type or "string"
     item.description = payload.description
     return item
-
-
-@router.get("/rules", response_model=list[RuleOut])
-def list_rules(
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return db.query(PlatformRule).order_by(PlatformRule.priority.asc(), PlatformRule.id.desc()).all()
-
-
-@router.post("/rules", response_model=RuleOut)
-def create_rule(
-    payload: RuleIn,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    rule = PlatformRule(
-        name=payload.name.strip(),
-        scope=payload.scope.strip().lower() or "chat",
-        content=payload.content.strip(),
-        priority=payload.priority,
-        is_active=payload.is_active,
-    )
-    db.add(rule)
-    db.commit()
-    db.refresh(rule)
-    return rule
-
-
-@router.put("/rules/{rule_id}", response_model=RuleOut)
-def update_rule(
-    rule_id: int,
-    payload: RuleIn,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    rule = db.query(PlatformRule).filter(PlatformRule.id == rule_id).first()
-    if not rule:
-        raise HTTPException(status_code=404, detail="Regla no encontrada")
-    rule.name = payload.name.strip()
-    rule.scope = payload.scope.strip().lower() or "chat"
-    rule.content = payload.content.strip()
-    rule.priority = payload.priority
-    rule.is_active = payload.is_active
-    db.commit()
-    db.refresh(rule)
-    return rule
-
-
-@router.patch("/rules/{rule_id}/toggle", response_model=RuleOut)
-def toggle_rule(
-    rule_id: int,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    rule = db.query(PlatformRule).filter(PlatformRule.id == rule_id).first()
-    if not rule:
-        raise HTTPException(status_code=404, detail="Regla no encontrada")
-    rule.is_active = not rule.is_active
-    db.commit()
-    db.refresh(rule)
-    return rule
-
-
-@router.delete("/rules/{rule_id}")
-def delete_rule(
-    rule_id: int,
-    current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    rule = db.query(PlatformRule).filter(PlatformRule.id == rule_id).first()
-    if not rule:
-        raise HTTPException(status_code=404, detail="Regla no encontrada")
-    db.delete(rule)
-    db.commit()
-    return {"ok": True}
 
 
 @router.get("/ai-config")
@@ -249,8 +133,6 @@ async def integrations_status(
 ):
     config = get_ai_config_map(db)
     ollama_url = config.get("ollama_url", DEFAULT_AI_CONFIG["ollama_url"]["value"])
-    rasa_enabled = parse_bool(config.get("rasa_enabled"))
-    rasa_url = config.get("rasa_url", DEFAULT_AI_CONFIG["rasa_url"]["value"])
     documents_count = db.query(Document).count()
 
     ollama = {"configured": bool(ollama_url), "url": ollama_url, "reachable": False}
@@ -261,24 +143,11 @@ async def integrations_status(
     except httpx.HTTPError:
         ollama["reachable"] = False
 
-    rasa = {"configured": rasa_enabled, "url": rasa_url, "reachable": False}
-    if rasa_enabled:
-        try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                response = await client.get(f"{rasa_url}/status")
-                rasa["reachable"] = response.status_code < 500
-        except httpx.HTTPError:
-            rasa["reachable"] = False
-
     return {
         "llama3": ollama,
-        "rasa": rasa,
         "rag": {
             "enabled": parse_bool(config.get("rag_enabled"), True),
             "documents_count": documents_count,
             "retriever": "vector_hashing_cosine_local",
-        },
-        "rules": {
-            "active_count": db.query(PlatformRule).filter(PlatformRule.is_active == True).count(),
         },
     }
