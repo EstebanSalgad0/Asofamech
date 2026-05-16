@@ -10,7 +10,7 @@ export function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState("estudiante");
+  const [role] = useState("estudiante");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -47,7 +47,7 @@ export function AuthPage() {
       saveAuthSession(payload);
       navigate("/dashboard");
     } catch (err) {
-      setError(err.message || "No se pudo iniciar sesion");
+      setError(err.message || "No se pudo iniciar sesión");
     } finally {
       setLoading(false);
     }
@@ -84,14 +84,14 @@ export function AuthPage() {
                   id="name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder={isRegister ? "Dr. Juan Perez" : "Tu nombre"}
+                  placeholder={isRegister ? "Nombre y apellido" : "Tu nombre"}
                   className="form-input"
                   required={isRegister}
                 />
               </div>
 
               <div className="form-group">
-                <label htmlFor="email" className="form-label">Correo electronico</label>
+                <label htmlFor="email" className="form-label">Correo electrónico</label>
                 <input
                   type="email"
                   id="email"
@@ -104,24 +104,14 @@ export function AuthPage() {
               </div>
 
               {isRegister && (
-                <div className="form-group">
-                  <label htmlFor="role" className="form-label">Rol educativo</label>
-                  <select
-                    id="role"
-                    value={role}
-                    onChange={(event) => setRole(event.target.value)}
-                    className="form-input"
-                  >
-                    <option value="estudiante">Estudiante</option>
-                    <option value="docente">Profesor</option>
-                    <option value="administrador">Administrador</option>
-                  </select>
+                <div className="auth-info-note">
+                  Las cuentas nuevas se crean como estudiante. Los permisos docentes y administrativos se asignan desde administracion.
                 </div>
               )}
 
               <div className="form-group">
                 <div className="form-label-row">
-                  <label htmlFor="password" className="form-label">Contrasena</label>
+                    <label htmlFor="password" className="form-label">Contraseña</label>
                 </div>
                 <div className="password-input-wrapper">
                   <input
@@ -129,16 +119,16 @@ export function AuthPage() {
                     id="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Minimo 6 caracteres"
+                    placeholder="Mínimo 8 caracteres, con letras y números"
                     className="form-input"
-                    minLength={6}
+                    minLength={8}
                     required
                   />
                   <button
                     type="button"
                     className="password-toggle"
                     onClick={() => setShowPassword((value) => !value)}
-                    aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                   >
                     {showPassword ? "Ocultar" : "Ver"}
                   </button>
@@ -148,17 +138,17 @@ export function AuthPage() {
               {error && <div className="auth-error">{error}</div>}
 
               <button type="submit" className="btn-auth-submit" disabled={loading}>
-                {loading ? "Validando..." : isRegister ? "Registrarse" : "Iniciar sesion"}
+                {loading ? "Validando..." : isRegister ? "Registrarse" : "Iniciar sesión"}
               </button>
             </form>
 
             <p className="auth-switch">
-              {isRegister ? "Ya tienes cuenta? " : "No tienes cuenta? "}
+              {isRegister ? "¿Ya tienes cuenta? " : "¿No tienes cuenta? "}
               <Link
                 to={isRegister ? "/auth" : "/auth?register=true"}
                 className="auth-switch-link"
               >
-                {isRegister ? "Inicia sesion aqui" : "Registrate aqui"}
+                {isRegister ? "Inicia sesión aquí" : "Regístrate aquí"}
               </Link>
             </p>
           </div>
@@ -167,14 +157,14 @@ export function AuthPage() {
         <div className="auth-info-side">
           <div className="auth-info-content">
             <h2 className="auth-info-title">
-              Educacion medica<br />del futuro
+              Educación médica<br />del futuro
             </h2>
             <p className="auth-info-subtitle">
-              Usa herramientas educativas con IA para reforzar aprendizaje, casos y revision histopatologica.
+              Usa herramientas educativas con IA para reforzar aprendizaje, casos y revisión histopatológica.
             </p>
 
             <ul className="auth-info-features">
-              <li><span className="feature-check">OK</span> Asistente medico educativo</li>
+              <li><span className="feature-check">OK</span> Asistente médico educativo</li>
               <li><span className="feature-check">OK</span> Tests SCT personalizados</li>
               <li><span className="feature-check">OK</span> Modulo histopatologico protegido por rol</li>
             </ul>

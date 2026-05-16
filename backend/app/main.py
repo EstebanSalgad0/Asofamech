@@ -4,7 +4,7 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError
 import time
 import os
 
-from .routers import auth, chat, cases, sct, medical_images, histopathology
+from .routers import admin, auth, chat, cases, rag, sct, medical_images, histopathology
 from .db import Base, engine
 
 app = FastAPI(title="Backend ASOFAMECH Educativo")
@@ -63,6 +63,8 @@ def health():
 # Incluir los routers (endpoints /api/chat, /api/cases y /api/sct)
 app.include_router(chat.router)
 app.include_router(cases.router)
+app.include_router(rag.router)
+app.include_router(admin.router)
 app.include_router(sct.router)
 app.include_router(auth.router)
 app.include_router(medical_images.router)

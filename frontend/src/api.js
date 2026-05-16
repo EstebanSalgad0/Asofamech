@@ -1,9 +1,11 @@
+import { authFetch, authHeaders } from "./authClient";
+
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
 
 export async function sendChatMessage(text) {
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ text }),
   });
 
@@ -12,6 +14,95 @@ export async function sendChatMessage(text) {
   }
 
   return res.json(); // { messages: [...] } desde FastAPI → Ollama
+}
+
+async function parseJsonResponse(res, fallback) {
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(payload?.detail || fallback || `Error API: ${res.status}`);
+  }
+  return payload;
+}
+
+export async function listRagDocuments() {
+  const res = await authFetch("/api/rag/documents");
+  return parseJsonResponse(res, "No se pudieron cargar los documentos RAG");
+}
+
+export async function createRagDocument(document) {
+  const res = await authFetch("/api/rag/documents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(document),
+  });
+  return parseJsonResponse(res, "No se pudo crear el documento RAG");
+}
+
+export async function updateRagDocument(documentId, document) {
+  const res = await authFetch(`/api/rag/documents/${documentId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(document),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar el documento RAG");
+}
+
+export async function deleteRagDocument(documentId) {
+  const res = await authFetch(`/api/rag/documents/${documentId}`, { method: "DELETE" });
+  return parseJsonResponse(res, "No se pudo eliminar el documento RAG");
+}
+
+export async function reindexRagDocument(documentId) {
+  const res = await authFetch(`/api/rag/documents/${documentId}/reindex`, { method: "POST" });
+  return parseJsonResponse(res, "No se pudo reindexar el documento RAG");
+}
+
+export async function reindexAllRagDocuments() {
+  const res = await authFetch("/api/rag/reindex", { method: "POST" });
+  return parseJsonResponse(res, "No se pudo reindexar el corpus RAG");
+}
+
+export async function listAdminRules() {
+  const res = await authFetch("/api/admin/rules");
+  return parseJsonResponse(res, "No se pudieron cargar las reglas");
+}
+
+export async function saveAdminRule(rule, ruleId = null) {
+  const res = await authFetch(ruleId ? `/api/admin/rules/${ruleId}` : "/api/admin/rules", {
+    method: ruleId ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(rule),
+  });
+  return parseJsonResponse(res, "No se pudo guardar la regla");
+}
+
+export async function toggleAdminRule(ruleId) {
+  const res = await authFetch(`/api/admin/rules/${ruleId}/toggle`, { method: "PATCH" });
+  return parseJsonResponse(res, "No se pudo cambiar el estado de la regla");
+}
+
+export async function deleteAdminRule(ruleId) {
+  const res = await authFetch(`/api/admin/rules/${ruleId}`, { method: "DELETE" });
+  return parseJsonResponse(res, "No se pudo eliminar la regla");
+}
+
+export async function getAIConfig() {
+  const res = await authFetch("/api/admin/ai-config");
+  return parseJsonResponse(res, "No se pudo cargar la configuracion IA");
+}
+
+export async function updateAIConfig(items) {
+  const res = await authFetch("/api/admin/ai-config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  return parseJsonResponse(res, "No se pudo guardar la configuracion IA");
+}
+
+export async function getIntegrationStatus() {
+  const res = await authFetch("/api/admin/integrations/status");
+  return parseJsonResponse(res, "No se pudo verificar la integracion IA");
 }
 
 export async function generateSCT(numItems = 5, difficulty = "pregrado", focus = "tuberculosis pulmonar") {
