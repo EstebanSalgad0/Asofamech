@@ -33,6 +33,11 @@ Ya existe una version funcional ampliada:
 - UI que muestra estado del modelo, umbral, probabilidades, QC y advertencia educativa;
 - salida educativa intermedia `baja_sospecha_no_metastasica` para ROIs
   evaluables con `P(no_metastasico)` moderada y `P(metastasico)` baja;
+- evaluador offline contra XML oficiales CAMELYON17 para separar
+  `true_positive`, `false_positive`, `false_negative` y `true_negative` sin
+  etiquetado visual no experto;
+- pipeline Stage 9 experimental que convierte errores XML de train/val en
+  hard negatives y positivos dificiles sin contaminar el test fijo;
 - importacion local de laminas CAMELYON17 ya descargadas en servidor;
 - DZI dinamico para WSI `.tif/.svs` grandes sin subir varios GB por navegador;
 - primer escaneo tipo heatmap sobre ROI 1, dividiendo en tiles y pintando
@@ -519,17 +524,79 @@ nuevos, 6 laminas candidatas adicionales, se corrigio la seleccion usando
 `stages.csv` y se excluyeron como negativos los slides positivos sin XML local.
 El checkpoint `tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt`
 mejora AUC, macro F1, recall/precision tumoral, recall de estroma y reduce
-`stroma->tumor` de 22% a 18% contra Stage 6 en el mismo test corregido. Queda
-como candidato activo para validacion visual en el backend.
+`stroma->tumor` de 22% a 18% contra Stage 6 en el mismo test corregido.
+
+Resultado de evaluacion XML Stage 8 y Stage 9:
+
+```text
+Test fijo XML, truth-mode=center:
+
+Stage 8 anterior, threshold 0.90:
+TP=78, FP=23, FN=42, TN=653
+
+Stage 9 experimental:
+- se evaluo Stage 8 en train/val contra XML oficial;
+- se generaron 81 falsos positivos como hard negatives;
+- se generaron 180 falsos negativos como positivos dificiles;
+- se creo camelyon17_manifest_stage9_xml_errors_merged_raw.csv;
+- se reutilizaron embeddings Stage 8 con reuse_manifest_embeddings.py;
+- se entrenaron variantes weighted, unweighted y weight050.
+
+Mejor variante cercana:
+Stage 9 weight050, threshold 0.80:
+TP=77, FP=21, FN=43, TN=655
+
+Decision:
+Stage 9 no reemplaza a Stage 8 porque no mejora claramente el
+balance sensibilidad/falsos positivos. La tuberia queda lista, pero la mejora
+real requiere mas datos nuevos con XML oficial, no solo reponderar errores ya
+vistos.
+```
+
+Resultado Stage 10 con mas datos nuevos:
+
+```text
+Dataset local:
+54 laminas TIF
+24 anotaciones XML
+
+Manifest oficial:
+positive_rows=1152
+negative_rows=2448
+
+Manifest balanceado:
+train: no_metastasico=1200, metastasico=972, estroma=374
+val:   no_metastasico=550,  metastasico=486, estroma=50
+test:  no_metastasico=358,  metastasico=244, estroma=50
+
+Checkpoint activo:
+tri_head_camelyon17_stage10_balanced_v1_weighted.pt
+```
+
+Comparacion contra el mismo test XML fijo de Stage 8:
+
+```text
+Stage 8 anterior, threshold 0.90:
+TP=78, FP=23, FN=42, TN=653
+
+Stage 10 weighted, threshold 0.90:
+TP=81, FP=17, FN=39, TN=659
+```
+
+Decision:
+Stage 10 reemplaza a Stage 8 como checkpoint activo porque mejora el balance
+tumor/no tumor con el mismo umbral: mas verdaderos positivos, menos falsos
+positivos, menos falsos negativos y mas verdaderos negativos. La validacion
+sigue siendo educativa y debe presentarse como prototipo, no como diagnostico.
 
 La siguiente accion tecnica debe ser:
 
 ```text
-1. levantar backend/Docker con el checkpoint Stage 8 corregido;
-2. repetir validacion visual en laminas tumorales y zonas sanas conocidas;
-3. registrar falsos positivos reales desde el visor como hard negatives;
-4. revisar ROIs de baja sospecha y confirmar si deben quedar como sanas,
-   inciertas o no evaluables;
-5. mantener un test fijo por coordenadas oficiales para no comparar contra tests movidos;
-6. si Stage 8 se comporta mejor en la app, dejarlo como checkpoint activo y continuar con cache/cola durable de heatmaps.
+1. mantener Stage 10 como checkpoint activo en backend/Docker;
+2. usar el evaluador XML como prueba fija antes de cualquier reemplazo futuro;
+3. validar visualmente Stage 10 con ROIs conocidas en patient_017_node_2 y otras laminas;
+4. seguir agregando laminas CAMELYON17 con XML y negativas oficiales por centros distintos;
+5. conservar test fijo por coordenadas oficiales para comparaciones honestas;
+6. documentar para el informe que Stage 9 fue un experimento no activado;
+7. continuar luego con cache/cola durable de heatmaps y aislamiento de datos por usuario.
 ```

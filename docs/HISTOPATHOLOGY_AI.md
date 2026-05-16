@@ -116,7 +116,7 @@ La tuberia escribe:
 Configura el checkpoint entrenado antes de levantar FastAPI:
 
 ```powershell
-$env:HISTO_CLASSIFIER_CHECKPOINT = "C:\ruta\absoluta\Asofamech\backend\artifacts\histopathology\checkpoints\tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt"
+$env:HISTO_CLASSIFIER_CHECKPOINT = "C:\ruta\absoluta\Asofamech\backend\artifacts\histopathology\checkpoints\tri_head_camelyon17_stage10_balanced_v1_weighted.pt"
 $env:HISTO_CONCH_CHECKPOINT_REF = "hf_hub:MahmoodLab/conch"
 $env:HISTO_AUDIT_LOG_PATH = "artifacts/histopathology/audit_log.jsonl"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
@@ -132,7 +132,7 @@ El endpoint debe responder `model_ready=true` cuando el checkpoint de la cabeza
 3-class y CONCH esten disponibles. En Docker, la ruta esperada del checkpoint es:
 
 ```text
-/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt
+/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage10_balanced_v1_weighted.pt
 ```
 
 En ejecucion local, la ruta se define con `HISTO_CLASSIFIER_CHECKPOINT`.
@@ -146,7 +146,7 @@ y liviana.
 
 Variables y mounts configurados en `docker-compose.yml`:
 
-- `HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt`
+- `HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage10_balanced_v1_weighted.pt`
 - `HISTO_CONCH_CHECKPOINT_REF=hf_hub:MahmoodLab/conch`
 - `HISTO_AUDIT_LOG_PATH=/app/artifacts/histopathology/audit_log.jsonl`
 - `HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD=0.90`
@@ -1022,6 +1022,196 @@ ROI evaluable por QC
 Esta salida no reemplaza una etiqueta firme ni es diagnostica; sirve para que
 el visor y el heatmap diferencien zonas de baja sospecha de zonas realmente
 inciertas o no evaluables.
+
+Evaluacion automatica contra XML CAMELYON17:
+
+Para no depender de criterio visual no experto, se agrego un evaluador offline
+que compara predicciones del modelo contra las anotaciones ASAP XML oficiales de
+CAMELYON17. El problema se transforma en una validacion geometrica:
+
+```text
+patch/ROI: x, y, width, height
+XML oficial: poligonos tumorales
+verdad automatica: el patch cae o no cae sobre tumor anotado
+```
+
+Comando base:
+
+```powershell
+.\.venv\Scripts\python.exe -m histopathology_offline.evaluate_camelyon17_xml_predictions `
+  --manifest artifacts\histopathology\manifests\camelyon17_manifest_stage8_corrected_balanced_v1.csv `
+  --embeddings-dir artifacts\histopathology\embeddings-camelyon17-stage8-corrected-balanced-v1 `
+  --checkpoint artifacts\histopathology\checkpoints\tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt `
+  --annotations-dir data\camelyon17\annotations `
+  --targets-csv data\camelyon17\stages.csv `
+  --output-dir artifacts\histopathology\evaluation\stage8_xml `
+  --splits test `
+  --truth-mode center `
+  --tumor-threshold 0.90 `
+  --device cuda
+```
+
+Archivos generados:
+
+```text
+all_predictions.csv
+true_positive.csv
+false_positive.csv
+false_negative.csv
+true_negative.csv
+unknown.csv
+summary.json
+```
+
+Interpretacion:
+
+```text
+XML tumor + modelo tumor            -> true_positive
+XML tumor + modelo no tumor         -> false_negative
+fuera de XML/slide negativo + tumor -> false_positive candidato
+fuera de XML/slide negativo + no tumor -> true_negative
+slide positivo sin XML local        -> unknown
+```
+
+Esta evaluacion permite minar errores para Stage 9 sin que el desarrollador
+tenga que identificar tejido manualmente. Los falsos positivos candidatos se
+pueden convertir en hard negatives; los falsos negativos dentro de XML se pueden
+usar como positivos dificiles.
+
+Resultado Stage 8 contra XML oficial fijo, usando solo `test`:
+
+```text
+checkpoint evaluado: tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt
+truth-mode: center
+threshold: 0.90
+
+true_positive:  78
+false_positive: 23
+false_negative: 42
+true_negative:  653
+precision tumor XML: 77.2%
+recall tumor XML:    65.0%
+```
+
+Stage 9 experimental:
+
+```powershell
+.\.venv\Scripts\python.exe -m histopathology_offline.evaluate_camelyon17_xml_predictions `
+  --manifest artifacts\histopathology\manifests\camelyon17_manifest_stage8_corrected_balanced_v1.csv `
+  --embeddings-dir artifacts\histopathology\embeddings-camelyon17-stage8-corrected-balanced-v1 `
+  --checkpoint artifacts\histopathology\checkpoints\tri_head_camelyon17_stage8_corrected_balanced_v1_weighted.pt `
+  --annotations-dir data\camelyon17\annotations `
+  --targets-csv data\camelyon17\stages.csv `
+  --output-dir artifacts\histopathology\evaluation\stage8_xml_train_val_center_t090 `
+  --splits train,val `
+  --truth-mode center `
+  --tumor-threshold 0.90 `
+  --device auto
+
+.\.venv\Scripts\python.exe -m histopathology_offline.build_stage9_manifest_from_xml_errors `
+  --evaluation-csv artifacts\histopathology\evaluation\stage8_xml_train_val_center_t090\all_predictions.csv `
+  --output artifacts\histopathology\manifests\camelyon17_manifest_stage9_xml_error_candidates_trainval.csv `
+  --summary artifacts\histopathology\reports\camelyon17_manifest_stage9_xml_error_candidates_trainval_summary.json `
+  --include-outcomes false_positive,false_negative
+
+.\.venv\Scripts\python.exe -m histopathology_offline.merge_patch_manifests `
+  --base-manifest artifacts\histopathology\manifests\camelyon17_manifest_stage8_corrected_balanced_v1.csv `
+  --extra-manifest artifacts\histopathology\manifests\camelyon17_manifest_stage9_xml_error_candidates_trainval.csv `
+  --output artifacts\histopathology\manifests\camelyon17_manifest_stage9_xml_errors_merged_raw.csv
+
+.\.venv\Scripts\python.exe -m histopathology_offline.reuse_manifest_embeddings `
+  --source-embeddings-dir artifacts\histopathology\embeddings-camelyon17-stage8-corrected-balanced-v1 `
+  --target-manifest artifacts\histopathology\manifests\camelyon17_manifest_stage9_xml_errors_merged_raw.csv `
+  --output-dir artifacts\histopathology\embeddings-camelyon17-stage9-xml-errors-v1 `
+  --source-splits train,val,test `
+  --target-splits train,val,test
+```
+
+El manifiesto Stage 9 agrego 261 casos dificiles extraidos automaticamente desde
+XML oficial, sin tocar el test fijo:
+
+```text
+false_positive -> 81 hard negatives
+false_negative -> 180 positivos dificiles
+train extra -> 223 filas
+val extra   -> 38 filas
+test extra  -> 0 filas
+```
+
+Comparacion XML en el mismo test fijo:
+
+```text
+modelo / umbral                  TP  FP  FN  TN  lectura
+Stage 8 anterior / 0.90          78  23  42 653  baseline fijo
+Stage 8 anterior / 0.80          89  35  31 641  mas sensible, mas FP
+Stage 9 weighted / 0.90          56  13  64 663  menos FP, pierde demasiados tumores
+Stage 9 unweighted / 0.80        80  26  40 650  cercano, no supera claramente Stage 8
+Stage 9 weight050 / 0.80         77  21  43 655  menos FP, pero no mejora sensibilidad
+```
+
+Decision: no se reemplazo Stage 8 por Stage 9. La tuberia XML queda
+implementada para seguir iterando, pero los resultados indican que repetir
+errores del mismo manifest no alcanza para mejorar de forma robusta. La siguiente
+mejora real debe incorporar mas laminas/patches nuevos con respaldo oficial y no
+solo reponderar ejemplos ya vistos.
+
+Stage 10: datos nuevos CAMELYON17 con XML oficial:
+
+Se amplio el dataset local a 54 laminas `.tif` y 24 anotaciones XML. La mejora
+no vino de etiquetar tejido manualmente, sino de agregar slides nuevos con
+verdad oficial CAMELYON17 y volver a entrenar contra ese soporte.
+
+```text
+nuevas positivas con XML:
+patient_015_node_1, patient_015_node_2, patient_017_node_4,
+patient_021_node_3, patient_022_node_4, patient_024_node_1,
+patient_034_node_3
+
+nuevas negativas oficiales utiles:
+patient_021_node_2, patient_022_node_3, patient_023_node_0,
+patient_023_node_1, patient_024_node_3
+```
+
+Manifiesto oficial Stage 10:
+
+```text
+slides: 54
+positive_rows: 1152
+negative_rows: 2448
+
+label_source:
+negative_slide: 1296
+annotation_official: 1152
+annotation_official_non_tumor: 1152
+```
+
+Manifiesto balanceado Stage 10:
+
+```text
+train: no_metastasico=1200, metastasico=972, estroma=374
+val:   no_metastasico=550,  metastasico=486, estroma=50
+test:  no_metastasico=358,  metastasico=244, estroma=50
+```
+
+Checkpoint generado:
+
+```text
+artifacts/histopathology/checkpoints/tri_head_camelyon17_stage10_balanced_v1_weighted.pt
+```
+
+Comparacion honesta contra el mismo test XML fijo usado en Stage 8:
+
+```text
+modelo / umbral          TP  FP  FN  TN
+Stage 8 / 0.90           78  23  42 653
+Stage 10 weighted / 0.90 81  17  39 659
+```
+
+Lectura: Stage 10 mejora al checkpoint Stage 8 con el mismo umbral de 0.90:
+detecta 3 tumores adicionales, reduce 6 falsos positivos, reduce 3 falsos
+negativos y aumenta 6 verdaderos negativos. Por eso queda como checkpoint activo
+en Docker/backend para la siguiente validacion visual. Sigue siendo un modulo
+educativo no diagnostico.
 
 Herramientas agregadas para iterar:
 
