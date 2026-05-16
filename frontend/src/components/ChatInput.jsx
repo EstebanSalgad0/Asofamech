@@ -23,7 +23,7 @@ export function ChatInput({ onSend }) {
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Escribe tu pregunta sobre TB u otra patología..."
+        placeholder="Escribe tu pregunta medica o de salud..."
         style={{ flex: 1, padding: 8 }}
       />
       <button onClick={handleSend}>Enviar</button>
