@@ -7,7 +7,7 @@ import os
 from .routers import auth, chat, cases, sct, medical_images, histopathology
 from .db import Base, engine
 
-app = FastAPI(title="Backend TB Educativa")
+app = FastAPI(title="Backend ASOFAMECH Educativo")
 
 # --- CORS ---
 # Si quieres permitir todo en desarrollo, puedes cambiar a allow_origins=["*"]

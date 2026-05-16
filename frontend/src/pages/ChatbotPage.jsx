@@ -6,7 +6,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { clearAuthSession, userStorageKey } from "../authClient";
 
 const STORAGE_KEY = "asofamech_chat_history";
-const BOT_WELCOME = "¡Hola! Soy tu asistente educativo médico. Puedo ayudarte con preguntas sobre enfermedades, síntomas, diagnósticos, tratamientos y casos de estudio. ¿En qué puedo ayudarte hoy?";
+const BOT_WELCOME = "¡Hola! Soy tu asistente educativo medico. Puedo ayudarte con preguntas sobre enfermedades, sintomas, diagnosticos, tratamientos, prevencion, examenes, medicamentos y casos de estudio. Solo respondo temas del ambito medico y de salud. ¿En que puedo ayudarte hoy?";
 
 function getTimestamp() {
   return new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
@@ -333,7 +333,7 @@ export function ChatbotPage() {
 
           <div className="chat-v2-disclaimer">
             <span>⚠️</span>
-            <p>Solo fines educativos. No reemplaza la consulta médica profesional.</p>
+            <p>Solo fines educativos y temas medicos. No reemplaza la consulta medica profesional.</p>
           </div>
 
           <div className="chat-v2-messages">
