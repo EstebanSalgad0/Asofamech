@@ -3977,6 +3977,20 @@ a { color: inherit; text-decoration: none; }
   flex-direction: column;
   gap: 8px;
 }
+.cfg-heatmap-history-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.cfg-heatmap-history-row .cfg-heatmap-history-item {
+  flex: 1;
+  min-width: 0;
+}
+.cfg-heatmap-delete-btn {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
+}
 .cfg-heatmap-history-item {
   display: flex;
   flex-direction: column;

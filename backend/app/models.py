@@ -70,18 +70,6 @@ class ChatLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-class PlatformRule(Base):
-    __tablename__ = "platform_rules"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(200), nullable=False)
-    scope = Column(String(80), nullable=False, default="chat")  # chat, rag, sct, global
-    content = Column(Text, nullable=False)
-    priority = Column(Integer, nullable=False, default=100)
-    is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
 class AIConfiguration(Base):
     __tablename__ = "ai_configurations"
     id = Column(Integer, primary_key=True, index=True)

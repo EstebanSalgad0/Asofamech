@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_optional_current_user
 from ..db import get_db
 from ..models import Case, ChatLog, User
-from .admin import get_active_rule_text, get_ai_config_map, parse_bool
+from .admin import get_ai_config_map, parse_bool
 from .rag import build_rag_context, retrieve_rag_hits
 
 
@@ -229,7 +229,6 @@ def _build_cases_context(question: str, db: Session) -> str:
 def _build_system_prompt(
     cases_context: str = "",
     rag_context: str = "",
-    active_rules: str = "",
 ) -> str:
     system_prompt = (
         "Eres un asistente medico educativo de alcance general. Responde en espanol "
@@ -262,12 +261,6 @@ def _build_system_prompt(
             "Prioriza esta informacion cuando sea pertinente y menciona de forma breve "
             "que la respuesta se apoya en material cargado en la plataforma:\n"
             f"{rag_context}"
-        )
-
-    if active_rules:
-        system_prompt += (
-            "\n\nReglas administrativas activas que debes respetar:\n"
-            f"{active_rules}"
         )
 
     return system_prompt
@@ -326,8 +319,7 @@ async def chat(
             cases_context = _build_cases_context(user_text, db)
             rag_hits = retrieve_rag_hits(db, user_text, max_context_documents) if rag_enabled else []
             rag_context = build_rag_context(rag_hits)
-            active_rules = get_active_rule_text(db)
-            system_prompt = _build_system_prompt(cases_context, rag_context, active_rules)
+            system_prompt = _build_system_prompt(cases_context, rag_context)
             payload = {
                 "model": model,
                 "messages": [
