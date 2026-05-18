@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { sendChatMessage } from "../api";
 import { startSession, flushSession, trackConsultation, pushActivity } from "../tracker";
@@ -6,7 +6,29 @@ import { AppSidebar } from "../components/AppSidebar";
 import { clearAuthSession, userStorageKey } from "../authClient";
 
 const STORAGE_KEY = "asofamech_chat_history";
-const BOT_WELCOME = "¡Hola! Soy tu asistente educativo medico. Puedo ayudarte con preguntas sobre enfermedades, sintomas, diagnosticos, tratamientos, prevencion, examenes, medicamentos y casos de estudio. Solo respondo temas del ambito medico y de salud. ¿En que puedo ayudarte hoy?";
+const NEW_CHAT_FLAG = "asofamech_new_chat_requested";
+const BOT_WELCOME =
+  "¡Hola! Soy tu asistente educativo médico. Puedo ayudarte con preguntas sobre enfermedades, síntomas, diagnósticos, tratamientos, prevención, exámenes, medicamentos y casos de estudio. Solo respondo temas del ámbito médico y de salud. ¿En qué puedo ayudarte hoy?";
+
+const TOPIC_PATTERNS = {
+  cardiología: /coraz[oó]n|cardio|infarto|arritmia|angina|ecg|valvul|pericardio|miocardio/i,
+  farmacología: /f[aá]rmac|medicament|dosis|antibiótic|analgésic|farmacol|antiinflamator/i,
+  nefrología: /ri[ñn][oó]n|renal|creatinin|di[aá]lisis|nefr|glomerulo/i,
+  infectología: /infecci[oó]n|bacteria|virus|covid|dengue|sepsis|infect|antimicrobian/i,
+  neurología: /cerebro|neurol[oó]g|nervio|\bacv\b|parkinson|epilepsia|esclerosis|migraña/i,
+  mecánica: /fuerza|mec[aá]nica|articular|pr[oó]tesis|rodilla|biomec[aá]nic|torque/i,
+};
+
+function detectTopic(text) {
+  for (const [topic, pattern] of Object.entries(TOPIC_PATTERNS)) {
+    if (pattern.test(text)) return topic;
+  }
+  return null;
+}
+
+function isSecurityWarning(text) {
+  return /solo puedo responder|fuera del [aá]mbito|puedo ayudarte si la consulta/i.test(text);
+}
 
 function getTimestamp() {
   return new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
@@ -44,10 +66,11 @@ function createNewConversation() {
     id: Date.now(),
     title: "Nueva conversación",
     saved: false,
+    topic: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     messages: [
-      { sender: "bot", text: BOT_WELCOME, time: getTimestamp() },
+      { sender: "bot", text: BOT_WELCOME, time: getTimestamp(), ragSources: [], isWarning: false },
     ],
   };
 }
@@ -55,32 +78,53 @@ function createNewConversation() {
 function renderMarkdown(text) {
   if (!text) return "";
   let html = text;
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="message-link">$1</a>');
-  html = html.replace(/<(https?:\/\/[^>]+)>/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="message-link">$1</a>');
-  const lines = html.split('\n');
+  html = html.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="message-link">$1</a>'
+  );
+  html = html.replace(
+    /<(https?:\/\/[^>]+)>/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer" class="message-link">$1</a>'
+  );
+  const lines = html.split("\n");
   const processed = [];
   let inList = false;
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
-    if (line.trim() === '' && processed.length > 0 && processed[processed.length - 1] === '<br/>') continue;
+    if (line.trim() === "" && processed.length > 0 && processed[processed.length - 1] === "<br/>")
+      continue;
     if (line.match(/^\*\*[^*]+\*\*:?\s*$/)) {
-      if (inList) { processed.push('</ul>'); inList = false; }
+      if (inList) {
+        processed.push("</ul>");
+        inList = false;
+      }
       line = line.replace(/^\*\*([^*]+)\*\*:?\s*$/, '<h3 class="message-heading">$1</h3>');
-      processed.push(line); continue;
+      processed.push(line);
+      continue;
     }
     const listMatch = line.match(/^[\s]*[\*\-]\s+(.+)$/);
     if (listMatch) {
-      if (!inList) { processed.push('<ul class="message-list">'); inList = true; }
+      if (!inList) {
+        processed.push('<ul class="message-list">');
+        inList = true;
+      }
       let itemContent = listMatch[1];
-      itemContent = itemContent.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      processed.push(`<li>${itemContent}</li>`); continue;
-    } else if (inList) { processed.push('</ul>'); inList = false; }
-    if (line.trim() === '') { processed.push('<br/>'); continue; }
-    line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    if (line.trim() !== '') processed.push(`<p class="message-paragraph">${line}</p>`);
+      itemContent = itemContent.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      processed.push(`<li>${itemContent}</li>`);
+      continue;
+    } else if (inList) {
+      processed.push("</ul>");
+      inList = false;
+    }
+    if (line.trim() === "") {
+      processed.push("<br/>");
+      continue;
+    }
+    line = line.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    if (line.trim() !== "") processed.push(`<p class="message-paragraph">${line}</p>`);
   }
-  if (inList) processed.push('</ul>');
-  return processed.join('');
+  if (inList) processed.push("</ul>");
+  return processed.join("");
 }
 
 export function ChatbotPage() {
@@ -92,18 +136,30 @@ export function ChatbotPage() {
   const [currentId, setCurrentId] = useState(null);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [toast, setToast] = useState(null);
+  const [convSearch, setConvSearch] = useState("");
+  const [topicFilter, setTopicFilter] = useState(null);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
     const token = localStorage.getItem("auth_token");
-    if (!userData || !token) { clearAuthSession(); navigate("/auth"); return; }
+    if (!userData || !token) {
+      clearAuthSession();
+      navigate("/auth");
+      return;
+    }
     setUser(JSON.parse(userData));
     const savedRole = localStorage.getItem("role");
     if (savedRole) setRole(savedRole);
     startSession();
     let stored = loadConversations();
+    const wantsNew = sessionStorage.getItem(NEW_CHAT_FLAG) === "1";
+    if (wantsNew) {
+      sessionStorage.removeItem(NEW_CHAT_FLAG);
+      const fresh = createNewConversation();
+      stored = [fresh, ...stored];
+      saveConversations(stored);
+    }
     if (stored.length === 0) {
       const fresh = createNewConversation();
       stored = [fresh];
@@ -135,12 +191,42 @@ export function ChatbotPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // RAG sources from the last bot message with sources
+  const activeRagSources = useMemo(() => {
+    if (!current) return [];
+    const botMsgs = current.messages.filter(
+      (m) => m.sender === "bot" && Array.isArray(m.ragSources) && m.ragSources.length > 0
+    );
+    return botMsgs.length > 0 ? botMsgs[botMsgs.length - 1].ragSources : [];
+  }, [current]);
+
+  // Topic counts across all conversations
+  const topicCounts = useMemo(() => {
+    const counts = {};
+    conversations.forEach((c) => {
+      if (c.topic) counts[c.topic] = (counts[c.topic] || 0) + 1;
+    });
+    return counts;
+  }, [conversations]);
+
+  // Filtered conversations list
+  const filteredConversations = useMemo(() => {
+    let result = conversations;
+    if (topicFilter) result = result.filter((c) => c.topic === topicFilter);
+    if (convSearch.trim()) {
+      const q = convSearch.toLowerCase();
+      result = result.filter((c) => c.title.toLowerCase().includes(q));
+    }
+    return result;
+  }, [conversations, topicFilter, convSearch]);
+
   const handleNewConversation = () => {
     const fresh = createNewConversation();
     const updated = [fresh, ...conversations];
     persist(updated);
     setCurrentId(fresh.id);
-    setShowSavedOnly(false);
+    setTopicFilter(null);
+    setConvSearch("");
   };
 
   const handleSelectConversation = (id) => setCurrentId(id);
@@ -162,17 +248,56 @@ export function ChatbotPage() {
 
   const handleToggleSave = (e, id) => {
     e.stopPropagation();
-    const updated = conversations.map((c) => c.id === id ? { ...c, saved: !c.saved } : c);
+    const updated = conversations.map((c) => (c.id === id ? { ...c, saved: !c.saved } : c));
     persist(updated);
     const conv = updated.find((c) => c.id === id);
-    showToast(conv.saved ? `"${conv.title}" guardada` : `"${conv.title}" removida`, "success");
+    showToast(conv.saved ? `"${conv.title}" guardada` : `"${conv.title}" removida`);
   };
 
   const handleSaveCurrentConversation = () => {
     if (!current) return;
-    const updated = conversations.map((c) => c.id === currentId ? { ...c, saved: true } : c);
+    const updated = conversations.map((c) =>
+      c.id === currentId ? { ...c, saved: true } : c
+    );
     persist(updated);
-    showToast(`"${current.title}" guardada`, "success");
+    showToast(`"${current.title}" guardada`);
+  };
+
+  const handleRegenerateLastResponse = async () => {
+    if (!current || isLoading) return;
+    const msgs = current.messages;
+    const lastUserIdx = [...msgs].reverse().findIndex((m) => m.sender === "user");
+    if (lastUserIdx === -1) return;
+    const userMsgIdx = msgs.length - 1 - lastUserIdx;
+    const userMsg = msgs[userMsgIdx];
+    const trimmed = msgs.slice(0, userMsgIdx + 1);
+    const updatedConv = { ...current, updatedAt: new Date().toISOString(), messages: trimmed };
+    const updated = conversations.map((c) => (c.id === currentId ? updatedConv : c));
+    persist(updated);
+    setIsLoading(true);
+    try {
+      const data = await sendChatMessage(userMsg.text);
+      const allBotTexts = (data.messages || []).map((m) => m.text || "").join("\n\n");
+      const ragSources = data.rag_sources || [];
+      const botMsg = {
+        sender: "bot",
+        text: allBotTexts,
+        time: getTimestamp(),
+        ragSources,
+        isWarning: isSecurityWarning(allBotTexts),
+      };
+      const withResponse = {
+        ...updatedConv,
+        updatedAt: new Date().toISOString(),
+        messages: [...trimmed, botMsg],
+      };
+      const updated2 = updated.map((c) => (c.id === currentId ? withResponse : c));
+      persist(updated2);
+    } catch {
+      showToast("Error al re-generar la respuesta", "error");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSend = async () => {
@@ -180,9 +305,18 @@ export function ChatbotPage() {
     const userMsg = { sender: "user", text: inputText, time: getTimestamp() };
     const isFirstUserMessage = !current.messages.some((m) => m.sender === "user");
     const newTitle = isFirstUserMessage
-      ? inputText.length > 40 ? inputText.slice(0, 40) + "..." : inputText
+      ? inputText.length > 40
+        ? inputText.slice(0, 40) + "..."
+        : inputText
       : current.title;
-    const updatedConv = { ...current, title: newTitle, updatedAt: new Date().toISOString(), messages: [...current.messages, userMsg] };
+    const newTopic = isFirstUserMessage ? detectTopic(inputText) : current.topic;
+    const updatedConv = {
+      ...current,
+      title: newTitle,
+      topic: newTopic,
+      updatedAt: new Date().toISOString(),
+      messages: [...current.messages, userMsg],
+    };
     const updated = conversations.map((c) => (c.id === currentId ? updatedConv : c));
     persist(updated);
     setInputText("");
@@ -190,19 +324,35 @@ export function ChatbotPage() {
     try {
       const data = await sendChatMessage(inputText);
       const allBotTexts = (data.messages || []).map((m) => m.text || "").join("\n\n");
-      const ragSources = (data.rag_sources || []).map((source) => source.title).filter(Boolean);
-      const sourcesText = ragSources.length
-        ? `\n\nFuentes RAG usadas: ${ragSources.join(", ")}`
-        : "";
-      const botMsg = { sender: "bot", text: `${allBotTexts}${sourcesText}`, time: getTimestamp() };
+      const ragSources = data.rag_sources || [];
+      const botMsg = {
+        sender: "bot",
+        text: allBotTexts,
+        time: getTimestamp(),
+        ragSources,
+        isWarning: isSecurityWarning(allBotTexts),
+      };
       trackConsultation();
       pushActivity("chat", newTitle);
-      const withResponse = { ...updatedConv, updatedAt: new Date().toISOString(), messages: [...updatedConv.messages, botMsg] };
+      const withResponse = {
+        ...updatedConv,
+        updatedAt: new Date().toISOString(),
+        messages: [...updatedConv.messages, botMsg],
+      };
       const updated2 = updated.map((c) => (c.id === currentId ? withResponse : c));
       persist(updated2);
     } catch {
-      const errorMsg = { sender: "bot", text: "Lo siento, ha ocurrido un error al procesar tu consulta. Por favor, intenta nuevamente.", time: getTimestamp() };
-      const withError = { ...updatedConv, messages: [...updatedConv.messages, errorMsg] };
+      const botMsg = {
+        sender: "bot",
+        text: "Lo siento, ha ocurrido un error al procesar tu consulta. Por favor, intenta nuevamente.",
+        time: getTimestamp(),
+        ragSources: [],
+        isWarning: false,
+      };
+      const withError = {
+        ...updatedConv,
+        messages: [...updatedConv.messages, botMsg],
+      };
       const updated2 = updated.map((c) => (c.id === currentId ? withError : c));
       persist(updated2);
     } finally {
@@ -211,7 +361,10 @@ export function ChatbotPage() {
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   const handleLogout = () => {
@@ -227,9 +380,13 @@ export function ChatbotPage() {
 
   if (!user) return null;
 
-  const displayedConversations = showSavedOnly
-    ? conversations.filter((c) => c.saved)
-    : conversations;
+  const initials = (user.name || "U")
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p.charAt(0).toUpperCase())
+    .join("");
+
+  const userMessages = current?.messages.filter((m) => m.sender === "user") || [];
 
   return (
     <>
@@ -242,165 +399,361 @@ export function ChatbotPage() {
       />
 
       <div className="page-fixed">
-        {/* Conversations panel */}
-        <aside className="chat-v2-conversations">
-          <div className="chat-v2-conv-header">
-            <div className="chat-v2-conv-label">
-              {showSavedOnly ? "Guardadas" : "Conversaciones"}
+        <div className="mc-wrapper">
+          {/* ── Page header ── */}
+          <div className="mc-page-header">
+            <div className="mc-page-header-left">
+              <div className="mc-page-pill">
+                <span className="mc-pill-dot" />
+                MediChat · Asistente educativo IA
+              </div>
+              <h1 className="mc-page-title">
+                Pregunta lo que quieras, <em>sin presión.</em>
+              </h1>
+              <p className="mc-page-subtitle">
+                Asistente IA con fuente RAG validada. Las respuestas se guardan automáticamente como hilos por tema.
+              </p>
             </div>
-            <button onClick={handleNewConversation} className="chat-v2-new-btn">
-              + Nueva
-            </button>
+            <div className="mc-page-header-right">
+              <button
+                className="mc-filter-btn"
+                onClick={() => setTopicFilter(null)}
+              >
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M3 5h14M6 10h8M9 15h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+                Filtrar por tema
+              </button>
+              <button className="mc-new-conv-btn" onClick={handleNewConversation}>
+                + Nueva conversación
+              </button>
+            </div>
           </div>
 
-          <div className="chat-v2-conv-list">
-            {displayedConversations.length === 0 ? (
-              <div className="chat-v2-conv-empty">
-                <span className="chat-v2-conv-empty-icon">{showSavedOnly ? "📌" : "💬"}</span>
-                <p>{showSavedOnly ? "Sin guardadas" : "Sin conversaciones"}</p>
+          {/* ── Three-panel area ── */}
+          <div className="mc-panels">
+            {/* Left: conversations */}
+            <aside className="mc-conversations">
+              <div className="mc-conv-search-wrap">
+                <svg className="mc-conv-search-icon" viewBox="0 0 20 20" fill="none">
+                  <path d="m17 17-3.5-3.5M14 8.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+                <input
+                  className="mc-conv-search"
+                  placeholder="Buscar conversación..."
+                  value={convSearch}
+                  onChange={(e) => setConvSearch(e.target.value)}
+                />
               </div>
-            ) : (
-              displayedConversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  className={`chat-v2-conv-item ${currentId === conv.id ? "active" : ""}`}
-                  onClick={() => handleSelectConversation(conv.id)}
-                >
-                  <div className={`chat-v2-conv-icon ${conv.saved ? "saved" : ""}`}>
-                    {conv.saved ? "📌" : "💬"}
+
+              {Object.keys(topicCounts).length > 0 && (
+                <div className="mc-topics-section">
+                  <div className="mc-topics-header">
+                    <span>Por tema</span>
+                    <button
+                      className="mc-topics-ver-todos"
+                      onClick={() => setTopicFilter(null)}
+                    >
+                      Ver todos
+                    </button>
                   </div>
-                  <div className="chat-v2-conv-info">
-                    <div className="chat-v2-conv-name">{conv.title}</div>
-                    <div className="chat-v2-conv-time">
-                      {timeAgo(conv.updatedAt)}
-                      {conv.messages && (
-                        <span className="chat-v2-conv-count">
-                          {" · "}{conv.messages.filter((m) => m.sender === "user").length} msgs
-                        </span>
-                      )}
+                  <div className="mc-topics-chips">
+                    {Object.entries(topicCounts).map(([topic, count]) => (
+                      <button
+                        key={topic}
+                        className={`mc-topic-chip ${topicFilter === topic ? "active" : ""}`}
+                        onClick={() =>
+                          setTopicFilter(topicFilter === topic ? null : topic)
+                        }
+                      >
+                        {topic} · {count}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mc-conv-section-header">Recientes</div>
+
+              <div className="mc-conv-list">
+                {filteredConversations.length === 0 ? (
+                  <div className="mc-conv-empty">
+                    <span className="mc-conv-empty-icon">💬</span>
+                    <p>Sin conversaciones</p>
+                  </div>
+                ) : (
+                  filteredConversations.map((conv) => (
+                    <div
+                      key={conv.id}
+                      className={`mc-conv-item ${currentId === conv.id ? "active" : ""}`}
+                      onClick={() => handleSelectConversation(conv.id)}
+                    >
+                      <div className="mc-conv-item-body">
+                        <div className="mc-conv-title">{conv.title}</div>
+                        <div className="mc-conv-meta">
+                          {conv.topic && (
+                            <span className="mc-conv-topic-badge">{conv.topic}</span>
+                          )}
+                          <span className="mc-conv-msgs">
+                            {conv.messages.filter((m) => m.sender === "user").length} msgs
+                          </span>
+                          <span className="mc-conv-time">{timeAgo(conv.updatedAt)}</span>
+                        </div>
+                      </div>
+                      <div className="mc-conv-actions">
+                        <button
+                          className={`mc-conv-action ${conv.saved ? "saved" : ""}`}
+                          onClick={(e) => handleToggleSave(e, conv.id)}
+                          title={conv.saved ? "Quitar guardado" : "Guardar"}
+                        >
+                          {conv.saved ? "★" : "☆"}
+                        </button>
+                        <button
+                          className="mc-conv-action del"
+                          onClick={(e) => handleDeleteConversation(e, conv.id)}
+                          title="Eliminar"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </aside>
+
+            {/* Center: chat window */}
+            <main className="mc-chat-main">
+              {/* Chat header */}
+              <div className="mc-chat-header">
+                <div className="mc-chat-header-left">
+                  <div className="mc-medic-avatar">m</div>
+                  <div>
+                    <div className="mc-chat-title">MediChat</div>
+                    <div className="mc-chat-subtitle">
+                      <span className="mc-online-pill">Online</span>
+                      {" · "}RAG activado
+                      {activeRagSources.length > 0 &&
+                        ` · ${activeRagSources.length} fuentes en contexto`}
                     </div>
                   </div>
-                  <div className="chat-v2-conv-actions">
-                    <button
-                      className={`chat-v2-action-btn ${conv.saved ? "is-saved" : ""}`}
-                      onClick={(e) => handleToggleSave(e, conv.id)}
-                      title={conv.saved ? "Quitar guardado" : "Guardar"}
-                    >
-                      {conv.saved ? "★" : "☆"}
-                    </button>
-                    <button
-                      className="chat-v2-action-btn"
-                      onClick={(e) => handleDeleteConversation(e, conv.id)}
-                      title="Eliminar"
-                    >
-                      ✕
-                    </button>
-                  </div>
                 </div>
-              ))
-            )}
-          </div>
-
-          <div className="chat-v2-conv-footer">
-            <button
-              className={`chat-v2-saved-btn ${showSavedOnly ? "active" : ""}`}
-              onClick={() => setShowSavedOnly(!showSavedOnly)}
-            >
-              <span>📌</span>
-              {showSavedOnly ? "Ver todas" : "Ver guardadas"}
-            </button>
-          </div>
-        </aside>
-
-        {/* Main chat */}
-        <main className="chat-v2-main">
-          <div className="chat-v2-header">
-            <div className="chat-v2-header-left">
-              <div className="chat-v2-bot-mark">🤖</div>
-              <div>
-                <div className="chat-v2-title">MediChat</div>
-                <div className="chat-v2-subtitle">
-                  <span className="chat-v2-online">Online</span>
-                  {" · "}Asistente Educativo
+                <div className="mc-chat-badges">
+                  <span className="mc-badge mc-badge-edu">⚠ Solo educativo</span>
+                  {current?.saved ? (
+                    <span className="mc-badge mc-badge-saved">★ Guardada</span>
+                  ) : userMessages.length > 0 ? (
+                    <button
+                      className="mc-badge mc-badge-save-btn"
+                      onClick={handleSaveCurrentConversation}
+                    >
+                      ☆ Guardar
+                    </button>
+                  ) : null}
+                  <button className="mc-badge mc-badge-export">↓ Exportar</button>
                 </div>
               </div>
-            </div>
-            {current && current.messages.some((m) => m.sender === "user") && (
-              <button
-                className={`chat-v2-save-btn ${current.saved ? "is-saved" : ""}`}
-                onClick={current.saved ? undefined : handleSaveCurrentConversation}
-              >
-                {current.saved ? "★ Guardada" : "☆ Guardar"}
-              </button>
-            )}
-          </div>
 
-          <div className="chat-v2-disclaimer">
-            <span>⚠️</span>
-            <p>Solo fines educativos y temas medicos. No reemplaza la consulta medica profesional.</p>
-          </div>
+              {/* Messages */}
+              <div className="mc-messages">
+                {current &&
+                  current.messages.map((msg, idx) => {
+                    const showSep =
+                      idx === 0 ||
+                      new Date(current.createdAt).toDateString() !==
+                        new Date(current.updatedAt).toDateString();
+                    return (
+                      <React.Fragment key={idx}>
+                        {idx === 0 && (
+                          <div className="mc-day-sep">
+                            {timeAgo(current.createdAt)} · {msg.time}
+                          </div>
+                        )}
 
-          <div className="chat-v2-messages">
-            {current && current.messages.map((msg, idx) => (
-              <div key={idx} className={`chat-v2-msg ${msg.sender}`}>
-                {msg.sender === "bot" && (
-                  <div className="chat-v2-msg-avatar bot">🤖</div>
+                        {msg.isWarning ? (
+                          <div className="mc-msg-warning">
+                            <div className="mc-warn-icon">!</div>
+                            <div className="mc-warn-content">
+                              <span className="mc-warn-label">Aviso de seguridad</span>
+                              <span className="mc-warn-colon">: </span>
+                              <span
+                                dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={`mc-msg ${msg.sender}`}>
+                            {msg.sender === "bot" && (
+                              <div className="mc-msg-av mc-av-bot">m</div>
+                            )}
+                            <div className="mc-msg-bubble">
+                              <div
+                                className="message-text"
+                                dangerouslySetInnerHTML={{
+                                  __html: renderMarkdown(msg.text),
+                                }}
+                              />
+                              <div className="mc-bubble-time">{msg.time}</div>
+                              {msg.sender === "bot" &&
+                                Array.isArray(msg.ragSources) &&
+                                msg.ragSources.length > 0 && (
+                                  <div className="mc-cited-sources">
+                                    <div className="mc-cited-label">FUENTES CITADAS</div>
+                                    {msg.ragSources.map((src, si) => (
+                                      <div key={si} className="mc-cited-item">
+                                        <span className="mc-cited-title">
+                                          {src.title || src}
+                                        </span>
+                                        {src.chunk_index != null && (
+                                          <span className="mc-cited-ref">
+                                            sec. {src.chunk_index + 1}
+                                          </span>
+                                        )}
+                                        {src.score != null && (
+                                          <span className="mc-cited-score">
+                                            {Math.round(src.score * 100)}%
+                                          </span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                            </div>
+                            {msg.sender === "user" && (
+                              <div className="mc-msg-av mc-av-user">{initials}</div>
+                            )}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+
+                {isLoading && (
+                  <div className="mc-msg bot">
+                    <div className="mc-msg-av mc-av-bot">m</div>
+                    <div className="mc-msg-bubble">
+                      <div className="mc-typing">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                    </div>
+                  </div>
                 )}
-                <div className="chat-v2-bubble">
-                  <div
-                    className="message-text"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="mc-input-area">
+                <div className="mc-input-wrap">
+                  <input
+                    type="text"
+                    className="mc-input"
+                    placeholder="Escribe tu pregunta médica..."
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    disabled={isLoading}
                   />
-                  <div className="chat-v2-bubble-time">{msg.time}</div>
+                  <button
+                    className="mc-send-btn"
+                    onClick={handleSend}
+                    disabled={!inputText.trim() || isLoading}
+                  >
+                    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <path d="M3 10h14M10 3l7 7-7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
                 </div>
-                {msg.sender === "user" && (
-                  <div className="chat-v2-msg-avatar user-av">
-                    {user.name.charAt(0)}
+              </div>
+            </main>
+
+            {/* Right: RAG context + thread actions */}
+            <aside className="mc-rag-panel">
+              <div className="mc-rag-section">
+                <div className="mc-rag-header">Contexto RAG activo</div>
+                {activeRagSources.length === 0 ? (
+                  <div className="mc-rag-empty">
+                    Sin fuentes activas en este hilo
+                  </div>
+                ) : (
+                  <div className="mc-rag-sources">
+                    {activeRagSources.slice(0, 5).map((src, i) => {
+                      const pct =
+                        src.score != null
+                          ? Math.round(src.score * 100)
+                          : Math.max(60, 92 - i * 7);
+                      const tier =
+                        pct >= 85 ? "high" : pct >= 70 ? "mid" : "low";
+                      return (
+                        <div key={i} className="mc-rag-card">
+                          <div className="mc-rag-card-top">
+                            <div className="mc-rag-card-name">
+                              {src.title || `Fuente ${i + 1}`}
+                            </div>
+                            <div className={`mc-rag-card-pct ${tier}`}>{pct}%</div>
+                          </div>
+                          {(src.tags?.length > 0 || src.chunk_index != null) && (
+                            <div className="mc-rag-card-ref">
+                              {src.tags?.slice(0, 2).join(" · ")}
+                              {src.chunk_index != null &&
+                                ` · sec. ${src.chunk_index + 1}`}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            ))}
-            {isLoading && (
-              <div className="chat-v2-msg bot">
-                <div className="chat-v2-msg-avatar bot">🤖</div>
-                <div className="chat-v2-bubble">
-                  <div className="chat-v2-typing">
-                    <span /><span /><span />
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
 
-          <div className="chat-v2-input-area">
-            <div className="chat-v2-input-wrap">
-              <input
-                type="text"
-                className="chat-v2-input"
-                placeholder="Escribe tu pregunta médica..."
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={handleKeyPress}
-                disabled={isLoading}
-              />
-              <button
-                className="chat-v2-send-btn"
-                onClick={handleSend}
-                disabled={!inputText.trim() || isLoading}
-              >
-                →
-              </button>
-            </div>
+              <div className="mc-thread-section">
+                <div className="mc-thread-header">Acciones del hilo</div>
+                {current?.topic && (
+                  <button
+                    className="mc-thread-btn"
+                    onClick={() => setTopicFilter(current.topic)}
+                  >
+                    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <path d="M10 3a7 7 0 1 0 0 14A7 7 0 0 0 10 3Zm0 3v4l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    Cambiar tema (@{current.topic})
+                  </button>
+                )}
+                <button
+                  className="mc-thread-btn"
+                  onClick={() => navigate("/dashboard/sct")}
+                >
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M4 10h12M10 4v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                  Generar test SCT del hilo
+                </button>
+                <button className="mc-thread-btn" onClick={handleRegenerateLastResponse}>
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M4 10a6 6 0 1 0 1.5-4M4 6v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Re-generar última respuesta
+                </button>
+                <button className="mc-thread-btn">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M10 13V4M6 9l4 4 4-4M4 16h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Exportar a PDF
+                </button>
+              </div>
+            </aside>
           </div>
-        </main>
+        </div>
       </div>
 
       {toast && (
         <div className="v2-toast">
           <span>{toast.type === "success" ? "✓" : "ℹ"}</span>
           <span>{toast.message}</span>
-          <button className="v2-toast-close" onClick={() => setToast(null)}>✕</button>
+          <button className="v2-toast-close" onClick={() => setToast(null)}>
+            ✕
+          </button>
         </div>
       )}
     </>
