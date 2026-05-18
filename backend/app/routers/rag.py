@@ -4,15 +4,22 @@ from sqlalchemy.orm import Session
 
 from ..auth import require_roles
 from ..db import get_db
+from ..embedding_service import embed_text_for_rag
 from ..models import Document, DocumentChunk, User
+from ..pgvector_store import (
+    delete_pgvector_embeddings_for_document,
+    ensure_pgvector_schema,
+    search_pgvector,
+    upsert_pgvector_embedding,
+)
 from ..rag_utils import (
     RagHit,
     chunk_text,
     cosine_similarity,
-    embed_text,
     make_snippet,
     score_document,
 )
+from .admin import get_ai_config_map, parse_bool
 
 
 router = APIRouter(prefix="/api/rag", tags=["rag"])
@@ -52,6 +59,14 @@ def _document_to_out(document: Document) -> dict:
 
 
 def sync_document_chunks(db: Session, document: Document) -> int:
+    config = get_ai_config_map(db)
+    model_name = config.get("embedding_model")
+    neural_enabled = parse_bool(config.get("neural_embeddings_enabled"), True)
+    pgvector_enabled = parse_bool(config.get("pgvector_enabled"), True)
+    pgvector_ready = pgvector_enabled and ensure_pgvector_schema(db)
+
+    if pgvector_ready:
+        delete_pgvector_embeddings_for_document(db, document.id)
     db.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).delete()
     source = "\n".join(
         part
@@ -60,15 +75,28 @@ def sync_document_chunks(db: Session, document: Document) -> int:
     )
     chunks = chunk_text(source)
     for index, chunk in enumerate(chunks):
-        db.add(
-            DocumentChunk(
-                document_id=document.id,
-                chunk_index=index,
-                content=chunk,
-                embedding=embed_text(chunk),
-                token_count=len(chunk.split()),
-            )
+        embedding = embed_text_for_rag(
+            chunk,
+            model_name=model_name,
+            neural_enabled=neural_enabled,
         )
+        chunk_row = DocumentChunk(
+            document_id=document.id,
+            chunk_index=index,
+            content=chunk,
+            embedding=embedding.vector,
+            token_count=len(chunk.split()),
+        )
+        db.add(chunk_row)
+        db.flush()
+        if pgvector_ready:
+            upsert_pgvector_embedding(
+                db,
+                chunk_id=chunk_row.id,
+                document_id=document.id,
+                vector=embedding.vector,
+                provider=embedding.provider,
+            )
     return len(chunks)
 
 
@@ -88,9 +116,41 @@ def ensure_vector_index(db: Session) -> None:
 
 def retrieve_rag_hits(db: Session, query: str, limit: int = 4) -> list[RagHit]:
     ensure_vector_index(db)
-    query_embedding = embed_text(query)
+    config = get_ai_config_map(db)
+    embedding = embed_text_for_rag(
+        query,
+        model_name=config.get("embedding_model"),
+        neural_enabled=parse_bool(config.get("neural_embeddings_enabled"), True),
+    )
+    query_embedding = embedding.vector
     if not any(query_embedding):
         return []
+
+    if parse_bool(config.get("pgvector_enabled"), True) and ensure_pgvector_schema(db):
+        vector_rows = search_pgvector(db, query_embedding, limit=max(8, limit * 4))
+        if vector_rows:
+            hits: list[RagHit] = []
+            seen_documents: set[int] = set()
+            for row in vector_rows:
+                document_id = int(row["document_id"])
+                if document_id in seen_documents:
+                    continue
+                seen_documents.add(document_id)
+                hits.append(
+                    RagHit(
+                        id=document_id,
+                        title=row["title"],
+                        tags=row["tags"] or "",
+                        score=round(float(row["score"] or 0.0), 6),
+                        snippet=make_snippet(row["chunk_content"], query),
+                        chunk_id=int(row["chunk_id"]),
+                        chunk_index=int(row["chunk_index"]),
+                        provider=row.get("provider") or embedding.provider,
+                    )
+                )
+                if len(hits) >= max(1, min(limit, 8)):
+                    break
+            return hits
 
     chunk_hits: list[tuple[DocumentChunk, float]] = []
     for chunk in db.query(DocumentChunk).join(Document).all():
@@ -122,6 +182,7 @@ def retrieve_rag_hits(db: Session, query: str, limit: int = 4) -> list[RagHit]:
                 snippet=make_snippet(chunk.content, query),
                 chunk_id=chunk.id,
                 chunk_index=chunk.chunk_index,
+                provider=embedding.provider,
             )
         )
         if len(hits) >= max(1, min(limit, 8)):

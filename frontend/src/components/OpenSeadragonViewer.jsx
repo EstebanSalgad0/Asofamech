@@ -1374,11 +1374,6 @@ export function OpenSeadragonViewer({ imageData }) {
                 {prediction.recommendation && (
                   <div style={{ marginTop: 6, color: resultPalette.subtle }}>{prediction.recommendation}</div>
                 )}
-                {resultMetrics && (
-                  <div style={{ marginTop: 8, color: resultPalette.subtle }}>
-                    QC: tejido {formatPercent(resultMetrics.tissue_fraction)}, fondo {formatPercent(resultMetrics.white_fraction)}, nucleos {formatPercent(resultMetrics.nuclear_fraction)}
-                  </div>
-                )}
                 {prediction.patch_metadata && (
                   <div style={{ marginTop: 8, color: resultPalette.text }}>
                     Patch: {prediction.patch_metadata.extracted_width}x{prediction.patch_metadata.extracted_height} px; input {prediction.patch_metadata.model_input}
@@ -1387,11 +1382,6 @@ export function OpenSeadragonViewer({ imageData }) {
                 {prediction.slide_dimensions && (
                   <div style={{ color: resultPalette.text }}>
                     Lamina: {prediction.slide_dimensions.width}x{prediction.slide_dimensions.height} px
-                  </div>
-                )}
-                {prediction.debug_artifacts?.enabled && (
-                  <div style={{ color: resultPalette.subtle }}>
-                    Debug patch: guardado por trace_id
                   </div>
                 )}
                 <div style={{ marginTop: 8, color: resultPalette.heading }}>

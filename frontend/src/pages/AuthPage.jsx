@@ -14,6 +14,7 @@ export function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const fallbackName = () => {
     if (name.trim()) return name.trim();
@@ -25,6 +26,7 @@ export function AuthPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
     try {
@@ -42,6 +44,12 @@ export function AuthPage() {
 
       if (!response.ok) {
         throw new Error(payload?.detail || `Error HTTP ${response.status}`);
+      }
+
+      if (isRegister && !payload?.access_token) {
+        setSuccess(payload?.message || "Solicitud recibida. Un administrador debe aprobar tu cuenta antes de ingresar.");
+        setPassword("");
+        return;
       }
 
       saveAuthSession(payload);
@@ -105,7 +113,7 @@ export function AuthPage() {
 
               {isRegister && (
                 <div className="auth-info-note">
-                  Las cuentas nuevas se crean como estudiante. Los permisos docentes y administrativos se asignan desde administracion.
+                  Tu cuenta quedara pendiente hasta que un administrador la revise y autorice.
                 </div>
               )}
 
@@ -136,6 +144,7 @@ export function AuthPage() {
               </div>
 
               {error && <div className="auth-error">{error}</div>}
+              {success && <div className="auth-info-note">{success}</div>}
 
               <button type="submit" className="btn-auth-submit" disabled={loading}>
                 {loading ? "Validando..." : isRegister ? "Registrarse" : "Iniciar sesión"}

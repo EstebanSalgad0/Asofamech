@@ -11,9 +11,9 @@ Caracter: prototipo academico educativo, no diagnostico clinico.
 | Frontend React/Vite | Implementado | `frontend/src/app.jsx`, `frontend/src/pages/*`, `frontend/src/components/*` | Build exitoso con `npm.cmd run build`; advertencia de bundle JS grande. |
 | Backend FastAPI | Implementado/parcial | `backend/app/main.py`, `backend/app/routers/*` | API modular; crea tablas con SQLAlchemy al iniciar. |
 | Base de datos PostgreSQL | Parcial | `backend/app/models.py`, `backend/app/db.py`, `docker-compose.yml` | Sin migraciones Alembic; algunas tablas no estan integradas al flujo. |
-| Autenticacion y usuarios | Implementado/parcial | `AuthPage.jsx`, `authClient.js`, `backend/app/auth.py`, `backend/app/routers/auth.py`, `auth_security.py` | Login/registro contra backend, contrasenas PBKDF2, token JWT HS256 y rol validado en API para acciones de imagenes/histopatologia. Persisten pendientes: recuperacion de contrasena, invitaciones, migraciones y endurecimiento productivo. |
+| Autenticacion y usuarios | Implementado/parcial | `AuthPage.jsx`, `authClient.js`, `backend/app/auth.py`, `backend/app/routers/auth.py`, `backend/app/routers/admin.py`, `email_service.py`, `auth_security.py` | Login/registro contra backend, contrasenas PBKDF2, token JWT HS256, cuentas nuevas pendientes de aprobacion, panel admin de usuarios, roles y notificacion por correo SMTP/outbox. Persisten pendientes: recuperacion de contrasena, invitaciones, migraciones Alembic y endurecimiento productivo. |
 | Chatbot educativo | Parcial | `ChatbotPage.jsx`, `backend/app/routers/chat.py` | Usa Ollama/LLaMA via API local; historial en navegador, no en DB. |
-| RAG / contexto documental | Implementado/parcial | `chat.py`, `rag.py`, `rag_utils.py`, tablas `documents` y `document_chunks`, `ConfigPage.jsx` | Trocea documentos, genera embeddings locales por hashing y recupera chunks por similitud coseno. No usa aun pgvector ni embeddings neuronales externos. |
+| RAG / contexto documental | Implementado/parcial | `chat.py`, `rag.py`, `rag_utils.py`, `embedding_service.py`, `pgvector_store.py`, tablas `documents` y `document_chunks`, `ConfigPage.jsx` | Trocea documentos, genera embeddings neuronales con sentence-transformers cuando esta disponible, persiste en pgvector si la extension existe y mantiene fallback local por hashing/JSON. |
 | SCT | Implementado/parcial | `SCTPage.jsx`, `ConfigPage.jsx`, `backend/app/routers/sct.py`, tabla `sct_tests` | Genera, resuelve, guarda, lista y elimina tests; no guarda intentos/respuestas por estudiante. |
 | Imagenes histopatologicas | Implementado/parcial | `ImagesPage.jsx`, `ConfigPage.jsx`, `medical_images.py` | Carga, listado, importacion local CAMELYON17 y metadata en DB. |
 | Visor histopatologico | Implementado/parcial | `OpenSeadragonViewer.jsx`, `MedicalImageViewer.jsx`, endpoints DZI | DZI/OpenSeadragon para deep zoom; Fabric para imagenes sin DZI. |
@@ -180,7 +180,7 @@ Estructura BPMN sugerida: mantener 4 pools maximo en la lamina principal: Estudi
 | PB-24 | IA visual | Heatmap lamina completa (precalculo admin) | Media | Pendiente/parcial | GPU, cola persistente, cache, auth admin | Panel admin acotado ya permite preparar regiones; falta lamina completa analizada en background para que estudiantes consuman resultado | Endpoints tarea larga; cola durable; auth real |
 | PB-25 | RAG / LLM | Chat educativo con Ollama | Alta | Implementado/parcial | Ollama, LLaMA | Responde pregunta en espanol con aviso, filtro medico y reglas activas | `/api/chat` |
 | PB-26 | RAG / LLM | RAG por casos y documentos | Media | Implementado/parcial | Tablas `cases`, `documents`, `document_chunks` | Incluye casos y fuentes documentales relevantes | `chat.py`, `rag.py`, `rag_utils.py` |
-| PB-27 | RAG / LLM | RAG vectorial/documental | Media | Implementado/parcial | Embeddings locales por hashing y coseno | Recuperacion vectorial trazable por chunk | Falta pgvector/embeddings neuronales |
+| PB-27 | RAG / LLM | RAG vectorial/documental | Media | Implementado/parcial | sentence-transformers opcional, pgvector opcional, fallback JSON | Recuperacion vectorial trazable por chunk | Falta evaluacion formal de calidad de recuperacion |
 | PB-28 | Chatbot educativo | UI de conversaciones | Alta | Implementado/parcial | localStorage | Historial local, guardar/eliminar | `ChatbotPage.jsx` |
 | PB-29 | Chatbot educativo | Persistir `ChatLog` | Media | Implementado/parcial | Auth/DB | Preguntas/respuestas se guardan al responder el chatbot | Tabla `chat_logs` usada por `chat.py` |
 | PB-30 | Chatbot educativo | Sanitizacion markdown IA | Alta | Pendiente | DOMPurify u otro | Mitigar XSS | Test seguridad |
@@ -248,7 +248,7 @@ Bloqueos tecnicos detectados:
 | Rutas React | Frontend | Implementado | `app.jsx` | Landing, auth, dashboard, chat, SCT, images, config |
 | Dashboard | Gestion academica | Parcial | `DashboardPage.jsx`, `tracker.js` | Metricas locales |
 | Login | Auth | Implementado/parcial | `AuthPage.jsx`, `/api/auth/*` | JWT inicial; faltan recuperacion e invitaciones |
-| Chat | Chatbot/RAG | Parcial | `chat.py`, `ChatbotPage.jsx`, `rag.py`, `admin.py` | RAG vectorial local, reglas activas y fuentes visibles |
+| Chat | Chatbot/RAG | Parcial | `chat.py`, `ChatbotPage.jsx`, `rag.py`, `admin.py`, `pgvector_store.py` | RAG vectorial con pgvector/sentence-transformers cuando estan disponibles, reglas activas y fuentes visibles |
 | SCT CRUD | SCT | Implementado | `/api/sct/*`, `sct_tests` | Sin intentos por estudiante |
 | Biblioteca imagenes | Imagenes | Implementado/parcial | `/api/medical-images/list` | Requiere DB con datos |
 | DZI | Visor | Implementado/parcial | `.dzi`, endpoints tiles | WSI dinamico |
@@ -273,7 +273,7 @@ Bloqueos tecnicos detectados:
 | Visor histopatologico | OpenSeadragon + Fabric | DZI, tiles, zoom, visor raster | Implementado/parcial | `OpenSeadragonViewer.jsx`, `MedicalImageViewer.jsx` | Persistencia de anotaciones incompleta |
 | Seleccion ROI | OpenSeadragon overlay + FastAPI | ROI 1/2, validacion, extraccion patch | Implementado/parcial | `roi.py`, tests | ROI no se guarda en DB |
 | SCT | FastAPI + Ollama + React | Generar, resolver, guardar/listar/eliminar | Implementado/parcial | `sct.py`, `SCTPage.jsx` | Sin intentos/respuestas por estudiante |
-| Chatbot educativo | React + FastAPI + Ollama | Conversaciones locales, prompt educativo, filtro medico, reglas admin y RAG vectorial local | Parcial | `chat.py`, `ChatbotPage.jsx` | Sin pgvector ni refresh tokens productivos |
+| Chatbot educativo | React + FastAPI + Ollama | Conversaciones locales, prompt educativo, filtro medico, reglas admin y RAG vectorial | Parcial | `chat.py`, `ChatbotPage.jsx` | pgvector/sentence-transformers son opcionales con fallback; falta refresh token productivo |
 | IA/RAG | Ollama + CONCH + PyTorch | Chat/SCT LLM; clasificador ROI 3 clases; QC | Parcial/avanzado | `inference_service.py`, artifacts | No diagnostico, dependencias externas, validacion limitada |
 
 ### 4.3.4. Implementacion del frontend
@@ -365,7 +365,7 @@ Bloqueos tecnicos detectados:
 | Tecnologias | React, FastAPI, httpx, Ollama/LLaMA 3, SQLAlchemy. |
 | Archivos | `ChatbotPage.jsx`, `backend/app/routers/chat.py`, `api.js`. |
 | Implementado | Conversaciones locales, envio de preguntas, respuesta LLM, prompt educativo, filtro de alcance medico, RAG vectorial por documentos y fuentes visibles. |
-| Parcial | Historial de UI sigue local; `ChatLog` guarda interacciones backend, pero no hay panel de auditoria. RAG vectorial usa hashing local, no embeddings neuronales. |
+| Parcial | Historial de UI sigue local; `ChatLog` guarda interacciones backend, pero no hay panel de auditoria. RAG usa sentence-transformers/pgvector si estan disponibles y fallback local si no. |
 | Pendiente | Persistencia consentida, sanitizacion DOMPurify, fuentes/citas, moderacion, healthcheck Ollama visible. |
 | Estado | Parcial. |
 | Evidencias | Captura chat, endpoint `/api/chat`, logs backend/Ollama. |
@@ -392,9 +392,14 @@ Bloqueos tecnicos detectados:
 | Metodo | Endpoint | Descripcion | Entrada esperada | Salida esperada | Estado | Modulo asociado |
 |---|---|---|---|---|---|---|
 | GET | `/health` | Estado backend | - | `{status:"ok"}` | Implementado | Backend |
-| POST | `/api/auth/register` | Registra usuario | email, password, name, role | JWT + usuario publico | Implementado/parcial | Auth |
+| POST | `/api/auth/register` | Registra solicitud de usuario | email, password, name, role | Solicitud pendiente; primer usuario bootstrap recibe JWT | Implementado/parcial | Auth |
 | POST | `/api/auth/login` | Inicia sesion | email, password | JWT + usuario publico | Implementado/parcial | Auth |
 | GET | `/api/auth/me` | Valida token actual | Bearer token | Usuario publico | Implementado/parcial | Auth |
+| GET | `/api/admin/users` | Lista usuarios para revision admin | status, role, q | Usuarios sin password | Implementado/parcial | Admin/Auth |
+| POST | `/api/admin/users` | Crea usuario desde administracion | name, email, password, role, account_status, notify_email | Usuario creado + resultado email | Implementado/parcial | Admin/Auth |
+| PATCH | `/api/admin/users/{user_id}` | Actualiza rol/estado de usuario | role, account_status, is_active, notify_email | Usuario actualizado | Implementado/parcial | Admin/Auth |
+| POST | `/api/admin/users/{user_id}/approve` | Aprueba cuenta y opcionalmente envia correo | role, notify_email | Usuario aprobado + resultado email | Implementado/parcial | Admin/Auth |
+| POST | `/api/admin/users/{user_id}/reject` | Rechaza solicitud pendiente | user_id | Usuario rechazado | Implementado/parcial | Admin/Auth |
 | POST | `/api/chat` | Consulta chatbot | `{text}` | `{messages:[{text}]}` | Parcial | Chat/RAG |
 | GET | `/api/cases` | Lista casos | - | Lista casos | Implementado | Casos |
 | POST | `/api/cases` | Crea caso | title, description, body | Caso creado | Implementado API | Casos |
@@ -427,7 +432,7 @@ Bloqueos tecnicos detectados:
 
 | Tabla | Proposito | Campos principales | Relaciones | Estado |
 |---|---|---|---|---|
-| `users` | Usuarios | id, email, name, password_hash, role, created_at | 1:N con `medical_images` | Implementado/parcial; auth JWT inicial |
+| `users` | Usuarios | id, email, name, password_hash, role, is_active, account_status, approved_at, approved_by, created_at | 1:N con `medical_images`; auto-FK `approved_by` | Implementado/parcial; auth JWT con aprobacion admin |
 | `medical_images` | Metadata imagenes | filename, title, file_type, file_size, file_path, dzi_path, uploaded_by | FK `uploaded_by -> users.id` | Implementado/parcial |
 | `cases` | Casos clinicos para RAG SQL | title, description, body, is_active | Sin FK | Implementado API/parcial flujo |
 | `documents` | Documentos fuente para RAG | title, content, tags | 1:N con `document_chunks` | Implementado/parcial |
@@ -578,10 +583,11 @@ El diseno del modulo distingue dos niveles de uso:
 
 ## 7b. RAG documental, reglas administrativas y configuracion IA
 
-Se implemento una primera version funcional del componente RAG vectorial
-documental y de la administracion de reglas/configuracion IA. El objetivo de
-esta iteracion fue pasar desde un chatbot con contexto limitado a casos SQL
-hacia un flujo donde el administrador puede cargar documentos, vectorizarlos,
+Se implemento una version ampliada del componente RAG vectorial documental y de
+la administracion de reglas/configuracion IA. El objetivo de esta iteracion fue
+pasar desde un chatbot con contexto limitado a casos SQL hacia un flujo donde el
+administrador puede cargar documentos, vectorizarlos con sentence-transformers
+cuando esta disponible, persistirlos en pgvector si PostgreSQL lo soporta,
 definir reglas activas y verificar la integracion Llama 3/RAG/Rasa desde la
 plataforma.
 
@@ -605,21 +611,34 @@ plataforma.
 | Elemento | Evidencia |
 |---|---|
 | Modelos nuevos | `PlatformRule`, `AIConfiguration` en `backend/app/models.py` |
-| RAG vectorial inicial | `backend/app/rag_utils.py`, `backend/app/routers/rag.py`, tabla `document_chunks` |
+| RAG vectorial | `backend/app/rag_utils.py`, `backend/app/embedding_service.py`, `backend/app/pgvector_store.py`, `backend/app/routers/rag.py`, tabla `document_chunks` y tabla SQL `document_vector_embeddings` cuando pgvector existe |
 | Reglas/configuracion IA | `backend/app/routers/admin.py` |
 | Integracion con chat | `backend/app/routers/chat.py` agrega documentos RAG, reglas activas y `ChatLog` |
-| Pantalla administrativa | `ConfigPage.jsx` agrega pestanas Documentos RAG, Reglas y Configuracion IA |
-| Seguridad login | Registro crea estudiantes por defecto; password minimo 8 con letras/numeros; bloqueo temporal por intentos fallidos |
-| Pruebas | `test_rag_utils.py`, `test_chat_prompt.py`, `test_auth_security.py` |
+| Pantalla administrativa | `ConfigPage.jsx` agrega pestanas Documentos RAG, Usuarios, Reglas y Configuracion IA; Usuarios permite alta manual, filtros, aprobacion, suspension y cambio de rol |
+| Seguridad login | Registro deja cuentas pendientes; login bloquea pendientes/rechazadas/suspendidas; password minimo 8 con letras/numeros; bloqueo temporal por intentos fallidos |
+| Gestion de usuarios | Endpoints `/api/admin/users*`, `account_status`, `is_active`, aprobacion con correo SMTP o outbox local |
+| Pruebas | `test_rag_utils.py`, `test_chat_prompt.py`, `test_auth_security.py`, `test_user_approval.py` |
+
+Variables de correo para aprobacion de cuentas: `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TLS` y
+`ASOFAMECH_PLATFORM_URL`. Si SMTP no esta configurado, el prototipo registra el
+correo en `artifacts/email_outbox.jsonl` como evidencia tecnica, pero no lo
+envia realmente.
 
 ### Alcance real
 
-El RAG implementado es vectorial/local: cada documento se divide en chunks, se
-calcula un embedding deterministico por hashing y se recuperan chunks mediante
-similitud coseno. No usa aun pgvector ni embeddings neuronales externos. Esta
-decision reduce la complejidad para el prototipo y permite evidenciar el flujo
-pedagogico completo: carga de fuente, vectorizacion, recuperacion, inclusion en
-prompt y trazabilidad de fuentes en la respuesta del chatbot.
+El RAG implementado es vectorial: cada documento se divide en chunks, se calcula
+un embedding y se recuperan chunks mediante similitud coseno. El sistema intenta
+usar `sentence-transformers/all-MiniLM-L6-v2` y pgvector; si el paquete, modelo o
+extension no estan disponibles, cae automaticamente a embeddings locales por
+hashing y busqueda coseno sobre JSON. Esta decision permite ejecutar el
+prototipo aun en entornos sin dependencias completas, pero deja preparado el
+flujo con pgvector para despliegue mas robusto.
+
+En Docker, las dependencias neuronales del RAG quedan separadas en
+`backend/requirements-rag-neural.txt` y se instalan con el argumento
+`INSTALL_RAG_NEURAL=true`. Esto evita que un backend liviano arrastre PyTorch y
+sentence-transformers cuando solo se requiere el fallback local.
 
 Rasa queda tratado como integracion verificable/configurable, no como motor de
 dialogo activo dentro del flujo principal. El endpoint de estado permite
@@ -645,7 +664,7 @@ Secciones que pueden completarse con evidencia real:
 | 4.3.8 ROI | ROI 1/2, validaciones, patch extraction, tests |
 | 4.3.9 SCT | Generacion/resolucion/CRUD |
 | 4.3.10 Chatbot | UI + endpoint + prompt educativo, filtro de alcance medico, fuentes RAG y `ChatLog` |
-| 4.3.11 IA/RAG | Ollama, RAG vectorial local, reglas admin, configuracion IA, CONCH, QC, audit logs, checkpoints |
+| 4.3.11 IA/RAG | Ollama, RAG vectorial pgvector/sentence-transformers con fallback local, reglas admin, configuracion IA, CONCH, QC, audit logs, checkpoints |
 
 Secciones que deben redactarse como implementacion parcial:
 
@@ -653,7 +672,7 @@ Secciones que deben redactarse como implementacion parcial:
 |---|---|
 | Autenticacion/usuarios | JWT/hash/RBAC inicial implementado; faltan refresh token, recuperacion e invitaciones |
 | Gestion academica | Dashboard/metricas locales, sin persistencia institucional |
-| RAG | Recuperacion vectorial local implementada; sin pgvector ni embeddings neuronales externos |
+| RAG | Recuperacion vectorial implementada; pgvector y sentence-transformers son opcionales con fallback |
 | IA visual | Funcional para ROI educativa, pero no validacion clinica ni lamina completa |
 | Heatmap | Acotado a ROI y asincronico con persistencia filesystem; sin procesamiento completo WSI |
 | Docker | No incluye frontend en compose actual |
@@ -665,7 +684,7 @@ Secciones o funcionalidades pendientes/proyectadas:
 | Autenticacion productiva completa | No declarar seguridad productiva: falta refresh/cookies seguras, politicas de invitacion y auditoria de sesiones |
 | Persistencia de ROI | No afirmar almacenamiento central de ROI |
 | Intentos/respuestas SCT por estudiante | No afirmar trazabilidad academica completa |
-| RAG vectorial avanzado | Existe RAG vectorial local; falta pgvector, embeddings neuronales y evaluacion de recuperacion |
+| Evaluacion RAG | Existe RAG vectorial con pgvector/embeddings opcionales; falta medir precision@k/recall@k con preguntas de prueba |
 | Configuracion IA productiva | UI y endpoints existen; falta auditoria historica y control fino por ambiente |
 | Diagnostico clinico o validacion clinica | Prototipo educativo, no diagnostico |
 | Clasificacion de lamina completa | Solo ROI/patch y heatmap ROI acotado |
