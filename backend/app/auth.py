@@ -17,7 +17,13 @@ def user_to_public_payload(user: User) -> dict:
         "name": user.name,
         "role": user.role,
         "role_label": display_role(user.role),
+        "is_active": bool(user.is_active),
+        "account_status": user.account_status or "pending",
     }
+
+
+def user_can_access_platform(user: User) -> bool:
+    return bool(user.is_active) and (user.account_status or "pending") == "approved"
 
 
 def get_current_user(
@@ -47,6 +53,11 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario no encontrado",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user_can_access_platform(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cuenta pendiente de aprobacion o deshabilitada",
         )
     return user
 
