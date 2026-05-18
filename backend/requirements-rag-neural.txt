@@ -1,0 +1,3 @@
+# Optional dependencies for neural RAG embeddings.
+# Install only when the deployment will index/search documents with sentence-transformers.
+sentence-transformers

@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 import time
 import os
 
-from .routers import admin, auth, chat, cases, rag, sct, medical_images, histopathology
+from .routers import admin, auth, chat, cases, dashboard, rag, sct, medical_images, histopathology
 from .db import Base, engine
 
 app = FastAPI(title="Backend ASOFAMECH Educativo")
@@ -37,6 +38,7 @@ def create_tables_with_retry(max_retries: int = 3, delay_seconds: int = 2) -> No
         try:
             print(f"[backend] Intentando crear tablas en la BD (intento {attempt}/{max_retries})...")
             Base.metadata.create_all(bind=engine)
+            apply_compatibility_migrations()
             print("[backend] Tablas creadas (o ya existían).")
             return
         except (OperationalError, UnicodeDecodeError, SQLAlchemyError) as e:
@@ -46,6 +48,30 @@ def create_tables_with_retry(max_retries: int = 3, delay_seconds: int = 2) -> No
             attempt += 1
 
     print("[backend] No fue posible conectar con la BD despues de varios intentos; el servicio continuara sin inicializar tablas.")
+
+
+def apply_compatibility_migrations() -> None:
+    """
+    Compatibilidad ligera para prototipo sin Alembic: agrega columnas nuevas
+    a tablas existentes y conserva aprobadas las cuentas previas.
+    """
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        if "users" not in inspector.get_table_names():
+            return
+        columns = {column["name"] for column in inspector.get_columns("users")}
+        default_true = "true" if conn.dialect.name == "postgresql" else "1"
+        if "is_active" not in columns:
+            conn.execute(text(f"ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT {default_true} NOT NULL"))
+        if "account_status" not in columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN account_status VARCHAR(30) DEFAULT 'approved' NOT NULL"))
+        if "approved_at" not in columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN approved_at TIMESTAMP NULL"))
+        if "approved_by" not in columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN approved_by INTEGER NULL"))
+        conn.execute(text("UPDATE users SET account_status = 'approved' WHERE account_status IS NULL OR account_status = ''"))
+        conn.execute(text("UPDATE users SET is_active = true WHERE is_active IS NULL"))
+        conn.execute(text("UPDATE users SET approved_at = COALESCE(approved_at, created_at) WHERE account_status = 'approved'"))
 
 
 @app.on_event("startup")
@@ -63,6 +89,7 @@ def health():
 # Incluir los routers (endpoints /api/chat, /api/cases y /api/sct)
 app.include_router(chat.router)
 app.include_router(cases.router)
+app.include_router(dashboard.router)
 app.include_router(rag.router)
 app.include_router(admin.router)
 app.include_router(sct.router)

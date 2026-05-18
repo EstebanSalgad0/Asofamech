@@ -3,8 +3,9 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from datetime import datetime
 
-from ..auth import get_current_user, user_to_public_payload
+from ..auth import get_current_user, user_can_access_platform, user_to_public_payload
 from ..auth_security import (
     create_access_token,
     hash_password,
@@ -14,6 +15,7 @@ from ..auth_security import (
     verify_password,
 )
 from ..db import get_db
+from ..email_service import send_template_email
 from ..models import User
 
 
@@ -110,16 +112,25 @@ def register(payload: AuthRegisterRequest, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == email).first()
     role = normalize_role_for_storage(payload.role)
     admin_exists = db.query(User).filter(User.role == "administrador").first() is not None
+    user_count = db.query(User).count()
+    bootstrap_first_user = user_count == 0
     if role in {"docente", "administrador"} and admin_exists:
         role = "estudiante"
+    if bootstrap_first_user:
+        role = "administrador"
 
     if existing and not is_legacy_placeholder_hash(existing.password_hash):
         raise HTTPException(status_code=409, detail="Ya existe una cuenta con ese correo")
 
+    is_approved = bootstrap_first_user
     if existing:
         existing.name = payload.name.strip()
         existing.password_hash = hash_password(payload.password)
         existing.role = role
+        existing.is_active = is_approved
+        existing.account_status = "approved" if is_approved else "pending"
+        existing.approved_at = datetime.utcnow() if is_approved else None
+        existing.approved_by = existing.id if is_approved else None
         user = existing
     else:
         user = User(
@@ -127,12 +138,29 @@ def register(payload: AuthRegisterRequest, db: Session = Depends(get_db)):
             name=payload.name.strip(),
             password_hash=hash_password(payload.password),
             role=role,
+            is_active=is_approved,
+            account_status="approved" if is_approved else "pending",
+            approved_at=datetime.utcnow() if is_approved else None,
         )
         db.add(user)
 
     db.commit()
     db.refresh(user)
-    return _issue_session(user)
+    if bootstrap_first_user:
+        user.approved_by = user.id
+        db.commit()
+        db.refresh(user)
+        return _issue_session(user)
+    try:
+        send_template_email(user, "account_pending", db)
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "approval_required": True,
+        "message": "Solicitud de cuenta recibida. Un administrador debe revisar y autorizar el acceso.",
+        "user": user_to_public_payload(user),
+    }
 
 
 @router.post("/login")
@@ -145,6 +173,11 @@ def login(payload: AuthLoginRequest, request: Request, db: Session = Depends(get
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Correo o contrasena incorrectos",
+        )
+    if not user_can_access_platform(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu cuenta aun no esta autorizada. Espera la aprobacion del administrador.",
         )
     _clear_failed_login(request, email)
     return _issue_session(user)

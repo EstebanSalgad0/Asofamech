@@ -1,14 +1,110 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { startSession, flushSession, getMetrics, formatStudyTime, getRecentActivity, timeAgo } from "../tracker";
+import {
+  startSession,
+  flushSession,
+  getMetrics,
+  getRecentActivity,
+  timeAgo,
+} from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
 import { clearAuthSession } from "../authClient";
+import { getDashboardStats, getDashboardRanking } from "../api";
+
+const NEW_CHAT_FLAG = "asofamech_new_chat_requested";
 
 function getGreeting() {
   const h = new Date().getHours();
-  if (h < 12) return "Buenos días";
+  if (h < 12) return "Buenos dias";
   if (h < 19) return "Buenas tardes";
   return "Buenas noches";
+}
+
+function getSessionLabel() {
+  const date = new Date();
+  return new Intl.DateTimeFormat("es-CL", { day: "2-digit", month: "long" }).format(date);
+}
+
+function activityRoute(type) {
+  if (type === "chat") return "/dashboard/chat";
+  if (type === "sct") return "/dashboard/sct";
+  if (type === "images") return "/dashboard/images";
+  return "/dashboard";
+}
+
+function activityIcon(type) {
+  if (type === "chat") return "chat";
+  if (type === "sct") return "sct";
+  if (type === "images") return "histo";
+  return "dot";
+}
+
+function activitySubtitle(item) {
+  if (!item?.title) return "Actividad registrada";
+  const parts = item.title.split(" - ");
+  if (parts.length > 1) return parts.slice(1).join(" - ");
+  if (item.type === "chat") return "conversacion guardada";
+  if (item.type === "sct") return "caso de razonamiento clinico";
+  if (item.type === "images") return "visualizacion histopatologica";
+  return "registro local";
+}
+
+function activityTitle(item) {
+  if (!item?.title) return "Actividad";
+  return item.title.split(" - ")[0];
+}
+
+function ActivityGlyph({ type }) {
+  if (type === "chat") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M21 14a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v7Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (type === "sct") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M8 4h8M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M7 5H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M8 12h8M8 16h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9 3h6v4l2 2v9a3 3 0 0 1-3 3h-4a3 3 0 0 1-3-3V9l2-2V3Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 13h8M10 17h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Sparkline({ data, color }) {
+  if (!data || data.length < 2) return null;
+  const max = Math.max(...data, 1);
+  const W = 80, H = 36, P = 3;
+  const pts = data.map((v, i) => [
+    P + (i / (data.length - 1)) * (W - P * 2),
+    H - P - (v / max) * (H - P * 2),
+  ]);
+  const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const area = `${pts[0][0].toFixed(1)},${H} ` + pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ") + ` ${pts[pts.length - 1][0].toFixed(1)},${H}`;
+  const [lx, ly] = pts[pts.length - 1];
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none" aria-hidden="true">
+      <polygon points={area} fill={color} opacity="0.13" />
+      <polyline points={line} stroke={color} strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lx.toFixed(1)} cy={ly.toFixed(1)} r="2.8" fill={color} />
+    </svg>
+  );
+}
+
+function formatStudyTime(ms) {
+  if (!ms || ms === 0) return "0 min";
+  const totalMin = Math.round(ms / 60000);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 export function DashboardPage() {
@@ -17,6 +113,9 @@ export function DashboardPage() {
   const [role, setRole] = useState("Estudiante");
   const [metrics, setMetrics] = useState({ consultations: 0, studyMs: 0, testsTotal: 0, testsPassed: 0 });
   const [activity, setActivity] = useState([]);
+  const [activityFilter, setActivityFilter] = useState("all");
+  const [dashStats, setDashStats] = useState(null);
+  const [rankingData, setRankingData] = useState(null);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -25,14 +124,17 @@ export function DashboardPage() {
       clearAuthSession();
       navigate("/auth");
       return;
-    } else {
-      setUser(JSON.parse(userData));
-      const savedRole = localStorage.getItem("role");
-      if (savedRole) setRole(savedRole);
     }
+    setUser(JSON.parse(userData));
+    const savedRole = localStorage.getItem("role");
+    if (savedRole) setRole(savedRole);
+
     startSession();
     setMetrics(getMetrics());
     setActivity(getRecentActivity(10));
+
+    getDashboardStats().then(setDashStats).catch(() => {});
+    getDashboardRanking().then(setRankingData).catch(() => {});
 
     const handleUnload = () => flushSession();
     window.addEventListener("beforeunload", handleUnload);
@@ -43,160 +145,263 @@ export function DashboardPage() {
   }, [navigate]);
 
   useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        setMetrics(getMetrics());
-        setActivity(getRecentActivity(10));
-      }
+    const refresh = () => {
+      setMetrics(getMetrics());
+      setActivity(getRecentActivity(10));
     };
+    const handleVisibility = () => { if (document.visibilityState === "visible") refresh(); };
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
 
-  const handleLogout = () => {
-    flushSession();
-    clearAuthSession();
-    navigate("/");
-  };
+  const handleLogout = () => { flushSession(); clearAuthSession(); navigate("/"); };
+  const handleRoleChange = (val) => { setRole(val); localStorage.setItem("role", val); };
+  const openNewChat = () => { sessionStorage.setItem(NEW_CHAT_FLAG, "1"); navigate("/dashboard/chat"); };
 
-  const handleRoleChange = (val) => {
-    setRole(val);
-    localStorage.setItem("role", val);
-  };
+  const filteredActivity = useMemo(() => {
+    if (activityFilter === "all") return activity.slice(0, 5);
+    return activity.filter((item) => item.type === activityFilter).slice(0, 5);
+  }, [activity, activityFilter]);
 
   if (!user) return null;
 
-  const testsPassedPct = metrics.testsTotal > 0
-    ? Math.round((metrics.testsPassed / metrics.testsTotal) * 100)
-    : null;
+  const firstName = (user.name || "Estudiante").split(" ")[0];
 
-  const activityDotClass = { chat: "type-chat", sct: "type-sct", images: "type-images" };
-  const activityEmoji = { chat: "💬", sct: "📋", images: "🔬" };
+  // Real data from backend (fallback to local tracker)
+  const chatCount   = dashStats?.chat?.total  ?? metrics.consultations;
+  const chatWeek    = dashStats?.chat?.week   ?? 0;
+  const chatDaily   = dashStats?.chat?.daily  ?? [];
+  const histoCount  = dashStats?.histo?.total ?? activity.filter(i => i.type === "images").length;
+  const histoWeek   = dashStats?.histo?.week  ?? 0;
+  const histoDaily  = dashStats?.histo?.daily ?? [];
+  const sctCount    = metrics.testsTotal || activity.filter(i => i.type === "sct").length;
+  const studyLabel  = formatStudyTime(metrics.studyMs);
+  const testsPassedPct = metrics.testsTotal > 0 ? Math.round((metrics.testsPassed / metrics.testsTotal) * 100) : null;
+
+  const latestChat  = activity.find(i => i.type === "chat");
+  const latestSct   = activity.find(i => i.type === "sct");
+  const latestHisto = activity.find(i => i.type === "images");
+  const pendingSct  = sctCount === 0 ? 1 : 0;
+  const newConversations = Math.min(2, Math.max(0, activity.filter(i => i.type === "chat").length));
+  const notificationCount = Math.min(9, Math.max(1, pendingSct + newConversations));
+
+  const statCards = [
+    {
+      id: "chat",
+      label: "CONSULTAS IA",
+      value: chatCount,
+      sub: chatWeek > 0 ? `+${chatWeek} esta semana` : "sin consultas esta semana",
+      color: "#10b981",
+      daily: chatDaily,
+    },
+    {
+      id: "study",
+      label: "TIEMPO DE ESTUDIO",
+      value: studyLabel,
+      sub: metrics.studyMs > 0 ? "sesion activa" : "empieza a estudiar",
+      color: "#6366f1",
+      daily: null,
+    },
+    {
+      id: "sct",
+      label: "TESTS SCT",
+      value: sctCount,
+      sub: testsPassedPct !== null ? `ultimo: ${testsPassedPct}%` : "sin tests completados",
+      color: "#f59e0b",
+      daily: null,
+    },
+    {
+      id: "histo",
+      label: "LAMINAS VISTAS",
+      value: histoCount,
+      sub: histoWeek > 0 ? `${histoWeek} nuevas` : "sin láminas esta semana",
+      color: "#ef4444",
+      daily: histoDaily,
+    },
+  ];
+
+  const moduleCards = [
+    {
+      id: "chat", eyebrow: "01 - Modulo", title: "Asistente Medico IA",
+      description: "Consulta educativa 24/7 sobre temas medicos, diagnosticos y tratamientos.",
+      stat: `${chatCount} consultas`,
+      detail: latestChat ? `Ultima: ${activityTitle(latestChat)}` : "Inicia una conversacion clinica",
+      route: "/dashboard/chat", className: "home-v3-card-dark", glyph: "chat",
+    },
+    {
+      id: "sct", eyebrow: "02 - Modulo", title: "Test SCT",
+      description: "Evalua tu razonamiento clinico con casos medicos generados por IA.",
+      stat: `${sctCount} tests completados`,
+      detail: latestSct ? `Ultimo: ${activityTitle(latestSct)}` : "Practica con casos cortos",
+      route: "/dashboard/sct", className: "home-v3-card-coral", glyph: "sct",
+    },
+    {
+      id: "images", eyebrow: "03 - Modulo", title: "Analisis Histopatologico",
+      description: "Visualiza y analiza imagenes histologicas de alta resolucion.",
+      stat: `${histoCount} visualizaciones`,
+      detail: latestHisto ? `Ultima: ${activityTitle(latestHisto)}` : "Explora laminas educativas",
+      route: "/dashboard/images", className: "home-v3-card-mint", glyph: "histo",
+    },
+  ];
+
+  const ranking = rankingData?.ranking ?? [];
+  const yourPosition = rankingData?.your_position;
+  const percentile   = rankingData?.percentile;
 
   return (
     <>
-      <AppSidebar
-        user={user}
-        role={role}
-        activeRoute="dashboard"
-        onRoleChange={handleRoleChange}
-        onLogout={handleLogout}
-      />
+      <AppSidebar user={user} role={role} activeRoute="dashboard" onRoleChange={handleRoleChange} onLogout={handleLogout} />
 
-      <div className="page-scroll">
-        {/* Hero */}
-        <div className="home-hero">
-          <div className="home-hero-pill">
-            <span className="home-hero-pill-dot" />
-            Plataforma activa
+      <main className="home-v3-shell">
+        <header className="home-v3-hero">
+          <div>
+            <div className="home-v3-pill">
+              <span />
+              Plataforma activa · Sesion {getSessionLabel()}
+            </div>
+            <h1>{getGreeting()}, <em>{firstName}.</em></h1>
+            <p>
+              Continua tu entrenamiento clinico donde lo dejaste.
+              {pendingSct > 0 ? ` Tienes ${pendingSct} caso SCT pendiente` : ""}
+              {newConversations > 0 ? `${pendingSct > 0 ? " y" : " Tienes"} ${newConversations} conversaciones nuevas.` : "."}
+            </p>
           </div>
-          <h1 className="home-hero-greeting">
-            {getGreeting()},{" "}
-            <span className="home-hero-name">{user.name.split(" ")[0]}</span>
-          </h1>
-          <p className="home-hero-sub">Continúa tu entrenamiento clínico donde lo dejaste.</p>
+          <div className="home-v3-actions">
+            <button className="home-v3-primary-btn" type="button" onClick={openNewChat}>
+              <span>+</span> Nueva sesion
+            </button>
+          </div>
+        </header>
 
-          <div className="home-stats-strip">
-            <div className="home-stat">
-              <div className="home-stat-label">Consultas realizadas</div>
-              <div className={`home-stat-value${metrics.consultations > 0 ? " clr-accent" : ""}`}>
-                {metrics.consultations}
+        {/* ── Stats row ─────────────────────────────────── */}
+        <section className="home-v3-stats-row">
+          {statCards.map((card) => (
+            <div key={card.id} className="home-v3-stat-card">
+              <div className="home-v3-stat-left">
+                <span className="home-v3-stat-label">{card.label}</span>
+                <span className="home-v3-stat-value">{card.value}</span>
+                <span className="home-v3-stat-sub" style={{ color: card.color }}>{card.sub}</span>
+              </div>
+              <div className="home-v3-stat-right">
+                {card.daily && card.daily.some(v => v > 0)
+                  ? <Sparkline data={card.daily} color={card.color} />
+                  : <div className="home-v3-stat-nodata" style={{ borderColor: card.color }} />
+                }
               </div>
             </div>
-            <div className="home-stat">
-              <div className="home-stat-label">Tiempo de estudio</div>
-              <div className="home-stat-value clr-indigo">
-                {formatStudyTime(metrics.studyMs)}
+          ))}
+        </section>
+
+        {/* ── Modules ───────────────────────────────────── */}
+        <section className="home-v3-section home-v3-modules-section">
+          <div className="home-v3-section-head">
+            <div>
+              <div className="home-v3-kicker">/ 01 - Modulos</div>
+              <h2>Tus tres herramientas</h2>
+            </div>
+            <span>Clic para abrir cualquiera.</span>
+          </div>
+          <div className="home-v3-modules-grid">
+            {moduleCards.map((card) => (
+              <button key={card.id} type="button" className={`home-v3-module-card ${card.className}`} onClick={() => navigate(card.route)}>
+                <span className="home-v3-module-eyebrow">{card.eyebrow}</span>
+                <span className="home-v3-module-glyph"><ActivityGlyph type={card.glyph} /></span>
+                <span className="home-v3-module-title">{card.title}</span>
+                <span className="home-v3-module-desc">{card.description}</span>
+                <span className="home-v3-module-foot">
+                  <strong>{card.stat}</strong>
+                  <small>{card.detail}</small>
+                  <b>Abrir</b>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Lower grid ────────────────────────────────── */}
+        <section className="home-v3-lower-grid">
+          <div className="home-v3-activity-card">
+            <div className="home-v3-card-head">
+              <div>
+                <h3>Actividad reciente</h3>
+                <p>{activity.length} eventos registrados en tu historial local</p>
+              </div>
+              <div className="home-v3-filter-tabs">
+                {[["all", "Todo"], ["chat", "IA"], ["sct", "SCT"], ["images", "Histo"]].map(([value, label]) => (
+                  <button key={value} type="button" className={activityFilter === value ? "active" : ""} onClick={() => setActivityFilter(value)}>
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="home-stat">
-              <div className="home-stat-label">Tests aprobados</div>
-              <div className={`home-stat-value${testsPassedPct !== null && testsPassedPct >= 60 ? " clr-accent" : testsPassedPct !== null ? " clr-coral" : ""}`}>
-                {testsPassedPct !== null ? `${testsPassedPct}%` : "—"}
-              </div>
-              {metrics.testsTotal > 0 && (
-                <div className="home-stat-detail">{metrics.testsPassed}/{metrics.testsTotal} tests</div>
+            <div className="home-v3-activity-list">
+              {filteredActivity.length === 0 ? (
+                <div className="home-v3-empty-activity">
+                  <strong>Sin actividad para este filtro</strong>
+                  <span>Usa un modulo para generar nuevos registros.</span>
+                </div>
+              ) : (
+                filteredActivity.map((item, index) => (
+                  <button key={`${item.timestamp}-${index}`} type="button" className="home-v3-activity-row" onClick={() => navigate(activityRoute(item.type))}>
+                    <span className={`home-v3-activity-icon type-${activityIcon(item.type)}`}>
+                      <ActivityGlyph type={activityIcon(item.type)} />
+                    </span>
+                    <span className="home-v3-activity-copy">
+                      <strong>{activityTitle(item)}</strong>
+                      <small>{activitySubtitle(item)}</small>
+                    </span>
+                    <span className="home-v3-activity-time">{timeAgo(item.timestamp)}</span>
+                  </button>
+                ))
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className="home-body">
-          {/* Modules */}
-          <div className="home-section-head">
-            <h2 className="home-section-title">Módulos</h2>
-            <span className="home-section-meta">3 herramientas</span>
+            <div className="home-v3-activity-foot">
+              <span>Mostrando {filteredActivity.length} de {activity.length}</span>
+              <button type="button" onClick={() => setActivityFilter("all")}>Ver toda la actividad</button>
+            </div>
           </div>
 
-          <div className="home-modules-grid">
-            <a href="/dashboard/chat" className="home-module-card chat-card" onClick={e => { e.preventDefault(); navigate("/dashboard/chat"); }}>
-              <div className="home-module-tag">01 — Asistente</div>
-              <div className="home-module-icon">🤖</div>
-              <h3 className="home-module-title">Asistente Médico IA</h3>
-              <p className="home-module-desc">Consulta educativa 24/7 sobre temas de salud, diagnósticos y tratamientos.</p>
-              <div className="home-module-stat">
-                {metrics.consultations > 0 ? `${metrics.consultations} consultas` : "Empieza a consultar →"}
-              </div>
-            </a>
+          <aside className="home-v3-side-stack">
+            <div className="home-v3-suggestion-card">
+              <span className="home-v3-suggest-label">Sugerido</span>
+              <h3>Repasa <em>histopatologia</em> hoy.</h3>
+              <p>Analiza una nueva lamina o genera 5 items SCT para reforzar tu razonamiento clinico.</p>
+              <button type="button" onClick={() => navigate("/dashboard/sct")}>
+                Empezar caso <span>{"->"}</span>
+              </button>
+            </div>
 
-            <a href="/dashboard/sct" className="home-module-card sct-card" onClick={e => { e.preventDefault(); navigate("/dashboard/sct"); }}>
-              <div className="home-module-tag">02 — Test</div>
-              <div className="home-module-icon">📋</div>
-              <h3 className="home-module-title">Test SCT</h3>
-              <p className="home-module-desc">Evalúa tu razonamiento clínico con casos médicos generados por IA.</p>
-              <div className="home-module-stat">
-                {metrics.testsTotal > 0 ? `${metrics.testsTotal} tests completados` : "Realiza tu primer test →"}
+            <div className="home-v3-ranking-card">
+              <div className="home-v3-ranking-head">
+                <strong>Ranking semanal</strong>
+                {percentile != null && <span>Top {percentile}%</span>}
               </div>
-            </a>
-
-            <a href="/dashboard/images" className="home-module-card images-card" onClick={e => { e.preventDefault(); navigate("/dashboard/images"); }}>
-              <div className="home-module-tag">03 — Análisis</div>
-              <div className="home-module-icon">🔬</div>
-              <h3 className="home-module-title">Imágenes IA</h3>
-              <p className="home-module-desc">Visualiza y analiza imágenes histológicas de alta resolución.</p>
-              <div className="home-module-stat">
-                {activity.filter(a => a.type === "images").length > 0
-                  ? `${activity.filter(a => a.type === "images").length} visualizaciones`
-                  : "Explora las imágenes →"}
-              </div>
-            </a>
-          </div>
-
-          {/* Activity */}
-          <div className="home-section-head">
-            <h2 className="home-section-title">Actividad Reciente</h2>
-            {activity.length > 0 && (
-              <span className="home-section-meta">{activity.length} registros</span>
-            )}
-          </div>
-
-          <div className="home-activity-list">
-            {activity.length === 0 ? (
-              <div className="home-activity-empty">
-                <span className="home-activity-empty-icon">📭</span>
-                <p>Aún no hay actividad registrada. Comienza usando el asistente o realizando un test SCT.</p>
-              </div>
-            ) : (
-              activity.map((item, idx) => (
-                <div key={idx} className="home-activity-item">
-                  <div className={`home-activity-dot ${activityDotClass[item.type] || "type-other"}`}>
-                    {activityEmoji[item.type] || "📌"}
-                  </div>
-                  <div className="home-activity-text">
-                    <div className="home-activity-title">{item.title}</div>
-                    <div className="home-activity-time">{timeAgo(item.timestamp)}</div>
-                  </div>
+              {ranking.length === 0 ? (
+                <div className="home-v3-ranking-empty">Sin datos suficientes esta semana</div>
+              ) : (
+                <div className="home-v3-ranking-list">
+                  {ranking.map((item, index) => (
+                    <div key={`${item.name}-${index}`} className={item.is_you ? "is-you" : ""}>
+                      <span>#{index + 1}</span>
+                      <strong>{item.is_you ? `${item.name} (tu)` : item.name}</strong>
+                      <b>{item.score}%</b>
+                    </div>
+                  ))}
                 </div>
-              ))
-            )}
-          </div>
-
-          <div className="home-disclaimer">
-            <strong>Recordatorio:</strong> Esta plataforma es exclusivamente educativa. La información no reemplaza la consulta con un profesional de la salud.
-          </div>
-        </div>
-      </div>
+              )}
+              {yourPosition != null && (
+                <div className="home-v3-ranking-foot">
+                  Posicion #{yourPosition} de {rankingData?.total_users} usuarios activos
+                </div>
+              )}
+            </div>
+          </aside>
+        </section>
+      </main>
     </>
   );
 }

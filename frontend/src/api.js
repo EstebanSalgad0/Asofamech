@@ -81,6 +81,63 @@ export async function getIntegrationStatus() {
   return parseJsonResponse(res, "No se pudo verificar la integracion IA");
 }
 
+export async function listAdminUsers(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.role) params.set("role", filters.role);
+  if (filters.q) params.set("q", filters.q);
+  const query = params.toString();
+  const res = await authFetch(`/api/admin/users${query ? `?${query}` : ""}`);
+  return parseJsonResponse(res, "No se pudieron cargar los usuarios");
+}
+
+export async function createAdminUser(payload) {
+  const res = await authFetch("/api/admin/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo crear el usuario");
+}
+
+export async function updateAdminUser(userId, payload) {
+  const res = await authFetch(`/api/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar el usuario");
+}
+
+export async function approveAdminUser(userId, payload = {}) {
+  const res = await authFetch(`/api/admin/users/${userId}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo aprobar el usuario");
+}
+
+export async function rejectAdminUser(userId) {
+  const res = await authFetch(`/api/admin/users/${userId}/reject`, { method: "POST" });
+  return parseJsonResponse(res, "No se pudo rechazar el usuario");
+}
+
+export async function deleteAdminUser(userId) {
+  const res = await authFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+  return parseJsonResponse(res, "No se pudo eliminar el usuario");
+}
+
+export async function getDashboardStats() {
+  const res = await authFetch("/api/dashboard/stats");
+  return parseJsonResponse(res, "No se pudieron cargar las estadísticas");
+}
+
+export async function getDashboardRanking() {
+  const res = await authFetch("/api/dashboard/ranking");
+  return parseJsonResponse(res, "No se pudo cargar el ranking");
+}
+
 export async function generateSCT(numItems = 5, difficulty = "pregrado", focus = "tuberculosis pulmonar") {
   const res = await fetch(`${API_BASE}/api/sct/generate`, {
     method: "POST",
@@ -160,5 +217,3 @@ export async function deleteSCTTest(testId) {
 
   return res.json();
 }
-
-

@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:15
+    image: pgvector/pgvector:pg15
     container_name: asofamech_db
     environment:
       - POSTGRES_DB=app_db
@@ -16,6 +16,7 @@ services:
       context: ./backend
       args:
         INSTALL_HISTOPATHOLOGY_AI: "true"
+        INSTALL_RAG_NEURAL: "true"
     container_name: asofamech_backend
     environment:
       - DATABASE_URL=postgresql://app_user:app_pass@db:5432/app_db
@@ -42,6 +43,14 @@ services:
       - HISTO_HEATMAP_RATE_LIMIT_WINDOW_SECONDS=${HISTO_HEATMAP_RATE_LIMIT_WINDOW_SECONDS:-60}
       - HISTO_HF_TOKEN=${HISTO_HF_TOKEN:-}
       - HF_HOME=/root/.cache/huggingface
+      - ASOFAMECH_PLATFORM_URL=${ASOFAMECH_PLATFORM_URL:-http://localhost:3000/auth}
+      - ASOFAMECH_EMAIL_OUTBOX_PATH=/app/artifacts/email_outbox.jsonl
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_TLS=${SMTP_TLS:-true}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     ports:
@@ -49,6 +58,7 @@ services:
     gpus: all
     depends_on:
       - db
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload", "--reload-dir", "/app/app"]
     volumes:
       - ./backend/app:/app/app
       - ./backend/artifacts:/app/artifacts

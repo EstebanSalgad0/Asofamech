@@ -10,9 +10,14 @@ class User(Base):
     name = Column(String(200), nullable=False)
     password_hash = Column(String(200), nullable=False)
     role = Column(String(50), default="estudiante")  # estudiante, docente, administrador
+    is_active = Column(Boolean, default=False, nullable=False)
+    account_status = Column(String(30), default="pending", nullable=False)  # pending, approved, rejected, suspended
+    approved_at = Column(DateTime, nullable=True)
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     uploaded_images = relationship("MedicalImage", back_populates="uploader")
+    approver = relationship("User", remote_side=[id])
 
 class MedicalImage(Base):
     __tablename__ = "medical_images"
@@ -77,6 +82,16 @@ class AIConfiguration(Base):
     value = Column(Text, nullable=False)
     value_type = Column(String(40), nullable=False, default="string")
     description = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EmailTemplate(Base):
+    __tablename__ = "email_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), unique=True, nullable=False, index=True)
+    label = Column(String(200), nullable=False)
+    subject = Column(String(500), nullable=False)
+    body = Column(Text, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class SCTTest(Base):
