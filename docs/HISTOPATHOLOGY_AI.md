@@ -1604,6 +1604,76 @@ Por tanto, el checkpoint activo sigue siendo Stage 10. La mineria queda como
 flujo reproducible para seguir acumulando negativos dificiles sin inventar
 verdad clinica manual.
 
+Stage 14 amplio el mismo flujo con nuevas laminas CAMELYON17 de prioridad 1.
+Primero se corrigio el monitor de descarga para que funcione en consola Windows
+sin errores de codificacion:
+
+```text
+histopathology_offline/check_download_progress.py
+python histopathology_offline/check_download_progress.py --watch --interval 30
+```
+
+La prioridad 1 quedo descargada completa:
+
+```text
+59/59 laminas descargadas
+7 XML oficiales disponibles
+52 laminas sin XML oficial en el bucket publico
+```
+
+Solo se usaron como verdad geometrica las laminas con XML oficial disponible.
+Desde esas 7 laminas se minaron falsos positivos del checkpoint activo Stage 10:
+
+```text
+sampled_patches_per_slide=96
+hard_negatives_per_slide=24
+min_tumor_score=0.45
+
+hard negatives nuevos=123
+outside_xml_tumor_polygon=123/123
+lymphoid_or_mixed_negative=110
+stroma=13
+```
+
+Artefactos Stage 14:
+
+```text
+artifacts/histopathology/camelyon17_patches_stage14_p1_mined_v1/
+artifacts/histopathology/manifests/camelyon17_manifest_stage14_p1_mined_hard_negatives_v1.csv
+artifacts/histopathology/manifests/camelyon17_manifest_stage14_stage10_plus_p1_mined_balanced_v1.csv
+artifacts/histopathology/embeddings-camelyon17-stage14-stage10-plus-p1-mined-v1/
+artifacts/histopathology/reports/camelyon17_stage14_p1_mined_summary_v1.json
+```
+
+Se entrenaron dos candidatos:
+
+```text
+artifacts/histopathology/checkpoints/tri_head_camelyon17_stage14_p1_mined_v1_weighted.pt
+artifacts/histopathology/checkpoints/tri_head_camelyon17_stage14_p1_mined_v1_weight050.pt
+```
+
+Resultado comparativo:
+
+```text
+Test Stage 14, threshold 0.90
+modelo                         TP   FP   FN   TN
+Stage 10 weighted              120  18   48   499
+Stage 14 weighted              114  14   54   503
+Stage 14 weight050             121  18   47   499
+
+Test Stage 10 anterior, threshold 0.90
+modelo                         TP   FP   FN   TN
+Stage 10 weighted              120  17   48   467
+Stage 14 weight050             121  18   47   466
+```
+
+Decision tecnica: Stage 14 no se activa todavia. El candidato `weight050`
+mantiene el comportamiento general y mejora un verdadero positivo, pero tambien
+agrega un falso positivo en el test de control. La mejora es metodologicamente
+util para el informe porque demuestra ampliacion de datos, mineria automatica y
+evaluacion honesta con XML, pero no es suficiente para reemplazar Stage 10 en
+produccion educativa.
+
 ## 13. Limites metodologicos
 
 El clasificador actual cubre una tarea estrecha:

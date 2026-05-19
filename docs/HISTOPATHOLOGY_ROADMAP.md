@@ -769,3 +769,92 @@ material linfoide dificil respaldado por XML oficial. La siguiente mejora debe
 minar mas negatives de varias laminas y entrenar con una estrategia que no
 desplace tanto el limite hacia tumor, por ejemplo caps por fuente, umbral de
 mineria mas alto o calibracion posterior por validacion.
+
+Resultado Stage 14 con prioridad 1 CAMELYON17:
+
+```text
+Objetivo:
+sumar datos nuevos reales, no solo remezclar las mismas laminas, para mejorar
+la deteccion de tejido no metastasico/linfoide sin perder deteccion tumoral.
+
+Descarga:
+prioridad 1 CAMELYON17=59/59 laminas descargadas
+XML oficiales disponibles para prioridad 1=7 laminas
+XML no disponibles en S3 para el resto=52 laminas
+
+Laminas XML usadas:
+patient_061_node_4
+patient_066_node_2
+patient_067_node_4
+patient_073_node_1
+patient_088_node_1
+patient_089_node_3
+patient_092_node_1
+```
+
+Mineria Stage 14:
+
+```text
+sampled_patches_per_slide=96
+hard_negatives_per_slide=24
+min_tumor_score=0.45
+checkpoint base=tri_head_camelyon17_stage10_balanced_v1_weighted.pt
+
+hard negatives nuevos=123
+outside_xml_tumor_polygon=123/123
+
+by_hard_negative_type:
+lymphoid_or_mixed_negative=110
+stroma=13
+
+by_split:
+train=66
+val=24
+test=33
+```
+
+Artefactos:
+
+```text
+artifacts/histopathology/camelyon17_patches_stage14_p1_mined_v1/
+artifacts/histopathology/manifests/camelyon17_manifest_stage14_p1_mined_hard_negatives_v1.csv
+artifacts/histopathology/reports/camelyon17_stage14_p1_mined_candidates_v1.csv
+artifacts/histopathology/reports/camelyon17_stage14_p1_mined_summary_v1.json
+artifacts/histopathology/manifests/camelyon17_manifest_stage14_stage10_plus_p1_mined_balanced_v1.csv
+artifacts/histopathology/embeddings-camelyon17-stage14-stage10-plus-p1-mined-v1/
+```
+
+Candidatos entrenados:
+
+```text
+tri_head_camelyon17_stage14_p1_mined_v1_weighted.pt
+tri_head_camelyon17_stage14_p1_mined_v1_weight050.pt
+```
+
+Comparacion contra test XML nuevo de Stage 14, umbral 0.90:
+
+```text
+modelo / umbral                    TP   FP   FN   TN
+Stage 10 weighted / 0.90           120  18   48   499
+Stage 14 weighted / 0.90           114  14   54   503
+Stage 14 weight050 / 0.90          121  18   47   499
+```
+
+Comparacion de control contra test XML anterior de Stage 10, umbral 0.90:
+
+```text
+modelo / umbral                    TP   FP   FN   TN
+Stage 10 weighted / 0.90           120  17   48   467
+Stage 14 weight050 / 0.90          121  18   47   466
+```
+
+Decision:
+Stage 14 demuestra que sumar laminas nuevas y negativos linfoides oficiales
+puede mejorar de forma marginal la sensibilidad sin colapsar el comportamiento
+del modelo. Sin embargo, la ganancia todavia es demasiado pequena para
+reemplazar el checkpoint activo: `weight050` gana 1 verdadero positivo, pero
+tambien suma 1 falso positivo en el test de control. `weighted` reduce falsos
+positivos, pero pierde demasiados verdaderos positivos. Por ahora Stage 10 debe
+seguir activo y Stage 14 queda como evidencia metodologica de ampliacion de
+dataset. La siguiente iteracion debe sumar mas XML oficiales, balancear por
+lamina/centro y buscar una mejora mas clara antes de promover un checkpoint.
