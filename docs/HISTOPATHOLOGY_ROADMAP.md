@@ -589,6 +589,98 @@ tumor/no tumor con el mismo umbral: mas verdaderos positivos, menos falsos
 positivos, menos falsos negativos y mas verdaderos negativos. La validacion
 sigue siendo educativa y debe presentarse como prototipo, no como diagnostico.
 
+Resultado Stage 11 denso:
+
+```text
+Objetivo:
+duplicar la densidad de patches oficiales CAMELYON17 desde las mismas 54
+laminas y 24 XML disponibles, para probar si mas coordenadas oficiales mejoran
+el clasificador sin descargar datos nuevos.
+
+Manifest oficial denso:
+rows=7200
+
+Manifest balanceado:
+train: no_metastasico=2400, metastasico=1932, estroma=374
+val:   no_metastasico=550,  metastasico=438, estroma=50
+test:  no_metastasico=646,  metastasico=484, estroma=50
+
+Candidatos entrenados:
+- tri_head_camelyon17_stage11_dense_balanced_v1_weighted.pt
+- tri_head_camelyon17_stage11_dense_balanced_v1_weight050.pt
+- tri_head_camelyon17_stage11_dense_balanced_v1_metric_selected.pt
+- tri_mlp_camelyon17_stage11_dense_balanced_v1_weight050.pt
+```
+
+Comparacion contra el mismo test XML fijo de Stage 8:
+
+```text
+modelo / umbral                    TP  FP  FN  TN
+Stage 10 weighted / 0.90           81  17  39  659
+Stage 11 weighted / 0.90           76  15  44  661
+Stage 11 weight050 / 0.90          76  17  44  659
+Stage 11 metric-selected / 0.90    89  35  31  641
+Stage 11 MLP weight050 / 0.90      89  28  31  648
+```
+
+Decision:
+Stage 11 no reemplaza al checkpoint activo. Aunque algunas variantes detectan
+mas verdaderos positivos, lo hacen aumentando falsos positivos en el test fijo.
+La variante weighted reduce falsos positivos, pero pierde sensibilidad tumoral.
+Por lo tanto, Stage 10 sigue siendo el mejor balance operativo actual para el
+umbral educativo de 0.90. Stage 11 queda como experimento reproducible y como
+evidencia de que no basta con duplicar patches de las mismas laminas: para
+mejorar de forma mas robusta hacen falta laminas nuevas, centros distintos y
+mas negativos duros con respaldo oficial.
+
+Resultado Stage 12 con hard negative mining oficial:
+
+```text
+Objetivo:
+mejorar la deteccion de zonas sanas/no tumorales sin perder deteccion tumoral,
+usando falsos positivos reales del checkpoint activo Stage 10 como negativos
+dificiles.
+
+Flujo:
+1. evaluar Stage 10 sobre train/val de Stage 11 contra XML oficial;
+2. seleccionar solo falsos positivos con threshold 0.80;
+3. convertirlos a hard negatives oficiales;
+4. fusionarlos con Stage 10;
+5. reentrenar candidatos Stage 12;
+6. comparar contra el mismo test XML fijo.
+
+Hard negatives minados:
+total=105
+train=93
+val=12
+
+Origen:
+outside_xml_tumor_polygon=97
+negative_slide=8
+```
+
+Comparacion contra el mismo test XML fijo de Stage 8:
+
+```text
+modelo / umbral                    TP  FP  FN  TN
+Stage 10 weighted / 0.90           81  17  39  659
+Stage 12 weighted / 0.90           69  14  51  662
+Stage 12 weight050 / 0.90          55  12  65  664
+Stage 12 weighted / 0.80           75  18  45  658
+Stage 12 weight050 / 0.80          76  20  44  656
+Stage 10 AND Stage 12 guard        81  17  39  659
+```
+
+Decision:
+Stage 12 tampoco reemplaza a Stage 10. El minado de falsos positivos si empuja
+el modelo a ser mas conservador en tejido sano, pero el costo en falsos
+negativos tumorales es demasiado alto para activarlo. La prueba de usar Stage 12
+como filtro secundario no mejoro el balance: reproduce Stage 10 o reduce recall.
+La conclusion tecnica es que el problema no se resuelve solo con pocos falsos
+positivos minados desde las mismas laminas; se necesitan mas negativos duros y
+mas tumores de laminas/pacientes/centros nuevos, idealmente manteniendo un test
+fijo no tocado.
+
 La siguiente accion tecnica debe ser:
 
 ```text
@@ -597,6 +689,83 @@ La siguiente accion tecnica debe ser:
 3. validar visualmente Stage 10 con ROIs conocidas en patient_017_node_2 y otras laminas;
 4. seguir agregando laminas CAMELYON17 con XML y negativas oficiales por centros distintos;
 5. conservar test fijo por coordenadas oficiales para comparaciones honestas;
-6. documentar para el informe que Stage 9 fue un experimento no activado;
+6. documentar para el informe que Stage 9, Stage 11 y Stage 12 fueron experimentos no activados;
 7. continuar luego con cache/cola durable de heatmaps y aislamiento de datos por usuario.
 ```
+
+Resultado Stage 13 con mineria automatica de negativos dificiles:
+
+```text
+Objetivo:
+obtener mas ejemplos del tipo observado en el visor: tejido linfoide/no tumoral
+fuera del XML oficial que el modelo Stage 10 mira como sospechoso o metastasico.
+
+Herramienta nueva:
+histopathology_offline/mine_camelyon17_false_positive_patches.py
+
+Flujo:
+1. cargar laminas CAMELYON17 con XML oficial;
+2. muestrear coordenadas fuera de los poligonos tumorales con margen de seguridad;
+3. filtrar por QC para evitar fondo/no evaluable;
+4. ejecutar el checkpoint activo Stage 10;
+5. conservar parches no tumorales con P(metastasico) alta o clase metastasico;
+6. guardar PNG, manifest CSV y reporte de candidatos.
+```
+
+Primera tanda v1:
+
+```text
+laminas XML usadas=6
+patch_size=256
+parches evaluables por lamina=48
+hard negatives generados=36
+annotation_status=outside_xml_tumor_polygon en 36/36
+
+by_hard_negative_type:
+lymphoid_or_mixed_negative=35
+stroma=1
+```
+
+Artefactos:
+
+```text
+artifacts/histopathology/manifests/camelyon17_manifest_stage13_mined_hard_negatives_v1.csv
+artifacts/histopathology/reports/camelyon17_stage13_mined_candidates_v1.csv
+artifacts/histopathology/reports/camelyon17_stage13_mined_summary_v1.json
+artifacts/histopathology/manifests/camelyon17_manifest_stage13_stage10_plus_mined_balanced_v1.csv
+artifacts/histopathology/embeddings-camelyon17-stage13-stage10-plus-mined-v1/
+```
+
+Candidatos entrenados:
+
+```text
+tri_head_camelyon17_stage13_mined_v1_weighted.pt
+tri_head_camelyon17_stage13_mined_v1_weight050.pt
+```
+
+Comparacion en el test XML de Stage 13, umbral 0.90:
+
+```text
+modelo / umbral                    TP   FP   FN   TN
+Stage 10 weighted / 0.90           120  17   48   473
+Stage 13 weighted / 0.90           143  37   25   453
+Stage 13 weight050 / 0.90          143  39   25   451
+```
+
+Calibracion Stage 13 a umbral 0.95:
+
+```text
+modelo / umbral                    TP   FP   FN   TN
+Stage 13 weighted / 0.95           136  26   32   464
+Stage 13 weight050 / 0.95          137  27   31   463
+```
+
+Decision:
+Stage 13 no reemplaza al checkpoint activo. Aumenta la sensibilidad tumoral,
+pero tambien aumenta los falsos positivos; como el problema inmediato era
+mejorar zonas sanas/linfoides, no conviene activarlo todavia. El resultado si
+es util porque deja implementado el minador automatico y confirma que existe
+material linfoide dificil respaldado por XML oficial. La siguiente mejora debe
+minar mas negatives de varias laminas y entrenar con una estrategia que no
+desplace tanto el limite hacia tumor, por ejemplo caps por fuente, umbral de
+mineria mas alto o calibracion posterior por validacion.
