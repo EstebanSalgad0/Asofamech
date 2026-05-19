@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { getMetrics, getRecentActivity } from "../tracker";
+import { getStreakDisplay } from "../tracker";
 
 const navItems = [
   { id: "dashboard", label: "Inicio", path: "/dashboard", icon: "home", group: "Navegacion" },
@@ -82,8 +82,7 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
   const [query, setQuery] = useState("");
 
   const privileged = role === "Administrador" || role === "Profesor";
-  const metrics = getMetrics();
-  const recent = getRecentActivity(10);
+  const { count: streakCount, weekBars } = getStreakDisplay();
   const visibleItems = navItems.filter((item) => !item.privileged || privileged);
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -94,8 +93,6 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
     groups[item.group] = [...(groups[item.group] || []), item];
     return groups;
   }, {});
-  const chatBadge = Math.min(9, Math.max(0, recent.filter((item) => item.type === "chat").length));
-  const streakDays = Math.max(1, Math.min(7, Math.ceil((metrics.studyMs || 0) / 900000) || 3));
   const initials = (user?.name || "U").split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("") || "U";
 
   const handleSearchSubmit = (event) => {
@@ -140,7 +137,6 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
               >
                 <Icon name={item.icon} />
                 <span>{item.label}</span>
-                {item.id === "chat" && chatBadge > 0 && <b>{chatBadge}</b>}
               </Link>
             ))}
           </div>
@@ -154,15 +150,23 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
             <span className="app-streak-fire">🔥</span>
           </div>
           <div className="app-streak-days">
-            <b>{streakDays}</b>
+            <b>{streakCount}</b>
             <span>días</span>
           </div>
           <div className="app-streak-bars">
-            {["L", "M", "M", "J", "V", "S", "D"].map((day, index) => (
-              <i key={`${day}-${index}`} className={index < streakDays ? "active" : ""} title={day} />
+            {weekBars.map((bar, index) => (
+              <i
+                key={index}
+                className={[bar.active ? "active" : "", bar.isToday ? "today" : ""].filter(Boolean).join(" ")}
+                title={bar.day}
+              />
             ))}
           </div>
-          <div className="app-streak-labels">L M M J V S D</div>
+          <div className="app-streak-labels">
+            {weekBars.map((bar, index) => (
+              <span key={index}>{bar.day}</span>
+            ))}
+          </div>
         </div>
 
         <div className="app-user-card">

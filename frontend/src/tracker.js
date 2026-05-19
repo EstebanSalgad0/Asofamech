@@ -5,6 +5,7 @@
  *   asofamech_metrics   – { consultations, studyMs, testsTotal, testsPassed }
  *   asofamech_activity   – [ { type, title, timestamp } , … ]  (max 30 entries)
  *   asofamech_session    – session start timestamp for study-time tracking
+ *   asofamech_streak     – { count, lastDate, weekActivity: { "YYYY-MM-DD": true } }
  */
 
 import { userStorageKey } from "./authClient";
@@ -12,6 +13,7 @@ import { userStorageKey } from "./authClient";
 const METRICS_KEY = "asofamech_metrics";
 const ACTIVITY_KEY = "asofamech_activity";
 const SESSION_KEY = "asofamech_session";
+const STREAK_KEY = "asofamech_streak";
 const MAX_ACTIVITY = 30;
 
 // ── Metrics ──────────────────────────────────────────────
@@ -96,12 +98,101 @@ function saveActivity(list) {
   localStorage.setItem(userStorageKey(ACTIVITY_KEY), JSON.stringify(list));
 }
 
+// ── Streak ───────────────────────────────────────────────
+
+/** "YYYY-MM-DD" in local time (not UTC) for today or offsetDays ago/ahead. */
+function localDateStr(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function loadStreak() {
+  try {
+    const raw = localStorage.getItem(userStorageKey(STREAK_KEY));
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return { count: 0, lastDate: null, weekActivity: {} };
+}
+
+function saveStreak(s) {
+  localStorage.setItem(userStorageKey(STREAK_KEY), JSON.stringify(s));
+}
+
+function recordStreakActivity() {
+  const s = loadStreak();
+  const today = localDateStr(0);
+  const yesterday = localDateStr(-1);
+
+  if (s.lastDate === today) {
+    // Already recorded today — just ensure weekActivity is marked
+    if (!s.weekActivity[today]) {
+      s.weekActivity[today] = true;
+      saveStreak(s);
+    }
+    return;
+  }
+
+  if (s.lastDate === yesterday) {
+    s.count += 1;
+  } else {
+    // Gap > 1 day: reset streak
+    s.count = 1;
+  }
+
+  s.lastDate = today;
+  s.weekActivity[today] = true;
+
+  // Prune weekActivity to keep only the last 14 days to avoid unbounded growth
+  const cutoff = localDateStr(-14);
+  for (const key of Object.keys(s.weekActivity)) {
+    if (key < cutoff) delete s.weekActivity[key];
+  }
+
+  saveStreak(s);
+}
+
+/**
+ * Returns streak count and a 7-item array for Mon–Sun of the current local week.
+ * Each item: { day: "L"|"M"|…, active: bool, isToday: bool }
+ */
+export function getStreakDisplay() {
+  const s = loadStreak();
+
+  // Find Monday of the current local week
+  const now = new Date();
+  const dow = now.getDay(); // 0=Sun … 6=Sat
+  const distToMonday = (dow === 0) ? -6 : 1 - dow;
+  const dayLabels = ["L", "M", "M", "J", "V", "S", "D"];
+  const today = localDateStr(0);
+
+  const weekBars = dayLabels.map((label, i) => {
+    const d = new Date(now);
+    d.setDate(now.getDate() + distToMonday + i);
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    const dateStr = `${y}-${mo}-${da}`;
+    return {
+      day: label,
+      active: Boolean(s.weekActivity[dateStr]),
+      isToday: dateStr === today,
+    };
+  });
+
+  return { count: s.count, weekBars };
+}
+
 /**
  * Push a new activity entry.
  *  type: "chat" | "sct" | "images"
  *  title: short description
  */
 export function pushActivity(type, title) {
+  recordStreakActivity();
   const list = loadActivity();
   list.unshift({ type, title, timestamp: new Date().toISOString() });
   // keep the list bounded

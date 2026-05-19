@@ -65,6 +65,20 @@ const USER_ROLE_OPTIONS = [
   { value: "docente", label: "Profesor" },
   { value: "administrador", label: "Administrador" },
 ];
+
+const HEATMAP_DECISION_LABELS = {
+  metastasis_probable: "Metastasis probable",
+  sano_probable: "Sano probable",
+  sospecha_focal: "Sospecha focal",
+  mixto_incierto: "Mixto/incierto",
+  roi_no_evaluable: "ROI no evaluable",
+};
+
+const heatmapDecisionLabel = (decision) => {
+  if (!decision) return "";
+  return decision.label || HEATMAP_DECISION_LABELS[decision.status] || "Decision ROI";
+};
+
 export function ConfigPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -1143,6 +1157,14 @@ export function ConfigPage() {
                           <span className="cfg-heatmap-mapfile-size">{latestHeatmap.tile_count} tiles</span>
                         )}
                       </div>
+                      {heatmapSummary.roi_decision && (
+                        <div className="cfg-heatmap-muted" style={{ marginTop: 8 }}>
+                          Decision ROI: <strong>{heatmapDecisionLabel(heatmapSummary.roi_decision)}</strong>
+                          {typeof heatmapSummary.roi_decision?.metrics?.max_connected_tumor_cluster === "number"
+                            ? ` - cluster tumor ${heatmapSummary.roi_decision.metrics.max_connected_tumor_cluster}`
+                            : ""}
+                        </div>
+                      )}
                     </div>
 
                     <div className="cfg-heatmap-fields">
@@ -1248,7 +1270,9 @@ export function ConfigPage() {
                       <div className="cfg-heatmap-muted">Sin mapas históricos para esta imagen.</div>
                     ) : (
                       <div className="cfg-hp-history-list">
-                        {heatmapHistory.map((item) => (
+                        {heatmapHistory.map((item) => {
+                          const decisionLabel = heatmapDecisionLabel(item.summary?.roi_decision);
+                          return (
                           <div key={item.trace_id} className="cfg-hp-history-row">
                             <button
                               type="button"
@@ -1256,8 +1280,15 @@ export function ConfigPage() {
                               onClick={() => handleLoadHeatmapTrace(item.trace_id)}
                               disabled={loadingHeatmapTrace === item.trace_id}
                             >
+                              <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
                               <span className="cfg-hp-history-info">
                                 {item.educational?.type || "referencia"} · tile {item.tile_size || 512} · {item.tile_count} tiles
+                              </span>
+                              {decisionLabel && (
+                                <span className="cfg-hp-history-info">
+                                  Decision ROI: {decisionLabel}
+                                </span>
+                              )}
                               </span>
                               <span className="cfg-hp-history-score">
                                 {formatPercent(item.summary?.max_tumor_score)}
@@ -1272,7 +1303,8 @@ export function ConfigPage() {
                               🗑
                             </button>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

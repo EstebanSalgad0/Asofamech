@@ -26,8 +26,10 @@ function detectTopic(text) {
   return null;
 }
 
-function isSecurityWarning(text) {
-  return /solo puedo responder|fuera del [aá]mbito|puedo ayudarte si la consulta/i.test(text);
+function getMsgType(messageType) {
+  if (messageType === "out_of_scope") return "warning";
+  if (messageType === "ambiguous") return "info";
+  return "answer";
 }
 
 function getTimestamp() {
@@ -70,7 +72,7 @@ function createNewConversation() {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     messages: [
-      { sender: "bot", text: BOT_WELCOME, time: getTimestamp(), ragSources: [], isWarning: false },
+      { sender: "bot", text: BOT_WELCOME, time: getTimestamp(), ragSources: [], msgType: "answer" },
     ],
   };
 }
@@ -284,7 +286,7 @@ export function ChatbotPage() {
         text: allBotTexts,
         time: getTimestamp(),
         ragSources,
-        isWarning: isSecurityWarning(allBotTexts),
+        msgType: getMsgType(data.message_type),
       };
       const withResponse = {
         ...updatedConv,
@@ -330,7 +332,7 @@ export function ChatbotPage() {
         text: allBotTexts,
         time: getTimestamp(),
         ragSources,
-        isWarning: isSecurityWarning(allBotTexts),
+        msgType: getMsgType(data.message_type),
       };
       trackConsultation();
       pushActivity("chat", newTitle);
@@ -360,11 +362,47 @@ export function ChatbotPage() {
     }
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleExportPDF = () => {
+    if (!current) return;
+    const exportDate = new Date().toLocaleString("es-CL");
+    const rows = current.messages
+      .map((m) => {
+        const sender = m.sender === "bot" ? "MediChat" : (user?.name || "Usuario");
+        const text = m.text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const cls = m.sender === "bot" ? "bot" : "usr";
+        return `<div class="msg ${cls}"><div class="sender">${sender} · ${m.time || ""}</div><div class="text">${text}</div></div>`;
+      })
+      .join("");
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>${current.title}</title><style>
+body{font-family:system-ui,sans-serif;max-width:780px;margin:0 auto;padding:32px;color:#1a1a2e}
+h1{font-size:20px;margin-bottom:4px}
+.meta{font-size:12px;color:#888;margin-bottom:24px}
+hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
+.msg{margin:16px 0;padding:12px 16px;border-radius:10px;font-size:14px;line-height:1.6}
+.msg.bot{background:#f0f4ff;border-left:3px solid #3b82f6}
+.msg.usr{background:#f0fdf4;border-left:3px solid #10b981;text-align:right}
+.sender{font-size:11px;font-weight:700;margin-bottom:4px;color:#555}
+.msg.bot .sender{color:#1e40af}.msg.usr .sender{color:#065f46}
+.text{white-space:pre-wrap;word-break:break-word}
+@media print{body{padding:16px}}
+</style></head><body>
+<h1>${current.title}</h1>
+<div class="meta">Exportado el ${exportDate} · ASOFAMECH MediChat</div>
+<hr>${rows}</body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) { showToast("Permite ventanas emergentes para exportar", "error"); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
   };
 
   const handleLogout = () => {
@@ -550,7 +588,7 @@ export function ChatbotPage() {
                       ☆ Guardar
                     </button>
                   ) : null}
-                  <button className="mc-badge mc-badge-export">↓ Exportar</button>
+                  <button className="mc-badge mc-badge-export" onClick={handleExportPDF}>↓ Exportar PDF</button>
                 </div>
               </div>
 
@@ -570,11 +608,22 @@ export function ChatbotPage() {
                           </div>
                         )}
 
-                        {msg.isWarning ? (
+                        {msg.msgType === "warning" ? (
                           <div className="mc-msg-warning">
                             <div className="mc-warn-icon">!</div>
                             <div className="mc-warn-content">
-                              <span className="mc-warn-label">Aviso de seguridad</span>
+                              <span className="mc-warn-label">Aviso de alcance</span>
+                              <span className="mc-warn-colon">: </span>
+                              <span
+                                dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
+                              />
+                            </div>
+                          </div>
+                        ) : msg.msgType === "info" ? (
+                          <div className="mc-msg-info">
+                            <div className="mc-info-icon">i</div>
+                            <div className="mc-warn-content">
+                              <span className="mc-info-label">Consulta ambigua</span>
                               <span className="mc-warn-colon">: </span>
                               <span
                                 dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
@@ -652,7 +701,7 @@ export function ChatbotPage() {
                     placeholder="Escribe tu pregunta médica..."
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    onKeyPress={handleKeyPress}
+                    onKeyDown={handleKeyDown}
                     disabled={isLoading}
                   />
                   <button
