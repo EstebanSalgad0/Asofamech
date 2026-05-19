@@ -54,37 +54,56 @@ def parse_args():
         default="artifacts/histopathology/reports/tri_head_metrics.json",
         help="Ruta para guardar el reporte JSON de métricas.",
     )
-    parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=13)
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
-    parser.add_argument("--head-type", default="linear", choices=["linear", "mlp"])
-    parser.add_argument("--hidden-dim", type=int, default=128)
-    parser.add_argument("--dropout", type=float, default=0.20)
+    parser.add_argument("--head-type", default="mlp", choices=["linear", "mlp"])
+    parser.add_argument("--hidden-dim", type=int, default=256)
+    parser.add_argument("--dropout", type=float, default=0.25)
     parser.add_argument(
         "--selection-metric",
-        default="val_loss",
+        default="tumor_recall_minus_stroma_fp",
         choices=["val_loss", "macro_f1", "tumor_f1", "tumor_recall_minus_stroma_fp"],
         help=(
-            "Criterio para escoger el mejor epoch. val_loss minimiza perdida; "
-            "las otras opciones maximizan metricas de validacion."
+            "Criterio para escoger el mejor epoch. tumor_recall_minus_stroma_fp "
+            "maximiza recall tumoral y minimiza falsos positivos de estroma."
         ),
     )
     parser.add_argument(
         "--class-weights",
         action="store_true",
+        default=True,
         help="Aplicar pesos inversamente proporcionales a la frecuencia de clase.",
     )
     parser.add_argument(
         "--class-weight-power",
         type=float,
-        default=1.0,
+        default=0.75,
         help=(
-            "Suaviza los pesos de clase cuando --class-weights esta activo. "
+            "Suaviza los pesos de clase. "
             "1.0 usa pesos inversos completos; 0.5 usa raiz cuadrada; 0.0 equivale a pesos uniformes."
         ),
+    )
+    parser.add_argument(
+        "--label-smoothing",
+        type=float,
+        default=0.05,
+        help="Suavizado de etiquetas en CrossEntropyLoss (0.0 = sin suavizado, 0.1 es un buen valor).",
+    )
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=8,
+        help="Early stopping: detiene el entrenamiento si el score de seleccion no mejora tras N epochs.",
+    )
+    parser.add_argument(
+        "--lr-scheduler",
+        default="cosine",
+        choices=["none", "cosine", "step"],
+        help="Scheduler de learning rate. cosine aplica CosineAnnealingLR; step baja lr x0.5 cada 10 epochs.",
     )
     return parser.parse_args()
 
@@ -395,6 +414,10 @@ def main():
         raise SystemExit("--dropout debe estar en el rango [0, 1).")
     if args.class_weight_power < 0:
         raise SystemExit("--class-weight-power debe ser mayor o igual a cero.")
+    if not 0.0 <= args.label_smoothing < 0.5:
+        raise SystemExit("--label-smoothing debe estar en [0, 0.5).")
+    if args.patience < 1:
+        raise SystemExit("--patience debe ser mayor a cero.")
 
     torch, nn, DataLoader, TensorDataset, metrics_api = load_runtime_dependencies()
     set_seed(torch, args.seed)
@@ -438,18 +461,30 @@ def main():
         if args.class_weights
         else None
     )
-    criterion = nn.CrossEntropyLoss(weight=weight)
+    criterion = nn.CrossEntropyLoss(weight=weight, label_smoothing=args.label_smoothing)
     optimizer = torch.optim.AdamW(head.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    if args.lr_scheduler == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.lr * 0.01)
+    elif args.lr_scheduler == "step":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    else:
+        scheduler = None
 
     best_state = None
     best_val_loss = float("inf")
     best_selection_score = float("-inf")
     best_epoch = None
+    epochs_without_improvement = 0
     history = []
 
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch(head, train_loader, optimizer, criterion, device)
         val_loss = validation_loss(torch, head, val_loader, criterion, device)
+
+        if scheduler is not None:
+            scheduler.step()
+
         val_metrics_for_selection = None
         if args.selection_metric != "val_loss":
             val_true_epoch, val_pred_epoch, val_score_epoch = predict(torch, head, val_loader, device)
@@ -460,10 +495,12 @@ def main():
                 val_score_epoch,
             )
         score = selection_score(val_metrics_for_selection, val_loss, args.selection_metric)
+        current_lr = optimizer.param_groups[0]["lr"]
         history_row = {
             "epoch": epoch,
             "train_loss": train_loss,
             "val_loss": val_loss,
+            "lr": current_lr,
             "selection_metric": args.selection_metric,
             "selection_score": score,
         }
@@ -478,13 +515,22 @@ def main():
         print(
             f"[histopathology-3class] epoch={epoch}/{args.epochs} "
             f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
-            f"selection_score={score:.4f}"
+            f"lr={current_lr:.2e} selection_score={score:.4f}"
         )
         if score > best_selection_score:
             best_selection_score = score
             best_val_loss = val_loss
             best_epoch = epoch
             best_state = {k: v.cpu() for k, v in head.state_dict().items()}
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= args.patience:
+                print(
+                    f"[histopathology-3class] early stopping en epoch {epoch} "
+                    f"(sin mejora durante {args.patience} epochs)"
+                )
+                break
 
     head.load_state_dict(best_state)
     val_true, val_pred, val_score = predict(torch, head, val_loader, device)
@@ -527,6 +573,9 @@ def main():
             "selection_metric": args.selection_metric,
             "class_weights": args.class_weights,
             "class_weight_power": args.class_weight_power,
+            "label_smoothing": args.label_smoothing,
+            "lr_scheduler": args.lr_scheduler,
+            "patience": args.patience,
         },
         "embedding_files": {
             "train": str(train_path),
