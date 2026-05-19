@@ -34,7 +34,15 @@ AMBIGUOUS_SCOPE_RESPONSE = (
     "Puedo ayudarte si la consulta esta relacionada con medicina o salud. "
     "Puedes reformularla indicando el contexto medico, clinico o educativo."
 )
-GREETING_TERMS = {"hola", "buenas", "gracias", "ayuda"}
+GREETING_TERMS = {
+    "hola", "buenas", "buenos", "dias", "tardes", "noches",
+    "gracias", "muchas", "mil", "de", "nada",
+    "perfecto", "ok", "okay", "bien", "muy", "excelente",
+    "genial", "claro", "entendido", "listo", "dale", "vale",
+    "si", "no", "por", "favor", "porfavor",
+    "adios", "hasta", "luego", "pronto", "bye", "chao",
+    "ayuda", "ayudame",
+}
 SCOPE_MEDICAL = "medical"
 SCOPE_NON_MEDICAL = "non_medical"
 SCOPE_AMBIGUOUS = "ambiguous"
@@ -312,9 +320,9 @@ async def chat(
                     ollama_url=ollama_url,
                 )
                 if scope == SCOPE_NON_MEDICAL:
-                    return {"messages": [{"text": OUT_OF_SCOPE_RESPONSE}], "rag_sources": []}
+                    return {"messages": [{"text": OUT_OF_SCOPE_RESPONSE}], "rag_sources": [], "message_type": "out_of_scope"}
                 if scope == SCOPE_AMBIGUOUS:
-                    return {"messages": [{"text": AMBIGUOUS_SCOPE_RESPONSE}], "rag_sources": []}
+                    return {"messages": [{"text": AMBIGUOUS_SCOPE_RESPONSE}], "rag_sources": [], "message_type": "ambiguous"}
 
             cases_context = _build_cases_context(user_text, db)
             rag_hits = retrieve_rag_hits(db, user_text, max_context_documents) if rag_enabled else []
@@ -358,6 +366,7 @@ async def chat(
 
             return {
                 "messages": [{"text": assistant_text}],
+                "message_type": "answer",
                 "rag_sources": [
                     {
                         "id": hit.id,
