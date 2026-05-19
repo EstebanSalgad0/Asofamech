@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..histopathology.audit_log import append_audit_event, get_audit_log_path
 from ..histopathology.debug_patches import save_patch_debug_images
+from ..histopathology.heatmap_decision import aggregate_heatmap_roi_decision
 from ..histopathology.heatmap_access import (
     check_heatmap_rate_limit,
     heatmap_rate_limit_key,
@@ -496,6 +497,7 @@ def _execute_heatmap_scan(
         tile for tile in tile_results
         if tile.get("status") == "resultado_incierto" and tile.get("tumor_score", 0.0) >= 0.50
     ]
+    roi_decision = aggregate_heatmap_roi_decision(tile_results)
 
     response_payload = {
         "trace_id": trace_id,
@@ -515,6 +517,7 @@ def _execute_heatmap_scan(
             "uncertain_high_tumor_tiles": len(uncertain_high),
             "best_tile": best_tile,
             "max_tumor_score": best_tile.get("tumor_score", 0.0) if best_tile else 0.0,
+            "roi_decision": roi_decision,
             "cache_hits": cache_hits,
             "cache_misses": cache_misses,
             "cache_hit_rate": cache_hits / total_tiles if total_tiles else 0.0,

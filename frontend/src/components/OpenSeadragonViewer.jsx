@@ -70,6 +70,54 @@ function educationalTypeLabel(value) {
   return labels[value] || 'Referencia';
 }
 
+function roiDecisionLabel(decision) {
+  if (!decision) return 'Sin decision ROI';
+  const labels = {
+    metastasis_probable: 'Metastasis probable',
+    sano_probable: 'Sano probable',
+    sospecha_focal: 'Sospecha focal',
+    mixto_incierto: 'ROI mixta / incierta',
+    roi_no_evaluable: 'ROI no evaluable',
+  };
+  return decision.label || labels[decision.status] || 'Decision ROI';
+}
+
+function roiDecisionPalette(status) {
+  const palettes = {
+    metastasis_probable: {
+      background: 'rgba(127, 29, 29, 0.52)',
+      border: 'rgba(248, 113, 113, 0.42)',
+      heading: '#fecaca',
+      text: '#fee2e2',
+    },
+    sano_probable: {
+      background: 'rgba(6, 78, 59, 0.52)',
+      border: 'rgba(52, 211, 153, 0.38)',
+      heading: '#a7f3d0',
+      text: '#d1fae5',
+    },
+    sospecha_focal: {
+      background: 'rgba(124, 45, 18, 0.52)',
+      border: 'rgba(251, 146, 60, 0.38)',
+      heading: '#fed7aa',
+      text: '#ffedd5',
+    },
+    mixto_incierto: {
+      background: 'rgba(113, 63, 18, 0.52)',
+      border: 'rgba(251, 191, 36, 0.38)',
+      heading: '#fde68a',
+      text: '#fef3c7',
+    },
+    roi_no_evaluable: {
+      background: 'rgba(51, 65, 85, 0.58)',
+      border: 'rgba(148, 163, 184, 0.38)',
+      heading: '#cbd5e1',
+      text: '#e2e8f0',
+    },
+  };
+  return palettes[status] || palettes.mixto_incierto;
+}
+
 function heatmapColor(score, status) {
   if (status === 'roi_no_evaluable' || status === 'error') {
     return {
@@ -1252,6 +1300,36 @@ export function OpenSeadragonViewer({ imageData }) {
                     )}
                   </div>
                 )}
+                {heatmap.summary?.roi_decision && (() => {
+                  const decision = heatmap.summary.roi_decision;
+                  const metrics = decision.metrics || {};
+                  const palette = roiDecisionPalette(decision.status);
+                  return (
+                    <div style={{
+                      color: palette.text,
+                      background: palette.background,
+                      border: `1px solid ${palette.border}`,
+                      borderRadius: 8,
+                      padding: 8,
+                      marginBottom: 8,
+                    }}>
+                      <div style={{ color: palette.heading, fontWeight: 800 }}>
+                        Decision ROI: {roiDecisionLabel(decision)}
+                      </div>
+                      <div style={{ marginTop: 4 }}>{decision.summary}</div>
+                      <div style={{ marginTop: 5, color: palette.text, fontSize: 11 }}>
+                        Cluster tumor: {metrics.max_connected_tumor_cluster ?? 0}/{metrics.cluster_required ?? 2} -
+                        Tiles fuertes: {metrics.strong_tumor_tiles ?? 0} -
+                        Soporte sano: {formatPercent(metrics.negative_fraction)}
+                      </div>
+                      {decision.recommendation && (
+                        <div style={{ marginTop: 5, color: '#cbd5e1', fontSize: 11 }}>
+                          {decision.recommendation}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div style={{ color: '#cbd5e1' }}>
                   Tile del mapa: {heatmap.tile_size || 'N/D'} px
                   {heatmap.stride ? ` (stride ${heatmap.stride}px)` : ''}

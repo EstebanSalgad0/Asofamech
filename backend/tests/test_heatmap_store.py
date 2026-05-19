@@ -156,6 +156,18 @@ class HeatmapStoreTestCase(unittest.TestCase):
         self.assertNotIn("probabilities", best_tile)
         self.assertNotIn("roi_quality", best_tile)
 
+    def test_history_keeps_roi_decision_summary(self):
+        result = self._make_result(image_id=17, trace_id="trace-roi-decision")
+        result["summary"]["roi_decision"] = {
+            "status": "sano_probable",
+            "label": "Sano probable",
+            "metrics": {"negative_fraction": 1.0},
+        }
+        heatmap_store.save_heatmap_result(result)
+        history = heatmap_store.load_heatmap_history_for_image(17)
+        self.assertEqual(history[0]["summary"]["roi_decision"]["status"], "sano_probable")
+        self.assertEqual(history[0]["summary"]["roi_decision"]["metrics"]["negative_fraction"], 1.0)
+
     def test_update_educational_metadata_updates_trace_latest_and_history(self):
         result = self._make_result(image_id=16, trace_id="trace-update-meta")
         heatmap_store.save_heatmap_result(result)

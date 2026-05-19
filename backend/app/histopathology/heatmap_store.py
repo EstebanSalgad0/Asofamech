@@ -83,6 +83,7 @@ def _history_item(result: Dict[str, Any], artifacts: Dict[str, str]) -> Dict[str
             "cache_misses": summary.get("cache_misses", 0),
             "cache_hit_rate": summary.get("cache_hit_rate", 0.0),
             "best_tile": _compact_best_tile(summary.get("best_tile")),
+            "roi_decision": summary.get("roi_decision"),
         },
         "educational": normalize_heatmap_educational(result.get("educational")),
         "artifacts": artifacts,
