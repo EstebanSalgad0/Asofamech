@@ -125,10 +125,14 @@ def aggregate_heatmap_roi_decision(tile_results: Iterable[Dict[str, Any]]) -> Di
     """
     tiles = list(tile_results)
     total_tiles = len(tiles)
-    tumor_tile_threshold = _env_float("HISTO_HEATMAP_ROI_TUMOR_TILE_THRESHOLD", 0.90)
+    # Thresholds ajustados para reducir falsos positivos en zonas sin metastasis:
+    # - tumor_tile_threshold subido (0.90→0.92): exige mayor certeza para declarar tile tumoral
+    # - sane_max_tumor_score subido (0.30→0.35): permite score tumoral levemente mas alto en zona sana
+    # - sane_min_negative_fraction bajado (0.70→0.60): basta con 60 % de tiles negativos para sano probable
+    tumor_tile_threshold = _env_float("HISTO_HEATMAP_ROI_TUMOR_TILE_THRESHOLD", 0.92)
     suspicious_tile_threshold = _env_float("HISTO_HEATMAP_ROI_SUSPICIOUS_TILE_THRESHOLD", 0.80)
-    sane_max_tumor_score = _env_float("HISTO_HEATMAP_ROI_SANE_MAX_TUMOR_SCORE", 0.30)
-    sane_min_negative_fraction = _env_float("HISTO_HEATMAP_ROI_SANE_MIN_NEGATIVE_FRACTION", 0.70)
+    sane_max_tumor_score = _env_float("HISTO_HEATMAP_ROI_SANE_MAX_TUMOR_SCORE", 0.35)
+    sane_min_negative_fraction = _env_float("HISTO_HEATMAP_ROI_SANE_MIN_NEGATIVE_FRACTION", 0.60)
     min_evaluable_fraction = _env_float("HISTO_HEATMAP_ROI_MIN_EVALUABLE_FRACTION", 0.35)
     configured_min_cluster = _env_int("HISTO_HEATMAP_ROI_MIN_TUMOR_CLUSTER", 2)
 
@@ -156,9 +160,11 @@ def aggregate_heatmap_roi_decision(tile_results: Iterable[Dict[str, Any]]) -> Di
         tile for tile in evaluable_tiles
         if _as_float(tile.get("tumor_score")) >= suspicious_tile_threshold
     ]
+    # "estroma" se incluye como soporte negativo: el modelo 3-class usa esta clase
+    # para tejido conectivo que el modelo binario confundia con tumor (falsos positivos).
     negative_support_tiles = [
         tile for tile in evaluable_tiles
-        if tile.get("class") in {"no_metastasico", "no_metastasico_probable"}
+        if tile.get("class") in {"no_metastasico", "no_metastasico_probable", "estroma"}
     ]
     uncertain_tiles = [
         tile for tile in evaluable_tiles
