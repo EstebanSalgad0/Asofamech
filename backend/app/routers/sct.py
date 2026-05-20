@@ -5,9 +5,14 @@ import os
 from typing import List
 from sqlalchemy.orm import Session
 from datetime import datetime
-from ..schemas import SCTGenerateRequest, SCTResponse, SCTItem, SCTSaveRequest, SCTTestOut, SCTTestDetail
-from ..models import SCTTest
+from ..schemas import (
+    SCTGenerateRequest, SCTResponse, SCTItem, SCTSaveRequest, SCTTestOut, SCTTestDetail,
+    SCTAttemptCreate, SCTAttemptOut, SCTAttemptDetail,
+)
+from ..models import SCTTest, SCTAttempt
 from ..db import get_db
+from ..auth import get_current_user
+from ..models import User
 
 router = APIRouter(prefix="/api/sct", tags=["SCT"])
 
@@ -329,6 +334,112 @@ async def delete_sct_test(test_id: int, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al eliminar test SCT: {str(e)}")
 
+@router.get("/my-attempts", response_model=List[SCTAttemptOut])
+async def list_my_attempts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    attempts = (
+        db.query(SCTAttempt)
+        .filter(SCTAttempt.user_id == current_user.id)
+        .order_by(SCTAttempt.completed_at.desc())
+        .all()
+    )
+    return [
+        SCTAttemptOut(
+            id=a.id,
+            test_id=a.test_id,
+            user_id=a.user_id,
+            score=a.score,
+            correct_count=a.correct_count,
+            total_items=a.total_items,
+            completed_at=a.completed_at.isoformat(),
+        )
+        for a in attempts
+    ]
+
+
+@router.get("/attempts/{attempt_id}", response_model=SCTAttemptDetail)
+async def get_attempt(
+    attempt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    attempt = db.query(SCTAttempt).filter(SCTAttempt.id == attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Intento no encontrado")
+    if attempt.user_id != current_user.id and current_user.role not in {"administrador", "docente"}:
+        raise HTTPException(status_code=403, detail="Sin acceso a este intento")
+    test = db.query(SCTTest).filter(SCTTest.id == attempt.test_id).first()
+    return SCTAttemptDetail(
+        id=attempt.id,
+        test_id=attempt.test_id,
+        user_id=attempt.user_id,
+        score=attempt.score,
+        correct_count=attempt.correct_count,
+        total_items=attempt.total_items,
+        completed_at=attempt.completed_at.isoformat(),
+        answers_json=attempt.answers_json,
+        test_name=test.name if test else "",
+        test_focus=test.focus if test else "",
+        test_difficulty=test.difficulty if test else "",
+    )
+
+
+@router.post("/{test_id}/attempt", response_model=SCTAttemptOut)
+async def submit_sct_attempt(
+    test_id: int,
+    request: SCTAttemptCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    test = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test SCT no encontrado")
+
+    correct_map = {item["id"]: item["correct_answer"] for item in test.items_json}
+    correct_count = sum(
+        1 for a in request.answers if correct_map.get(a.item_id) == a.selected_answer
+    )
+    total = len(test.items_json)
+    score = round(correct_count / total, 4) if total > 0 else 0.0
+
+    started_at = None
+    if request.started_at:
+        try:
+            started_at = datetime.fromisoformat(request.started_at.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            pass
+
+    attempt = SCTAttempt(
+        test_id=test_id,
+        user_id=current_user.id,
+        answers_json=[a.dict() for a in request.answers],
+        score=score,
+        correct_count=correct_count,
+        total_items=total,
+        started_at=started_at,
+        completed_at=datetime.utcnow(),
+    )
+    try:
+        db.add(attempt)
+        db.commit()
+        db.refresh(attempt)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar intento: {str(e)}")
+
+    return SCTAttemptOut(
+        id=attempt.id,
+        test_id=attempt.test_id,
+        user_id=attempt.user_id,
+        score=attempt.score,
+        correct_count=attempt.correct_count,
+        total_items=attempt.total_items,
+        completed_at=attempt.completed_at.isoformat(),
+    )
+
+
 @router.get("/{test_id}", response_model=SCTTestDetail)
 async def get_sct_test(test_id: int, db: Session = Depends(get_db)):
     """
@@ -336,13 +447,12 @@ async def get_sct_test(test_id: int, db: Session = Depends(get_db)):
     """
     try:
         test = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True).first()
-        
+
         if not test:
             raise HTTPException(status_code=404, detail="Test SCT no encontrado")
-        
-        # Convertir items_json a objetos SCTItem
+
         items = [SCTItem(**item) for item in test.items_json]
-        
+
         return SCTTestDetail(
             id=test.id,
             name=test.name,

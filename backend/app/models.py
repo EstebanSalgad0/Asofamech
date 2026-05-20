@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Text, DateTime, Boolean, JSON, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, Float, String, Text, DateTime, Boolean, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .db import Base
@@ -104,6 +104,40 @@ class SCTTest(Base):
     items_json = Column(JSON, nullable=False)           # Array de ítems SCT
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+
+
+class HeatmapJob(Base):
+    __tablename__ = "heatmap_jobs"
+    job_id = Column(String(36), primary_key=True)
+    trace_id = Column(String(36), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="queued")
+    progress = Column(Float, nullable=False, default=0.0)
+    processed_tiles = Column(Integer, nullable=False, default=0)
+    total_tiles = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    failed_at = Column(DateTime, nullable=True)
+    error = Column(Text, nullable=True)
+    request_json = Column(JSON, nullable=True)
+    result_json = Column(JSON, nullable=True)
+    worker_limit = Column(Integer, nullable=False, default=1)
+
+
+class SCTAttempt(Base):
+    __tablename__ = "sct_attempts"
+    id = Column(Integer, primary_key=True, index=True)
+    test_id = Column(Integer, ForeignKey("sct_tests.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    answers_json = Column(JSON, nullable=False)
+    score = Column(Float, nullable=False, default=0.0)
+    correct_count = Column(Integer, nullable=False, default=0)
+    total_items = Column(Integer, nullable=False, default=0)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    test = relationship("SCTTest")
+    user = relationship("User")
 
 
 class HistopathologySession(Base):
