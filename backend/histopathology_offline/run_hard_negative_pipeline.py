@@ -148,7 +148,7 @@ def main() -> None:
             python, str(OFFLINE_DIR / "extract_manifest_embeddings.py"),
             "--manifest", str(manifest_path),
             "--output-dir", str(embeddings_dir),
-            "--conch-checkpoint-ref", args.conch_ref,
+            "--checkpoint-ref", args.conch_ref,
             "--batch-size", str(args.extract_batch_size),
             "--num-workers", str(args.num_workers),
         ]
