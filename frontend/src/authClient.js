@@ -18,9 +18,23 @@ export function getStoredUser() {
   }
 }
 
+const _ROLE_DISPLAY = { administrador: "Administrador", docente: "Profesor", estudiante: "Estudiante" };
+
+function _getRoleFromToken() {
+  const token = getAuthToken();
+  if (!token) return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return _ROLE_DISPLAY[payload.role] || null;
+  } catch {
+    return null;
+  }
+}
+
 export function getStoredRole() {
-  const user = getStoredUser();
-  return user?.role_label || localStorage.getItem(ROLE_KEY) || "Estudiante";
+  return _getRoleFromToken() || getStoredUser()?.role_label || localStorage.getItem(ROLE_KEY) || "Estudiante";
 }
 
 export function getUserStorageScope(user = getStoredUser()) {

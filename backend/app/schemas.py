@@ -74,6 +74,36 @@ class SCTTestDetail(BaseModel):
     num_items: int
     items: List[SCTItem]
     created_at: str
-    
+
     class Config:
         orm_mode = True
+
+
+class SCTAnswerItem(BaseModel):
+    item_id: int
+    selected_answer: int
+
+
+class SCTAttemptCreate(BaseModel):
+    answers: List[SCTAnswerItem]
+    started_at: Optional[str] = None
+
+
+class SCTAttemptOut(BaseModel):
+    id: int
+    test_id: int
+    user_id: int
+    score: float
+    correct_count: int
+    total_items: int
+    completed_at: str
+
+    class Config:
+        orm_mode = True
+
+
+class SCTAttemptDetail(SCTAttemptOut):
+    answers_json: List[dict]
+    test_name: str
+    test_focus: str
+    test_difficulty: str

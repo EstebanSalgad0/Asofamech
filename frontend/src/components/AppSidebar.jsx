@@ -7,6 +7,7 @@ const navItems = [
   { id: "chat", label: "Asistente IA", path: "/dashboard/chat", icon: "chat", group: "Navegacion" },
   { id: "sct", label: "Test SCT", path: "/dashboard/sct", icon: "clipboard", group: "Navegacion" },
   { id: "images", label: "Imagenes IA", path: "/dashboard/images", icon: "image", group: "Navegacion" },
+  { id: "review", label: "Revision", path: "/dashboard/review", icon: "review", group: "Admin", privileged: true },
   { id: "config", label: "Configuracion", path: "/dashboard/config", icon: "settings", group: "Admin", privileged: true },
 ];
 
