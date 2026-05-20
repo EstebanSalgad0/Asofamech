@@ -45,6 +45,10 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def utc_now() -> str:
+    return _utc_now().isoformat()
+
+
 def _job_to_dict(job) -> Dict[str, Any]:
     def _iso(dt):
         return dt.isoformat() if dt else None
