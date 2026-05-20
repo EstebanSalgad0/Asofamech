@@ -16,7 +16,7 @@ const TOPIC_PATTERNS = {
   nefrología: /ri[ñn][oó]n|renal|creatinin|di[aá]lisis|nefr|glomerulo/i,
   infectología: /infecci[oó]n|bacteria|virus|covid|dengue|sepsis|infect|antimicrobian/i,
   neurología: /cerebro|neurol[oó]g|nervio|\bacv\b|parkinson|epilepsia|esclerosis|migraña/i,
-  mecánica: /fuerza|mec[aá]nica|articular|pr[oó]tesis|rodilla|biomec[aá]nic|torque/i,
+  ortopedia: /articular|pr[oó]tesis|rodilla|biomec[aá]nic|fractura|ortop[eé]d|columna|ligamento/i,
 };
 
 function detectTopic(text) {
@@ -338,6 +338,7 @@ export function ChatbotPage() {
       pushActivity("chat", newTitle);
       const withResponse = {
         ...updatedConv,
+        topic: data.message_type === "out_of_scope" ? current.topic : newTopic,
         updatedAt: new Date().toISOString(),
         messages: [...updatedConv.messages, botMsg],
       };
