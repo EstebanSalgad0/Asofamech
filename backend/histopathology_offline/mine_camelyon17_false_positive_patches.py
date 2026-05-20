@@ -6,6 +6,7 @@ import json
 import os
 import random
 import sys
+import time
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -237,6 +238,54 @@ def write_candidates_csv(path: Path, rows: list[tuple[MinedCandidate, PatchManif
             )
 
 
+def predict_patches_batch(
+    inference_service,
+    patches: list,
+    batch_size: int,
+) -> list[dict]:
+    """Inferencia en lote sobre multiples patches usando CONCH + clasificador."""
+    torch = inference_service.torch
+    extractor = inference_service.extractor
+    head = inference_service.head
+    labels = inference_service.labels
+    device = inference_service.device
+    num_classes = inference_service.num_classes
+    class_mapping = inference_service.class_mapping
+    classifier_kind = inference_service.classifier_kind
+    confidence_threshold = inference_service.confidence_threshold
+
+    results: list[dict] = []
+    for start in range(0, len(patches), batch_size):
+        mini_batch = patches[start : start + batch_size]
+        tensors = [extractor.preprocess(p) for p in mini_batch]
+        batch_tensor = torch.stack(tensors, dim=0).to(device)
+        with torch.inference_mode():
+            features = extractor.model.encode_image(
+                batch_tensor, proj_contrast=False, normalize=False
+            )
+            logits = head(features)
+            probabilities = torch.softmax(logits, dim=1)
+        for probs in probabilities:
+            predicted_index = int(torch.argmax(probs).item())
+            predicted_class = labels[str(predicted_index)]
+            confidence = float(probs[predicted_index].item())
+            results.append({
+                "predicted_index": predicted_index,
+                "predicted_class": predicted_class,
+                "model_predicted_class": predicted_class,
+                "confidence": confidence,
+                "probabilities": {
+                    labels[str(idx)]: float(probs[idx].item())
+                    for idx in range(num_classes)
+                },
+                "class_mapping": class_mapping,
+                "num_classes": num_classes,
+                "classifier_kind": classifier_kind,
+                "decision_threshold": confidence_threshold,
+            })
+    return results
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -277,6 +326,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-ratio", type=float, default=0.70)
     parser.add_argument("--val-ratio", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=37)
+    parser.add_argument(
+        "--inference-batch-size", type=int, default=128,
+        help="Patches por lote en la inferencia GPU (mayor = mas rapido, usa mas VRAM).",
+    )
     parser.add_argument(
         "--allow-non-evaluable",
         action="store_true",
@@ -329,16 +382,26 @@ def main() -> None:
     selected_pairs: list[tuple[MinedCandidate, PatchManifestRow]] = []
     per_slide: dict[str, dict[str, Any]] = {}
 
-    for slide in slides:
+    total_slides = len(slides)
+    slide_times: list[float] = []
+    pipeline_start = time.monotonic()
+
+    for slide_idx, slide in enumerate(slides, start=1):
         polygons = polygons_by_slide.get(slide.slide_id, [])
         split = split_for_slide(slide.slide_id, args.train_ratio, args.val_ratio, args.seed)
         candidates: list[MinedCandidate] = []
         sampled = 0
         skipped_qc = 0
         attempted_positions = 0
+        slide_start = time.monotonic()
         max_sampling_attempts = args.sampled_patches_per_slide * args.max_attempts_per_sample
         reader = SlideReader(slide.path)
         try:
+            # Colectar patches evaluables primero, luego inferencia en lote
+            pending_patches: list = []
+            pending_positions: list[tuple[int, int]] = []
+            pending_qcs: list[dict] = []
+
             while sampled < args.sampled_patches_per_slide and attempted_positions < max_sampling_attempts:
                 attempted_positions += 1
                 xy = sample_outside_tumor_xy(
@@ -360,31 +423,39 @@ def main() -> None:
                     continue
 
                 sampled += 1
-                prediction = inference_service.predict_patch(patch)
-                tumor_score = float(prediction["probabilities"].get("metastasico", 0.0))
-                predicted_class = str(prediction["predicted_class"])
-                if not should_keep_candidate(
-                    tumor_score=tumor_score,
-                    predicted_class=predicted_class,
-                    min_tumor_score=args.min_tumor_score,
-                ):
-                    continue
+                pending_patches.append(patch)
+                pending_positions.append((x, y))
+                pending_qcs.append(qc)
 
-                candidates.append(
-                    MinedCandidate(
-                        slide_id=slide.slide_id,
-                        x=x,
-                        y=y,
-                        width=args.patch_size,
-                        height=args.patch_size,
-                        split=split,
-                        truth_source=slide.truth_source,
+            # Inferencia en lote sobre todos los patches recolectados
+            if pending_patches:
+                predictions = predict_patches_batch(
+                    inference_service, pending_patches, args.inference_batch_size
+                )
+                for (px, py), qc, prediction in zip(pending_positions, pending_qcs, predictions):
+                    tumor_score = float(prediction["probabilities"].get("metastasico", 0.0))
+                    predicted_class = str(prediction["predicted_class"])
+                    if not should_keep_candidate(
                         tumor_score=tumor_score,
                         predicted_class=predicted_class,
-                        confidence=float(prediction["confidence"]),
-                        qc=qc,
+                        min_tumor_score=args.min_tumor_score,
+                    ):
+                        continue
+                    candidates.append(
+                        MinedCandidate(
+                            slide_id=slide.slide_id,
+                            x=px,
+                            y=py,
+                            width=args.patch_size,
+                            height=args.patch_size,
+                            split=split,
+                            truth_source=slide.truth_source,
+                            tumor_score=tumor_score,
+                            predicted_class=predicted_class,
+                            confidence=float(prediction["confidence"]),
+                            qc=qc,
+                        )
                     )
-                )
 
             selected = select_top_candidates(candidates, args.hard_negatives_per_slide)
             for candidate in selected:
@@ -411,10 +482,18 @@ def main() -> None:
                 "selected": len(selected),
                 "max_tumor_score": max((candidate.tumor_score for candidate in candidates), default=0.0),
             }
+            slide_elapsed = time.monotonic() - slide_start
+            slide_times.append(slide_elapsed)
+            avg_time = sum(slide_times) / len(slide_times)
+            remaining = (total_slides - slide_idx) * avg_time
+            eta_min, eta_sec = divmod(int(remaining), 60)
+            total_elapsed = time.monotonic() - pipeline_start
+            el_min, el_sec = divmod(int(total_elapsed), 60)
             print(
-                "[histopathology-stage13] "
-                f"slide={slide.slide_id} attempts={attempted_positions} sampled={sampled} suspicious={len(candidates)} "
-                f"selected={len(selected)} max_score={per_slide[slide.slide_id]['max_tumor_score']:.3f}",
+                f"[{slide_idx}/{total_slides}] {slide.slide_id} | "
+                f"elapsed: {el_min}m{el_sec:02d}s | "
+                f"eta: ~{eta_min}m{eta_sec:02d}s | "
+                f"suspicious={len(candidates)} selected={len(selected)} max_score={per_slide[slide.slide_id]['max_tumor_score']:.3f}",
                 flush=True,
             )
         finally:

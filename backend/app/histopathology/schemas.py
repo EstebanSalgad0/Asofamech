@@ -90,6 +90,7 @@ class HistopathologySessionDetail(HistopathologySessionSummary):
     recommendation: Optional[str] = None
     roi_quality_metrics: Optional[Dict[str, Any]] = None
     warning: Optional[str] = None
+    educational_feedback: Optional[str] = None
 
 
 class HistopathologySessionListResponse(BaseModel):
@@ -118,3 +119,4 @@ class HistopathologyAnalyzeResponse(BaseModel):
     model: Dict[str, Any]
     warning: str
     slide_dimensions: Optional[Dict[str, int]] = None
+    educational_feedback: Optional[str] = None
