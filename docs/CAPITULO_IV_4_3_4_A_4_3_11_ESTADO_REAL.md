@@ -2,7 +2,7 @@
 
 Documento de apoyo para los apartados 4.3.4 a 4.3.11.
 
-Fecha de revision: 19-05-2026.
+Fecha de revision: 19-05-2026. Actualizado con mejoras implementadas en la misma sesion.
 
 Alcance: revision del codigo fuente local del proyecto ASOFAMECH. Este documento evita pegar bloques extensos de codigo y prioriza proceso de implementacion, decisiones tecnicas, flujo funcional, evidencias y validaciones.
 
@@ -13,6 +13,7 @@ Validaciones ejecutadas durante la revision:
 | `backend/.venv/Scripts/python.exe -m pytest tests -q` | 126 pruebas aprobadas, 4 warnings de Pydantic v2. |
 | `frontend/npm.cmd run build` | Build exitoso con Vite. 58 modulos transformados. Advertencia: bundle JS principal mayor a 500 kB. |
 | Revision Git reciente | Commits relevantes: `db7ca61`, `d241791`, `ac18946`, `291f0be`, `7bcd4d7`. |
+| Mejoras implementadas 19-05-2026 | Commits: `0eea356` (persistencia SCT, heatmap en DB, sidebar review, rol JWT), `23a3667` (fix utc_now), `510a93b` (frontend SCT envia intentos). |
 
 ## 4.3.4. Implementacion del Front-End
 
@@ -46,12 +47,12 @@ Flujo de navegacion:
 3. Al iniciar sesion se guarda token JWT, usuario y rol en `localStorage`.
 4. El usuario autenticado ingresa a `/dashboard`.
 5. Desde el dashboard accede a asistente IA, SCT o imagenes IA.
-6. Usuarios con rol Profesor o Administrador ven configuracion en el sidebar.
-7. La revision docente existe como ruta `/dashboard/review`, aunque el sidebar actual no la muestra como enlace permanente.
+6. Usuarios con rol Profesor o Administrador ven configuracion y revision docente en el sidebar.
+7. La ruta `/dashboard/review` esta enlazada permanentemente en el sidebar para roles privilegiados.
 
 Control visual por rol:
 
-El componente `AppSidebar.jsx` oculta la opcion de configuracion para usuarios no privilegiados. `ConfigPage.jsx` muestra pestanas adicionales para Administrador, como Usuarios, Configuracion IA y Correo. Este control es visual y se apoya en el rol almacenado localmente; las acciones sensibles se refuerzan en backend mediante JWT y dependencias de rol.
+El componente `AppSidebar.jsx` oculta las opciones de configuracion y revision docente para usuarios sin privilegios. `ConfigPage.jsx` muestra pestanas adicionales para Administrador, como Usuarios, Configuracion IA y Correo. El rol se obtiene en primer lugar decodificando el payload del token JWT almacenado (`authClient.js`, funcion `_getRoleFromToken`), y solo si falla se recurre al valor guardado en `localStorage`. Esto evita que un cambio de rol en el servidor quede desincronizado con la sesion activa del navegador. Las acciones sensibles se refuerzan siempre en backend mediante JWT y dependencias de rol.
 
 Decisiones tecnicas adoptadas:
 
@@ -68,9 +69,10 @@ Tabla de evidencia del apartado 4.3.4:
 | 4.3.4 | Landing publica | React/Vite | `LandingPage.jsx`, ruta `/` | Pagina inicial publica ASOFAMECH | Build Vite exitoso | Implementado | Ajustar textos finales del informe/institucion. |
 | 4.3.4 | Login y registro | React, JWT client-side | `AuthPage.jsx`, `authClient.js` | Formulario de inicio de sesion y registro pendiente | Prueba manual recomendada login/registro | Implementado | Completar flujo visual de cuenta pendiente y rechazo con mas estados. |
 | 4.3.4 | Dashboard | React, API dashboard | `DashboardPage.jsx`, `/api/dashboard/stats`, `/api/dashboard/ranking` | Dashboard principal con modulos | Build Vite exitoso | Implementado/parcial | Algunas metricas SCT siguen en `localStorage`. |
-| 4.3.4 | Sidebar y navegacion | React Router | `AppSidebar.jsx`, `app.jsx` | Sidebar por rol | Revision de rutas | Implementado/parcial | Ruta `/dashboard/review` no esta enlazada actualmente en sidebar. |
+| 4.3.4 | Sidebar y navegacion | React Router | `AppSidebar.jsx`, `app.jsx` | Sidebar con enlace Revision para privilegiados | Revision de rutas | Implementado | Ruta `/dashboard/review` ahora aparece en sidebar para Admin y Profesor. |
+| 4.3.4 | Rol visual desde JWT | React, `authClient.js` | `_getRoleFromToken`, decode payload JWT | Sidebar muestra rol correcto tras cambio servidor | Revision manual | Implementado | Fallback a `localStorage` si el token no esta disponible. |
 | 4.3.4 | Asistente IA | React, fetch API | `ChatbotPage.jsx`, `api.js` | Chat con respuesta educativa y fuentes RAG | Prueba manual recomendada | Implementado | Historial largo vive en cliente; backend guarda cada pregunta/respuesta. |
-| 4.3.4 | SCT | React, formularios | `SCTPage.jsx`, `SCTSection.jsx` | Generacion y resolucion de SCT | Build Vite exitoso | Implementado/parcial | Falta persistencia centralizada de intentos por estudiante. |
+| 4.3.4 | SCT | React, formularios | `SCTPage.jsx`, `api.js` | Generacion, resolucion y envio de intentos al backend | Build Vite exitoso | Implementado | Al completar test se envia intento a `POST /api/sct/{id}/attempt`; si el test no estaba guardado se auto-guarda primero. |
 | 4.3.4 | Imagenes IA | React, OpenSeadragon | `ImagesPage.jsx`, `OpenSeadragonViewer.jsx` | Visor con ROI y heatmap | Prueba manual recomendada | Implementado/parcial | Depende de DZI y backend con OpenSlide. |
 | 4.3.4 | Configuracion | React, panel admin | `ConfigPage.jsx` | Tabs: imagenes, RAG, usuarios, IA, correo, SCT | Build Vite exitoso | Implementado/parcial | UI grande; conviene code splitting por bundle pesado. |
 
@@ -118,7 +120,7 @@ Endpoints principales:
 | RAG | `GET/POST/PUT/DELETE /api/rag/documents`, `POST /reindex`, `GET /search` | Implementado/parcial |
 | Chatbot | `POST /api/chat` | Implementado |
 | Casos | `GET /api/cases`, `POST /api/cases`, `GET /api/cases/search` | Implementado API |
-| SCT | `POST /api/sct/generate`, `GET /example`, `POST /save`, `GET /list`, `GET/DELETE /{id}` | Implementado/parcial |
+| SCT | `POST /api/sct/generate`, `GET /example`, `POST /save`, `GET /list`, `GET/DELETE /{id}`, `POST /{id}/attempt`, `GET /my-attempts`, `GET /attempts/{id}` | Implementado |
 | Dashboard | `GET /api/dashboard/stats`, `GET /api/dashboard/ranking` | Implementado/parcial |
 
 Flujo de comunicacion:
@@ -153,6 +155,8 @@ Entidades principales:
 | `AIConfiguration` | `ai_configurations` | Parametros IA, RAG, correo y comportamiento. |
 | `EmailTemplate` | `email_templates` | Plantillas de correo para aprobacion/rechazo/suspension. |
 | `SCTTest` | `sct_tests` | Tests SCT generados y guardados. |
+| `SCTAttempt` | `sct_attempts` | Intentos individuales por estudiante: respuestas, puntaje exacto y parcial, timestamps. |
+| `HeatmapJob` | `heatmap_jobs` | Jobs de heatmap asincronicos con estado, progreso, tiles procesados y resultado. |
 | `HistopathologySession` | `histopathology_sessions` | Analisis ROI por usuario, imagen, coordenadas, clase, probabilidades y QC. |
 | `HistopathologyCorrection` | `histopathology_corrections` | Correcciones docentes sobre sesiones histopatologicas. |
 
@@ -160,8 +164,10 @@ Relaciones principales:
 
 - `User` 1:N `MedicalImage`.
 - `User` 1:N `HistopathologySession`.
+- `User` 1:N `SCTAttempt`.
 - `MedicalImage` 1:N `HistopathologySession`.
 - `HistopathologySession` 1:1 `HistopathologyCorrection`.
+- `SCTTest` 1:N `SCTAttempt`.
 - `Document` 1:N `DocumentChunk`.
 - `DocumentChunk` 1:1 aproximado con `document_vector_embeddings` mediante `chunk_id`.
 - `User` puede aprobar a otros usuarios mediante `approved_by`.
@@ -175,17 +181,18 @@ Informacion persistida actualmente:
 - Logs de chat individuales.
 - Configuracion IA y correo.
 - Tests SCT guardados.
+- Intentos SCT por estudiante con respuestas individuales, puntaje y timestamps (`sct_attempts`).
+- Jobs de heatmap con estado, progreso y resultado en tabla `heatmap_jobs`.
 - Sesiones ROI histopatologicas.
 - Correcciones docentes.
-- Heatmaps en JSON dentro de `artifacts/histopathology/heatmaps`, no en tabla SQL.
+- Heatmaps en JSON dentro de `artifacts/histopathology/heatmaps`.
 
 Informacion pendiente o parcial:
 
-- Intentos SCT por estudiante, respuestas individuales y puntajes historicos centralizados.
 - Conversaciones completas de chatbot como hilo en base de datos; actualmente el backend guarda intercambio pregunta/respuesta y el frontend conserva hilos en `localStorage`.
-- Jobs de heatmap durables en DB o Redis; actualmente viven en memoria.
 - Migraciones Alembic formales.
 - Politica definitiva de aislamiento por propietario de imagen en todos los modulos.
+- Historial SCT institucional y rubricas de revision docente sobre respuestas.
 
 Tabla de evidencia del apartado 4.3.6:
 
@@ -195,7 +202,9 @@ Tabla de evidencia del apartado 4.3.6:
 | 4.3.6 | ORM | SQLAlchemy | `models.py` | DER actualizado | Revision de modelos | Implementado | Documentacion DB anterior esta desactualizada. |
 | 4.3.6 | RAG vectorial | pgvector + JSON embeddings | `pgvector_store.py`, `DocumentChunk` | Captura documentos/chunks | `test_embedding_service.py`, `test_rag_utils.py` | Implementado/parcial | Verificar extension vector en ambiente productivo. |
 | 4.3.6 | Historial ROI | SQLAlchemy JSON | `HistopathologySession` | Registro con `trace_id` | Tests histopathology | Implementado | Completar vistas de historial transversal. |
-| 4.3.6 | Heatmaps persistidos | JSON filesystem | `heatmap_store.py` | Carpeta `artifacts/.../heatmaps` | `test_heatmap_store.py` | Parcial | Migrar jobs/resultados criticos a DB. |
+| 4.3.6 | Intentos SCT | SQLAlchemy | `SCTAttempt`, `models.py`, `sct.py` | Tabla `sct_attempts` con registros por estudiante | Revision manual tras completar test | Implementado | Historial institucional y rubrica docente pendientes. |
+| 4.3.6 | Jobs heatmap en DB | SQLAlchemy | `HeatmapJob`, `heatmap_jobs.py` | Tabla `heatmap_jobs`; jobs sobreviven reinicio | Revision manual | Implementado | Resultados de heatmap siguen en JSON filesystem. |
+| 4.3.6 | Heatmaps persistidos | JSON filesystem | `heatmap_store.py` | Carpeta `artifacts/.../heatmaps` | `test_heatmap_store.py` | Implementado/parcial | Resultados en JSON; metadatos de job ahora en DB. |
 
 ## 4.3.7. Implementacion del Visor Histopatologico
 
@@ -329,7 +338,7 @@ Tabla de evidencia del apartado 4.3.9:
 | 4.3.9 | Extractor CONCH | PyTorch + CONCH | `conch_feature_extractor.py` | Endpoint `/status` model_ready | Prueba status recomendada | Implementado/parcial | Requiere dependencias CONCH/checkpoint. |
 | 4.3.9 | Cabeza clasificadora | PyTorch | `inference_service.py`, checkpoint Stage 10 | Resultado con probabilidades | Evaluaciones Stage 10/14 documentadas | Implementado/parcial | Dataset limitado a tarea CAMELYON/PCam. |
 | 4.3.9 | Control de calidad | Heuristicas H&E | `roi_quality.py` | ROI no evaluable por estroma/fondo | `test_histopathology_roi_quality.py` | Implementado | Heuristico, no reemplaza revision experta. |
-| 4.3.9 | Heatmaps ROI | FastAPI background tasks | `heatmap_jobs.py`, `heatmap_store.py` | Overlay por tiles en visor | `test_heatmap_*` | Implementado/parcial | Jobs en memoria; falta cola durable. |
+| 4.3.9 | Heatmaps ROI | FastAPI background tasks + DB | `heatmap_jobs.py`, `heatmap_store.py`, tabla `heatmap_jobs` | Overlay por tiles en visor | `test_heatmap_*` | Implementado | Jobs persisten en DB; sobreviven reinicio del backend. |
 | 4.3.9 | Auditoria | JSONL/artifacts | `audit_log.py`, `debug_patches.py` | Trace_id y patch debug | Tests audit log | Implementado | Gestion de retencion pendiente. |
 
 ## 4.3.10. Implementacion del RAG y Retroalimentacion Educativa
@@ -421,6 +430,9 @@ Endpoints:
 - `GET /api/sct/example`.
 - `POST /api/sct/save`.
 - `GET /api/sct/list`.
+- `GET /api/sct/my-attempts` (requiere JWT).
+- `GET /api/sct/attempts/{attempt_id}` (requiere JWT; docente puede ver intentos de otros).
+- `POST /api/sct/{test_id}/attempt` (requiere JWT).
 - `GET /api/sct/{test_id}`.
 - `DELETE /api/sct/{test_id}`.
 
@@ -431,15 +443,15 @@ Funcionamiento:
 3. Frontend presenta vineta, hipotesis, nueva informacion y escala.
 4. El estudiante responde.
 5. La UI calcula puntaje y muestra explicacion por item.
-6. Los tests pueden guardarse y luego cargarse desde la biblioteca.
+6. Al enviar el test, `SCTPage.jsx` llama a `POST /api/sct/{test_id}/attempt` con las respuestas y timestamp de inicio. Si el test fue generado en sesion y no estaba guardado, se auto-guarda primero para obtener un ID valido.
+7. El backend calcula puntaje exacto (coincidencia directa) y persiste el intento en `sct_attempts`.
+8. Los tests pueden guardarse y luego cargarse desde la biblioteca; los intentos quedan vinculados al usuario y al test.
 
 Pendiente:
 
-- Persistencia individual de intentos por estudiante.
-- Puntajes centralizados por usuario.
-- Historial SCT institucional.
-- Rubricas o revision docente de respuestas.
-- Mayor control de calidad de items generados.
+- Historial SCT institucional con vista docente de intentos por cohorte.
+- Rubricas o revision docente de respuestas individuales.
+- Mayor control de calidad de items generados por LLM.
 
 Tabla de evidencia del apartado 4.3.11:
 
@@ -449,8 +461,8 @@ Tabla de evidencia del apartado 4.3.11:
 | 4.3.11 A | Filtro de alcance medico | Prompt + Ollama JSON | `_classify_medical_scope` | Consulta no medica rechazada | `test_chat_prompt.py` | Implementado | Depende del modelo local. |
 | 4.3.11 A | RAG en chat | Casos + documentos | `retrieve_rag_hits`, `build_rag_context` | Respuesta con fuentes | Prueba RAG recomendada | Implementado/parcial | Mejorar citacion y evaluacion de fuentes. |
 | 4.3.11 B | Generacion SCT | Ollama LLaMA 3 | `sct.py`, `SCT_SYSTEM_PROMPT` | Formulario generar SCT | Prueba manual recomendada | Implementado/parcial | Modelo hardcodeado en `sct.py`. |
-| 4.3.11 B | Resolucion SCT | React | `SCTPage.jsx`, `SCTSection.jsx` | Test respondido con puntaje | Build Vite exitoso | Implementado/parcial | Intentos no persistidos en DB. |
-| 4.3.11 B | Banco SCT | PostgreSQL JSON | `SCTTest`, endpoints SCT | Listado y detalle de tests | Prueba API recomendada | Implementado | Falta versionado/autor/propietario. |
+| 4.3.11 B | Resolucion y persistencia SCT | React + FastAPI | `SCTPage.jsx`, `api.js`, `sct.py`, `SCTAttempt` | Test respondido con puntaje; intento guardado en DB | Prueba manual recomendada | Implementado | Historial institucional y rubrica docente pendientes. |
+| 4.3.11 B | Banco SCT | PostgreSQL JSON | `SCTTest`, `SCTAttempt`, endpoints SCT | Listado tests e intentos por usuario | Prueba API recomendada | Implementado | Falta versionado/autor/propietario en tests. |
 
 ## Lista consolidada de capturas recomendadas para Capitulo IV
 
@@ -579,7 +591,7 @@ Tabla de evidencia del apartado 4.3.11:
 
 El front-end de ASOFAMECH se implemento como una aplicacion web de pagina unica desarrollada con React y Vite. Esta decision permitio construir una interfaz modular, con rutas diferenciadas para la pagina publica, autenticacion, dashboard, asistente educativo, modulo SCT, visor histopatologico y paneles administrativos. La navegacion se estructuro mediante React Router DOM, mientras que los componentes visuales se organizaron en carpetas de paginas y componentes reutilizables.
 
-La interfaz considera distintos perfiles de usuario. En la capa visual, el sidebar presenta u oculta opciones segun el rol del usuario, permitiendo que estudiantes accedan a los modulos formativos y que profesores o administradores accedan a configuracion, gestion de imagenes, documentos RAG, usuarios, correo y tests SCT. Como decision de implementacion, el front-end mantiene parte del estado de experiencia en el navegador, como historial conversacional, metricas de uso y resultados SCT locales, mientras que las acciones criticas se comunican con el backend mediante endpoints protegidos.
+La interfaz considera distintos perfiles de usuario. En la capa visual, el sidebar presenta u oculta opciones segun el rol del usuario, permitiendo que estudiantes accedan a los modulos formativos y que profesores o administradores accedan a configuracion, revision docente, gestion de imagenes, documentos RAG, usuarios, correo y tests SCT. El rol se determina decodificando el payload del token JWT en el cliente, evitando depender exclusivamente del valor almacenado en `localStorage`, el cual puede quedar desactualizado si el servidor modifica el rol del usuario. Como decision de implementacion, el front-end mantiene parte del estado de experiencia en el navegador, como historial conversacional y metricas de uso, mientras que los resultados SCT y los intentos individuales se persisten en el backend.
 
 La validacion tecnica del front-end se realizo mediante el proceso de build de Vite, el cual compilo correctamente la aplicacion. Como limitacion actual, el bundle principal supera 500 kB, por lo que una mejora futura es aplicar division de codigo por rutas para optimizar la carga inicial.
 
@@ -597,7 +609,7 @@ La base de datos del prototipo utiliza PostgreSQL con SQLAlchemy como ORM. En el
 
 La persistencia actual permite registrar usuarios aprobados o pendientes, almacenar metadata de imagenes, conservar tests SCT generados, guardar documentos y fragmentos para RAG, registrar intercambios de chatbot y almacenar sesiones ROI con coordenadas, probabilidades y trazabilidad mediante `trace_id`. Las correcciones docentes se almacenan como una entidad relacionada con las sesiones histopatologicas, permitiendo construir manifiestos para reentrenamiento futuro.
 
-Como limitacion, los jobs asincronicos de heatmap viven en memoria y los resultados de heatmap se guardan en archivos JSON, no en tablas relacionales. Adicionalmente, los intentos SCT individuales por estudiante aun no cuentan con persistencia centralizada. Estas limitaciones se consideran parte del roadmap posterior.
+Como mejora implementada en la misma sesion de revision, los jobs asincronicos de heatmap se migraron de un diccionario en memoria a la tabla `heatmap_jobs` en PostgreSQL, lo que garantiza que el estado de un job sobrevive reinicios del backend. De igual forma, se agrego el modelo `SCTAttempt` con su tabla correspondiente, que registra cada intento de estudiante con respuestas, puntaje y timestamps. Los resultados de heatmap siguen almacenandose como JSON en el filesystem; solo los metadatos del job se persistieron en DB. Como limitacion pendiente quedan las migraciones Alembic formales y la politica de aislamiento por propietario de imagen.
 
 ### 4.3.7. Implementacion del Visor Histopatologico
 
@@ -637,4 +649,4 @@ El chatbot educativo se implemento como una interfaz conversacional conectada a 
 
 El modulo SCT permite generar pruebas de Script Concordance Test a partir de un tema, dificultad y cantidad de items. El backend solicita al modelo generativo una salida estructurada con vineta clinica, hipotesis, nueva informacion, respuesta esperada y explicacion. El estudiante responde usando una escala de -2 a +2 y la interfaz entrega puntaje y retroalimentacion por item.
 
-Los tests generados pueden guardarse, listarse, abrirse y eliminarse logicamente desde el sistema. No obstante, la persistencia individual de intentos, respuestas y puntajes por estudiante sigue pendiente. Esta funcionalidad es relevante para una futura version orientada a seguimiento academico longitudinal.
+Los tests generados pueden guardarse, listarse, abrirse y eliminarse logicamente desde el sistema. La persistencia individual de intentos se implemento mediante el modelo `SCTAttempt` y tres nuevos endpoints protegidos por JWT. Al completar un test, el frontend envia las respuestas al backend, que calcula el puntaje y registra el intento vinculado al usuario y al test. Si el test fue generado en sesion sin haber sido guardado previamente, el frontend lo auto-guarda antes de enviar el intento, garantizando que el ID requerido exista en la base de datos. El historial de intentos es consultable por el propio estudiante y, con permisos de docente o administrador, tambien por otros usuarios. Como trabajo pendiente queda la vista institucional de intentos por cohorte y la rubrica de revision docente sobre respuestas individuales.
