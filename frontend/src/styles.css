@@ -4074,8 +4074,27 @@ a { color: inherit; text-decoration: none; }
 .images-v2-sidebar {
   width: 280px; background: #f0f1ee;
   border-right: 2px solid #d8dbd4;
-  display: flex; flex-direction: column; flex-shrink: 0;
+  display: flex; flex-direction: row; flex-shrink: 0;
   box-shadow: 2px 0 12px rgba(11,20,16,0.06);
+  transition: width 0.25s ease; overflow: hidden; position: relative;
+}
+.images-v2-sidebar.collapsed { width: 36px; }
+.images-v2-sidebar-toggle {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 48px; z-index: 10;
+  background: #d8dbd4; border: none; border-radius: 6px 0 0 6px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--muted); transition: background 0.15s;
+  flex-shrink: 0;
+}
+.images-v2-sidebar-toggle:hover { background: #c5c8c2; color: var(--ink); }
+.images-v2-sidebar-content {
+  flex: 1; display: flex; flex-direction: column;
+  min-width: 244px; overflow: hidden;
+  transition: opacity 0.2s ease;
+}
+.images-v2-sidebar.collapsed .images-v2-sidebar-content {
+  opacity: 0; pointer-events: none;
 }
 .images-v2-sidebar-section { padding: 18px; border-bottom: 2px solid #d8dbd4; }
 .images-v2-sidebar-title {

@@ -13,6 +13,7 @@ export function ImagesPage() {
   const [imageLibrary, setImageLibrary] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -133,57 +134,67 @@ export function ImagesPage() {
         {/* Body */}
         <div className="images-v2-body">
           {/* Sidebar */}
-          <div className="images-v2-sidebar">
-            <div className="images-v2-sidebar-section">
-              <div className="images-v2-sidebar-title">Cargar imagen</div>
-              <div className="images-v2-upload-zone">
-                <span className="images-v2-upload-icon">📤</span>
-                <div className="images-v2-upload-text">Arrastra o selecciona</div>
-                <div className="images-v2-upload-hint">SVS · JPG · PNG · TIFF</div>
-                <input
-                  type="file"
-                  accept="image/*,.svs"
-                  onChange={handleFileUpload}
-                  className="images-v2-upload-input"
-                />
+          <div className={`images-v2-sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
+            <button
+              className="images-v2-sidebar-toggle"
+              onClick={() => setSidebarCollapsed(c => !c)}
+              title={sidebarCollapsed ? 'Expandir biblioteca' : 'Colapsar biblioteca'}
+            >
+              {sidebarCollapsed ? '›' : '‹'}
+            </button>
+
+            <div className="images-v2-sidebar-content">
+              <div className="images-v2-sidebar-section">
+                <div className="images-v2-sidebar-title">Cargar imagen</div>
+                <div className="images-v2-upload-zone">
+                  <span className="images-v2-upload-icon">📤</span>
+                  <div className="images-v2-upload-text">Arrastra o selecciona</div>
+                  <div className="images-v2-upload-hint">SVS · JPG · PNG · TIFF</div>
+                  <input
+                    type="file"
+                    accept="image/*,.svs"
+                    onChange={handleFileUpload}
+                    className="images-v2-upload-input"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="images-v2-sidebar-section" style={{ borderBottom: 'none' }}>
-              <div className="images-v2-sidebar-title">Biblioteca</div>
-            </div>
+              <div className="images-v2-sidebar-section" style={{ borderBottom: 'none' }}>
+                <div className="images-v2-sidebar-title">Biblioteca</div>
+              </div>
 
-            <div className="images-v2-list">
-              {loading ? (
-                <div style={{ padding: '20px', textAlign: 'center' }}>
-                  <span className="images-v2-loading">Cargando…</span>
-                </div>
-              ) : imageLibrary.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center' }}>
-                  <span style={{ fontSize: '28px', display: 'block', marginBottom: '8px', opacity: 0.3 }}>🔬</span>
-                  <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Sin imágenes disponibles</span>
-                </div>
-              ) : (
-                imageLibrary.map((img) => (
-                  <div
-                    key={img.id}
-                    className={`images-v2-img-item ${selectedImage?.id === img.id ? "selected" : ""}`}
-                    onClick={() => handleImageSelect(img)}
-                  >
-                    <div className="images-v2-img-thumb">🔬</div>
-                    <div className="images-v2-img-info">
-                      <div className="images-v2-img-name">{img.title}</div>
-                      <div className="images-v2-img-meta">
-                        {img.pathology_type && (
-                          <span className="images-v2-img-tag">{img.pathology_type}</span>
-                        )}
-                        <span>{img.file_type?.toUpperCase()}</span>
-                        <span>{(img.file_size / 1024 / 1024).toFixed(1)} MB</span>
+              <div className="images-v2-list">
+                {loading ? (
+                  <div style={{ padding: '20px', textAlign: 'center' }}>
+                    <span className="images-v2-loading">Cargando…</span>
+                  </div>
+                ) : imageLibrary.length === 0 ? (
+                  <div style={{ padding: '20px', textAlign: 'center' }}>
+                    <span style={{ fontSize: '28px', display: 'block', marginBottom: '8px', opacity: 0.3 }}>🔬</span>
+                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Sin imágenes disponibles</span>
+                  </div>
+                ) : (
+                  imageLibrary.map((img) => (
+                    <div
+                      key={img.id}
+                      className={`images-v2-img-item ${selectedImage?.id === img.id ? "selected" : ""}`}
+                      onClick={() => handleImageSelect(img)}
+                    >
+                      <div className="images-v2-img-thumb">🔬</div>
+                      <div className="images-v2-img-info">
+                        <div className="images-v2-img-name">{img.title}</div>
+                        <div className="images-v2-img-meta">
+                          {img.pathology_type && (
+                            <span className="images-v2-img-tag">{img.pathology_type}</span>
+                          )}
+                          <span>{img.file_type?.toUpperCase()}</span>
+                          <span>{(img.file_size / 1024 / 1024).toFixed(1)} MB</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
 
