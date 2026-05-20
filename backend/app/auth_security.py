@@ -17,8 +17,19 @@ class TokenError(ValueError):
     pass
 
 
+_JWT_INSECURE_DEFAULT = "dev-only-change-this-asofamech-secret"
+
+
 def jwt_secret() -> str:
-    return os.getenv("ASOFAMECH_JWT_SECRET", "dev-only-change-this-asofamech-secret")
+    secret = os.getenv("ASOFAMECH_JWT_SECRET", "")
+    if not secret:
+        if os.getenv("APP_ENV", "development") != "development":
+            raise RuntimeError(
+                "ASOFAMECH_JWT_SECRET no está configurado. "
+                "Define esta variable de entorno antes de iniciar en producción."
+            )
+        return _JWT_INSECURE_DEFAULT
+    return secret
 
 
 def access_token_expire_seconds() -> int:

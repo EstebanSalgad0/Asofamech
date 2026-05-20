@@ -11,13 +11,17 @@ from .db import Base, engine
 app = FastAPI(title="Backend ASOFAMECH Educativo")
 
 # --- CORS ---
-# Si quieres permitir todo en desarrollo, puedes cambiar a allow_origins=["*"]
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3001",
-]
+_cors_env = os.getenv("CORS_ORIGINS", "").strip()
+origins = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if _cors_env
+    else [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ]
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,8 +80,12 @@ def apply_compatibility_migrations() -> None:
 
 @app.on_event("startup")
 def on_startup():
-    # Crear tablas al arrancar, con reintentos
     create_tables_with_retry()
+    if not os.getenv("ASOFAMECH_JWT_SECRET"):
+        print(
+            "[backend] ADVERTENCIA: ASOFAMECH_JWT_SECRET no configurado. "
+            "Se usa el secreto de desarrollo — NO apto para producción."
+        )
     print("[backend] Servicio FastAPI iniciado correctamente.")
 
 
