@@ -71,6 +71,12 @@ def _job_to_dict(job) -> Dict[str, Any]:
     }
 
 
+def _coerce_datetime(value: Any) -> Any:
+    if isinstance(value, str):
+        return datetime.fromisoformat(value)
+    return value
+
+
 def create_heatmap_job(payload: Dict[str, Any]) -> Dict[str, Any]:
     from ..db import SessionLocal
     from ..models import HeatmapJob
@@ -120,6 +126,8 @@ def update_heatmap_job(job_id: str, **updates) -> Optional[Dict[str, Any]]:
         for key, value in updates.items():
             col = field_map.get(key, key)
             if hasattr(job, col):
+                if col in {"started_at", "completed_at", "failed_at"}:
+                    value = _coerce_datetime(value)
                 setattr(job, col, value)
         db.commit()
         db.refresh(job)

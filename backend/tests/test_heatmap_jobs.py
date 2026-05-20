@@ -1,14 +1,33 @@
 import threading
 import unittest
 from datetime import datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app import db as app_db
 from app.histopathology import heatmap_jobs
+from app.models import HeatmapJob
 
 
 class HeatmapJobsTestCase(unittest.TestCase):
     def setUp(self):
-        with heatmap_jobs._LOCK:
-            heatmap_jobs._JOBS.clear()
+        self._tmpdir = TemporaryDirectory()
+        db_path = Path(self._tmpdir.name) / "heatmap_jobs_test.db"
+        self.engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False},
+        )
+        HeatmapJob.__table__.create(self.engine)
+        self._original_session_local = app_db.SessionLocal
+        app_db.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+
+    def tearDown(self):
+        app_db.SessionLocal = self._original_session_local
+        self.engine.dispose()
+        self._tmpdir.cleanup()
 
     def _payload(self, trace_id="trace-test", image_id=1):
         return {
