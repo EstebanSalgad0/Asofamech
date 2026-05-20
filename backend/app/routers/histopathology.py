@@ -2,7 +2,9 @@ import os
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -52,9 +54,95 @@ from ..histopathology.schemas import (
 )
 from ..models import HistopathologyCorrection, HistopathologySession, MedicalImage
 from ..auth import get_current_user
+from .chat import LLM_MODEL, OLLAMA_URL
+from .rag import build_rag_context, retrieve_rag_hits
 
 
 router = APIRouter(prefix="/api/histopathology", tags=["histopathology"])
+
+_CLASS_DESCRIPTIONS = {
+    "metastasico": "hallazgo metastásico — se detectaron células con patrón tumoral",
+    "no_metastasico": "tejido sin metástasis — ganglio aparentemente sano",
+    "estroma": "tejido estromal — tejido conectivo de soporte",
+    "incierto": "resultado incierto — el modelo no alcanzó confianza suficiente",
+    "baja_sospecha_no_metastasica": "baja sospecha metastásica — tejido probablemente sano, confianza moderada",
+    "roi_no_evaluable": "ROI no evaluable — calidad de imagen insuficiente para análisis confiable",
+}
+
+
+async def _generate_histo_feedback(
+    db,
+    status: str,
+    predicted_class: str,
+    confidence: float,
+    probabilities: dict,
+) -> str | None:
+    class_desc = _CLASS_DESCRIPTIONS.get(predicted_class, predicted_class)
+    conf_pct = f"{confidence * 100:.1f}%"
+    prob_text = ", ".join(
+        f"{cls.replace('_', ' ')}={val:.3f}"
+        for cls, val in (probabilities or {}).items()
+    )
+
+    rag_context = ""
+    try:
+        query = f"ganglio linfático histopatología metástasis {predicted_class}"
+        rag_hits = retrieve_rag_hits(db, query, 3)
+        rag_context = build_rag_context(rag_hits)
+    except Exception:
+        pass
+
+    rag_section = (
+        f"\n\nMaterial de referencia de la plataforma:\n{rag_context}\n"
+        "Prioriza este material cuando sea pertinente."
+        if rag_context else ""
+    )
+
+    system_prompt = (
+        "Eres un tutor experto en histopatología y anatomía patológica para estudiantes "
+        "de medicina de pregrado. Tu rol es explicar hallazgos microscópicos de forma "
+        "clara, estructurada y educativa. Siempre respondes en español. "
+        "Aunque no dispongas de material de referencia específico, utiliza tu conocimiento "
+        "médico para entregar siempre una explicación completa y útil al estudiante."
+        f"{rag_section}"
+    )
+
+    user_prompt = (
+        "El sistema analizó una región de interés (ROI) en una lámina histopatológica "
+        f"de ganglio linfático y obtuvo:\n\n"
+        f"• Clasificación: {class_desc}\n"
+        f"• Confianza: {conf_pct}\n"
+        f"• Probabilidades: {prob_text}\n\n"
+        "Genera una explicación educativa concisa (3-4 párrafos) que incluya:\n"
+        "1. Qué significa este hallazgo en el contexto del ganglio linfático\n"
+        "2. Las características morfológicas relevantes que el estudiante debe identificar\n"
+        "3. La importancia clínica y oncológica de este resultado\n"
+        "4. Qué observar en la lámina para confirmar o explorar el hallazgo\n\n"
+        "Si el resultado es incierto o no evaluable, orienta al estudiante sobre cómo "
+        "mejorar la selección de la ROI y qué características buscar."
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                f"{OLLAMA_URL}/api/chat",
+                json={
+                    "model": LLM_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "stream": False,
+                    "options": {"temperature": 0.4, "top_p": 0.9, "num_ctx": 4096},
+                },
+            )
+            if resp.status_code == 200:
+                text = resp.json().get("message", {}).get("content", "").strip()
+                return text or None
+    except Exception:
+        pass
+    return None
+
 
 EDUCATIONAL_WARNING = (
     "Modulo educativo no diagnostico. La prediccion esta limitada a patches de "
@@ -955,6 +1043,29 @@ async def analyze_roi2(
     except Exception:
         pass
     return response_payload
+
+
+class _FeedbackRequest(BaseModel):
+    status: str
+    predicted_class: str
+    confidence: float
+    probabilities: dict = Field(default_factory=dict)
+
+
+@router.post("/feedback")
+async def generate_educational_feedback(
+    req: _FeedbackRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    feedback = await _generate_histo_feedback(
+        db,
+        status=req.status,
+        predicted_class=req.predicted_class,
+        confidence=req.confidence,
+        probabilities=req.probabilities,
+    )
+    return {"educational_feedback": feedback}
 
 
 @router.post("/scan-roi")
