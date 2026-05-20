@@ -217,3 +217,13 @@ export async function deleteSCTTest(testId) {
 
   return res.json();
 }
+
+export async function submitSCTAttempt(testId, answers, startedAt = null) {
+  const res = await authFetch(`/api/sct/${testId}/attempt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers, started_at: startedAt }),
+  });
+  if (!res.ok) throw new Error(`Error SCT Attempt: ${res.status}`);
+  return res.json();
+}

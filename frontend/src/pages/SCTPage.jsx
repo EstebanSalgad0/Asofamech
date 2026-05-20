@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { generateSCT, saveSCTTest, listSCTTests, getSCTTest } from "../api";
+import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, submitSCTAttempt } from "../api";
 import { startSession, flushSession, trackTestCompleted, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
 import { clearAuthSession, userStorageKey } from "../authClient";
@@ -116,6 +116,7 @@ export function SCTPage() {
   const [specificFocus, setSpecificFocus] = useState("");
 
   const [resultLog, setResultLog] = useState([]);
+  const [testStartedAt, setTestStartedAt] = useState(null);
 
   const showToast = (message, type = "info") => {
     setToast({ message, type });
@@ -260,6 +261,7 @@ export function SCTPage() {
           setCurrentTest(formatted);
           setViewMode("test");
           setAnswers({});
+          setTestStartedAt(new Date().toISOString());
         } else {
           showToast("No se generaron casos. Revisa el enfoque e intenta nuevamente.", "error");
         }
@@ -320,6 +322,45 @@ export function SCTPage() {
     };
     appendResult(entry);
     setResultLog(loadResultLog());
+
+    // Enviar intento al backend (fire-and-forget, no bloquea la UI)
+    const backendAnswers = currentTest.items.map((item) => ({
+      item_id: item.id,
+      selected_answer: answers[item.id],
+    }));
+    (async () => {
+      try {
+        let dbId = currentTest.db_id;
+        if (!dbId) {
+          // Test generado pero no guardado: auto-guardar para obtener db_id
+          const saved = await saveSCTTest(
+            currentTest.title,
+            currentTest.difficulty.toLowerCase(),
+            currentTest.focus,
+            currentTest.items.length,
+            currentTest.items.map((item) => ({
+              id: item.id,
+              vignette: item.scenario,
+              hypothesis: item.hypothesis,
+              new_info: item.newInfo,
+              scale_options: ["−2", "−1", "0", "+1", "+2"],
+              correct_answer: item.correctAnswer,
+              explanation: item.explanation,
+            }))
+          );
+          dbId = saved?.id;
+          if (dbId) {
+            setCurrentTest((prev) => ({ ...prev, db_id: dbId }));
+            loadSavedTests();
+          }
+        }
+        if (dbId) {
+          await submitSCTAttempt(dbId, backendAnswers, testStartedAt);
+        }
+      } catch {
+        // fallo silencioso — el resultado local ya fue guardado
+      }
+    })();
   };
 
   const handleSaveTest = async (nameOverride) => {
@@ -355,6 +396,7 @@ export function SCTPage() {
       if (data?.items?.length > 0) {
         setCurrentTest({
           id: data.id,
+          db_id: data.id,
           title: data.name,
           items: data.items.map((item, i) => ({
             id: item.id || i + 1,
@@ -371,6 +413,7 @@ export function SCTPage() {
         });
         setViewMode("test");
         setAnswers({});
+        setTestStartedAt(new Date().toISOString());
       } else {
         showToast("No se pudo cargar el test.", "error");
       }
