@@ -7,7 +7,6 @@ const navItems = [
   { id: "chat", label: "Asistente IA", path: "/dashboard/chat", icon: "chat", group: "Navegacion" },
   { id: "sct", label: "Test SCT", path: "/dashboard/sct", icon: "clipboard", group: "Navegacion" },
   { id: "images", label: "Imagenes IA", path: "/dashboard/images", icon: "image", group: "Navegacion" },
-  { id: "review", label: "Revision", path: "/dashboard/review", icon: "review", group: "Admin", privileged: true },
   { id: "config", label: "Configuracion", path: "/dashboard/config", icon: "settings", group: "Admin", privileged: true },
 ];
 
@@ -39,14 +38,6 @@ function Icon({ name }) {
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M4 5h16v14H4V5Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M8 14h8M10 10v8M14 10v8M12 7v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (name === "review") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M7 3h7l4 4v14H7V3Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M14 3v5h4M9 13h6M9 17h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     );
   }

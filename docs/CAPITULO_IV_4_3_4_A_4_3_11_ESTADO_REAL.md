@@ -1,652 +1,659 @@
-# Capitulo IV - Estado real de implementacion ASOFAMECH
+# Capitulo IV - Estado actualizado de implementacion ASOFAMECH
 
-Documento de apoyo para los apartados 4.3.4 a 4.3.11.
+Documento de apoyo para los apartados 4.3.5 a 4.3.11 del informe de tesis.
 
-Fecha de revision: 19-05-2026. Actualizado con mejoras implementadas en la misma sesion.
+Fecha de revision: 19-05-2026.
 
-Alcance: revision del codigo fuente local del proyecto ASOFAMECH. Este documento evita pegar bloques extensos de codigo y prioriza proceso de implementacion, decisiones tecnicas, flujo funcional, evidencias y validaciones.
+Alcance: revision del codigo fuente local del proyecto ASOFAMECH. Este documento evita pegar bloques extensos de codigo fuente y prioriza proceso de implementacion, decisiones tecnicas, flujo funcional, evidencias, pruebas, estado actual y limitaciones.
 
-Validaciones ejecutadas durante la revision:
+Nota de consistencia: existen componentes experimentales asociados a revision/correccion docente de sesiones histopatologicas. Para el informe actual no deben presentarse como funcionalidad activa del prototipo ni como base de reentrenamiento real. En este documento se reformulan como elementos fuera del alcance actual o como trabajo futuro condicionado a especialistas.
 
-| Validacion | Resultado |
+Validaciones tecnicas ejecutadas durante la revision:
+
+| Validacion | Resultado esperado / referencia |
 |---|---|
-| `backend/.venv/Scripts/python.exe -m pytest tests -q` | 126 pruebas aprobadas, 4 warnings de Pydantic v2. |
-| `frontend/npm.cmd run build` | Build exitoso con Vite. 58 modulos transformados. Advertencia: bundle JS principal mayor a 500 kB. |
-| Revision Git reciente | Commits relevantes: `db7ca61`, `d241791`, `ac18946`, `291f0be`, `7bcd4d7`. |
-| Mejoras implementadas 19-05-2026 | Commits: `0eea356` (persistencia SCT, heatmap en DB, sidebar review, rol JWT), `23a3667` (fix utc_now), `510a93b` (frontend SCT envia intentos). |
+| Backend tests | `backend/.venv/Scripts/python.exe -m pytest tests -q`: 126 pruebas aprobadas, 4 warnings de Pydantic v2. |
+| Frontend build | `frontend/npm.cmd run build`: build exitoso con Vite, 58 modulos transformados, advertencia de bundle JS mayor a 500 kB. |
+| Revision de endpoints | Swagger/OpenAPI en `http://localhost:8001/docs` |
+| Revision funcional | Login, roles, visor, ROI, heatmap, RAG, chatbot y SCT |
 
-## 4.3.4. Implementacion del Front-End
+## 1. Revision de consistencia del proyecto actualizado
 
-El front-end se implemento como una aplicacion de pagina unica construida con React 18 y Vite. La navegacion se organiza con `react-router-dom` y las vistas principales estan definidas en `frontend/src/app.jsx`. La interfaz esta contenida principalmente en `frontend/src/pages` y `frontend/src/components`, con estilos globales en `frontend/src/styles.css`.
+La revision del codigo confirma que algunos elementos de revision/correccion docente existen en la base de codigo, pero deben excluirse del alcance principal del informe. El enfoque recomendado para el Capitulo IV es describir el modulo histopatologico como un sistema de analisis educativo con trazabilidad tecnica de sesiones ROI, no como un sistema validado por docentes o especialistas.
 
-Tecnologias y librerias utilizadas:
+| Elemento encontrado | Archivo o modulo donde aparece | Debe eliminarse del informe como funcionalidad activa | Reformulacion recomendada | Trabajo futuro |
+|---|---|---:|---|---|
+| Revision docente de sesiones | `frontend/src/pages/ReviewPage.jsx`, `frontend/src/app.jsx`, `frontend/src/components/AppSidebar.jsx` | Si | Pantalla experimental no considerada dentro del alcance actual del prototipo. | Si, solo si se define un flujo de validacion con especialistas. |
+| Ruta `/dashboard/review` | `frontend/src/app.jsx`, `frontend/src/components/AppSidebar.jsx` | Si | Ruta administrativa experimental. No usar como evidencia central del informe. | Si, condicionada a criterios institucionales. |
+| Correcciones docentes | `backend/app/routers/histopathology.py`, `backend/app/histopathology/schemas.py`, `frontend/src/components/OpenSeadragonViewer.jsx` | Si | Mecanismo experimental de anotacion, no usado como verdad academica ni clinica. | Si, con patologo/docente responsable. |
+| `HistopathologyCorrection` | `backend/app/models.py`, `backend/app/routers/admin.py`, `backend/app/routers/histopathology.py` | Si | Entidad fuera del alcance actual del informe. No incluirla como tabla principal. | Si, como extension futura. |
+| `GET /api/histopathology/dataset/manifest` | `backend/app/routers/histopathology.py` | Si | Exportacion tecnica experimental. No presentarla como dataset curado. | Si, solo con datos validados. |
+| Reentrenamiento con correcciones reales | Referencias funcionales indirectas en flujo experimental | Si | Reemplazar por "mejora futura del modelo con datos validados y CAMELYON17". | Si, requiere validacion experta. |
+| Revision docente SCT | No se observa como flujo principal consolidado; existe acceso protegido a intentos SCT | Si | Describir como persistencia de intentos SCT y consulta tecnica por rol. | Futuro: control de calidad de items y retroalimentaciones. |
 
-- React 18 para componentes y estado de interfaz.
-- Vite para servidor de desarrollo y empaquetado.
-- React Router DOM para rutas publicas y privadas de facto.
-- OpenSeadragon para visualizacion DZI de laminas histopatologicas.
-- Fabric.js para visor/anotaciones sobre imagenes no DZI.
-- Fetch API y cliente propio `authClient.js` para comunicacion HTTP.
-- `localStorage` para sesion del cliente, historial local de chat, metricas de uso y resultados SCT locales.
+Recomendacion de redaccion: cuando se hable de histopatologia, usar los conceptos "trazabilidad de sesiones ROI", "registro tecnico de resultados", "historial de analisis ROI", "trace_id" y "evaluacion preliminar con CAMELYON17". Evitar declarar dataset curado, correccion docente activa o reentrenamiento clinicamente validado.
 
-Estructura de vistas implementadas:
+## 2. Informacion actualizada para 4.3.5. Implementacion del Back-End
 
-- `LandingPage.jsx`: pagina publica de presentacion.
-- `AuthPage.jsx`: login y registro con flujo de aprobacion.
-- `DashboardPage.jsx`: tablero inicial, actividad, metricas y ranking.
-- `ChatbotPage.jsx`: asistente educativo con historial de conversaciones.
-- `SCTPage.jsx`: generacion, resolucion y retroalimentacion de SCT.
-- `ImagesPage.jsx`: biblioteca de imagenes y visor histopatologico.
-- `ConfigPage.jsx`: gestion de imagenes, documentos RAG, usuarios, configuracion IA, correo y tests SCT.
-- `ReviewPage.jsx`: revision docente de sesiones histopatologicas.
+### Tecnologias utilizadas
 
-Flujo de navegacion:
+El back-end se implemento con FastAPI como framework principal para exponer servicios REST. La aplicacion utiliza Uvicorn como servidor ASGI, SQLAlchemy como ORM, PostgreSQL como base de datos relacional, pgvector para busqueda vectorial cuando esta disponible, httpx para integracion con Ollama, python-multipart para carga de archivos, Pillow y OpenSlide para procesamiento de imagenes, y PyTorch/CONCH para inferencia histopatologica.
 
-1. El visitante accede a `/`.
-2. Desde la landing puede ir a `/auth`.
-3. Al iniciar sesion se guarda token JWT, usuario y rol en `localStorage`.
-4. El usuario autenticado ingresa a `/dashboard`.
-5. Desde el dashboard accede a asistente IA, SCT o imagenes IA.
-6. Usuarios con rol Profesor o Administrador ven configuracion y revision docente en el sidebar.
-7. La ruta `/dashboard/review` esta enlazada permanentemente en el sidebar para roles privilegiados.
+### Estructura general del backend
 
-Control visual por rol:
-
-El componente `AppSidebar.jsx` oculta las opciones de configuracion y revision docente para usuarios sin privilegios. `ConfigPage.jsx` muestra pestanas adicionales para Administrador, como Usuarios, Configuracion IA y Correo. El rol se obtiene en primer lugar decodificando el payload del token JWT almacenado (`authClient.js`, funcion `_getRoleFromToken`), y solo si falla se recurre al valor guardado en `localStorage`. Esto evita que un cambio de rol en el servidor quede desincronizado con la sesion activa del navegador. Las acciones sensibles se refuerzan siempre en backend mediante JWT y dependencias de rol.
-
-Decisiones tecnicas adoptadas:
-
-- Usar React/Vite para iteracion rapida y bajo costo de configuracion.
-- Separar paginas y componentes para mantener modularidad.
-- Usar cliente `authClient.js` para adjuntar `Authorization: Bearer`.
-- Mantener estados locales para conversaciones y resultados SCT, permitiendo una experiencia fluida aun cuando no todo esta persistido.
-- Usar OpenSeadragon solo cuando la imagen dispone de DZI, evitando cargar laminas completas en memoria.
-
-Tabla de evidencia del apartado 4.3.4:
-
-| Apartado | Componente implementado | Tecnologia/herramienta usada | Evidencia tecnica disponible | Evidencia visual sugerida | Validacion o prueba realizada | Estado actual | Limitaciones o pendiente |
-|---|---|---|---|---|---|---|---|
-| 4.3.4 | Landing publica | React/Vite | `LandingPage.jsx`, ruta `/` | Pagina inicial publica ASOFAMECH | Build Vite exitoso | Implementado | Ajustar textos finales del informe/institucion. |
-| 4.3.4 | Login y registro | React, JWT client-side | `AuthPage.jsx`, `authClient.js` | Formulario de inicio de sesion y registro pendiente | Prueba manual recomendada login/registro | Implementado | Completar flujo visual de cuenta pendiente y rechazo con mas estados. |
-| 4.3.4 | Dashboard | React, API dashboard | `DashboardPage.jsx`, `/api/dashboard/stats`, `/api/dashboard/ranking` | Dashboard principal con modulos | Build Vite exitoso | Implementado/parcial | Algunas metricas SCT siguen en `localStorage`. |
-| 4.3.4 | Sidebar y navegacion | React Router | `AppSidebar.jsx`, `app.jsx` | Sidebar con enlace Revision para privilegiados | Revision de rutas | Implementado | Ruta `/dashboard/review` ahora aparece en sidebar para Admin y Profesor. |
-| 4.3.4 | Rol visual desde JWT | React, `authClient.js` | `_getRoleFromToken`, decode payload JWT | Sidebar muestra rol correcto tras cambio servidor | Revision manual | Implementado | Fallback a `localStorage` si el token no esta disponible. |
-| 4.3.4 | Asistente IA | React, fetch API | `ChatbotPage.jsx`, `api.js` | Chat con respuesta educativa y fuentes RAG | Prueba manual recomendada | Implementado | Historial largo vive en cliente; backend guarda cada pregunta/respuesta. |
-| 4.3.4 | SCT | React, formularios | `SCTPage.jsx`, `api.js` | Generacion, resolucion y envio de intentos al backend | Build Vite exitoso | Implementado | Al completar test se envia intento a `POST /api/sct/{id}/attempt`; si el test no estaba guardado se auto-guarda primero. |
-| 4.3.4 | Imagenes IA | React, OpenSeadragon | `ImagesPage.jsx`, `OpenSeadragonViewer.jsx` | Visor con ROI y heatmap | Prueba manual recomendada | Implementado/parcial | Depende de DZI y backend con OpenSlide. |
-| 4.3.4 | Configuracion | React, panel admin | `ConfigPage.jsx` | Tabs: imagenes, RAG, usuarios, IA, correo, SCT | Build Vite exitoso | Implementado/parcial | UI grande; conviene code splitting por bundle pesado. |
-
-## 4.3.5. Implementacion del Back-End
-
-El back-end se implemento con FastAPI y se organiza en routers especializados. `backend/app/main.py` crea la aplicacion, configura CORS, monta routers, expone `/health` y crea tablas mediante SQLAlchemy al iniciar.
-
-Tecnologias utilizadas:
-
-- FastAPI como framework REST.
-- Uvicorn como servidor ASGI.
-- SQLAlchemy como ORM.
-- PostgreSQL/pgvector como base de datos.
-- httpx para comunicacion con Ollama.
-- python-multipart para carga de archivos.
-- OpenSlide y Pillow para imagenes medicas.
-- PyTorch/CONCH para inferencia histopatologica cuando las dependencias estan disponibles.
-
-Organizacion del backend:
-
-- `backend/app/routers`: rutas por modulo.
-- `backend/app/models.py`: modelos SQLAlchemy.
-- `backend/app/schemas.py`: esquemas generales.
-- `backend/app/histopathology/schemas.py`: esquemas ROI, heatmap y correcciones.
-- `backend/app/auth.py` y `auth_security.py`: JWT, hashing y control de roles.
-- `backend/app/histopathology/*`: ROI, QC, inferencia, heatmaps, cache y auditoria.
-- `backend/histopathology_offline/*`: entrenamiento, evaluacion y mineria CAMELYON17.
-
-Endpoints principales:
-
-| Modulo | Endpoints principales | Estado |
+| Capa | Evidencia tecnica | Funcion |
 |---|---|---|
-| Salud | `GET /health` | Implementado |
-| Auth | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me` | Implementado |
-| Usuarios/admin | `GET/POST/PATCH/DELETE /api/admin/users`, `POST /approve`, `POST /reject` | Implementado |
-| Config IA | `GET/PUT /api/admin/ai-config`, `GET /api/admin/integrations/status` | Implementado |
-| Correo | `GET/PUT /api/admin/email-config`, `POST /test`, `GET/PUT /email-templates/{key}` | Implementado/parcial |
-| Imagenes | `POST /api/medical-images/upload`, `GET /list`, `GET /view/{id}`, `DELETE /{id}` | Implementado |
-| CAMELYON17 local | `GET /local/camelyon17`, `POST /import-local/camelyon17` | Implementado |
-| DZI | `GET /dzi/{id}.dzi`, `GET /dzi/{id}_files/{level}/{col}_{row}.{fmt}` | Implementado |
-| Histopatologia | `GET /status`, `POST /analyze-roi`, `POST /scan-roi` | Implementado |
-| Heatmaps | `POST /heatmaps/jobs`, `GET /jobs/{id}`, `GET /image/{id}/latest`, `GET /history`, `GET/DELETE /{trace_id}` | Implementado/parcial |
-| Sesiones ROI | `GET /sessions`, `GET /sessions/{id}`, `DELETE /sessions/{id}` | Implementado |
-| Revision docente | `POST/DELETE /sessions/{id}/correction`, `GET /review/sessions`, `GET /dataset/manifest` | Implementado |
-| RAG | `GET/POST/PUT/DELETE /api/rag/documents`, `POST /reindex`, `GET /search` | Implementado/parcial |
-| Chatbot | `POST /api/chat` | Implementado |
-| Casos | `GET /api/cases`, `POST /api/cases`, `GET /api/cases/search` | Implementado API |
-| SCT | `POST /api/sct/generate`, `GET /example`, `POST /save`, `GET /list`, `GET/DELETE /{id}`, `POST /{id}/attempt`, `GET /my-attempts`, `GET /attempts/{id}` | Implementado |
+| Aplicacion principal | `backend/app/main.py` | Crea la app FastAPI, configura CORS, monta routers, expone `/health` y prepara tablas. |
+| Routers | `backend/app/routers/` | Agrupa endpoints por dominio: autenticacion, usuarios, imagenes, histopatologia, RAG, SCT, chatbot, casos y configuracion. |
+| Modelos | `backend/app/models.py` | Define entidades SQLAlchemy persistidas en PostgreSQL. |
+| Schemas | `backend/app/schemas.py`, `backend/app/histopathology/schemas.py` | Define contratos Pydantic de entrada/salida. |
+| Seguridad | `backend/app/auth.py`, `backend/app/auth_security.py` | Gestiona JWT, hash de contrasenas, usuario actual y permisos por rol. |
+| Servicios IA | `backend/app/histopathology/`, `backend/app/routers/chat.py`, `backend/app/routers/sct.py` | Ejecuta inferencia visual, chatbot, RAG y generacion SCT. |
+| Entrenamiento offline | `backend/histopathology_offline/` | Contiene scripts de preparacion, evaluacion y entrenamiento con CAMELYON17. |
+
+### Endpoints reales implementados por modulo
+
+| Modulo | Endpoints principales | Estado actual |
+|---|---|---|
+| Salud/status | `GET /health` | Implementado |
+| Autenticacion | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me` | Implementado |
+| Usuarios/admin | `GET /api/admin/users`, `POST /api/admin/users`, `PATCH /api/admin/users/{id}`, `DELETE /api/admin/users/{id}`, `POST /api/admin/users/{id}/approve`, `POST /api/admin/users/{id}/reject` | Implementado |
+| Configuracion IA | `GET /api/admin/ai-config`, `PUT /api/admin/ai-config`, `GET /api/admin/integrations/status` | Implementado/parcial |
+| Correo | `GET /api/admin/email-config`, `PUT /api/admin/email-config`, `POST /api/admin/email-config/test`, `GET/PUT /api/admin/email-templates/{key}` | Implementado/parcial |
+| Imagenes medicas | `POST /api/medical-images/upload`, `GET /api/medical-images/list`, `GET /api/medical-images/view/{id}`, `GET /api/medical-images/download/{id}`, `DELETE /api/medical-images/{id}` | Implementado |
+| Importacion CAMELYON17 | `GET /api/medical-images/local/camelyon17`, `POST /api/medical-images/import-local/camelyon17` | Implementado |
+| DZI/tiles | `GET /api/medical-images/dzi/{id}.dzi`, `GET /api/medical-images/dzi/{id}_files/{level}/{col}_{row}.{fmt}`, `GET /api/medical-images/dzi/{id}/info` | Implementado |
+| Histopatologia/status | `GET /api/histopathology/status` | Implementado |
+| ROI/inferencia | `POST /api/histopathology/analyze-roi`, `POST /api/histopathology/scan-roi` | Implementado |
+| Heatmap | `POST /api/histopathology/heatmaps/jobs`, `GET /api/histopathology/heatmaps/jobs/{job_id}`, `GET /api/histopathology/heatmaps/image/{image_id}/latest`, `GET /api/histopathology/heatmaps/image/{image_id}/history`, `GET /api/histopathology/heatmaps/{trace_id}`, `DELETE /api/histopathology/heatmaps/{trace_id}` | Implementado/parcial |
+| Sesiones ROI | `GET /api/histopathology/sessions`, `GET /api/histopathology/sessions/{session_id}`, `DELETE /api/histopathology/sessions/{session_id}` | Implementado |
+| Chatbot | `POST /api/chat` | Implementado/parcial |
+| Casos clinicos | `GET /api/cases`, `POST /api/cases`, `GET /api/cases/search` | Implementado API |
+| RAG documental | `GET/POST /api/rag/documents`, `GET/PUT/DELETE /api/rag/documents/{id}`, `POST /api/rag/documents/{id}/reindex`, `GET /api/rag/search` | Implementado/parcial |
+| SCT | `POST /api/sct/generate`, `GET /api/sct/example`, `POST /api/sct/save`, `GET /api/sct/list`, `GET /api/sct/{test_id}`, `DELETE /api/sct/{test_id}`, `POST /api/sct/{test_id}/attempt`, `GET /api/sct/my-attempts`, `GET /api/sct/attempts/{attempt_id}` | Implementado |
 | Dashboard | `GET /api/dashboard/stats`, `GET /api/dashboard/ranking` | Implementado/parcial |
 
-Flujo de comunicacion:
+Endpoints experimentales fuera del alcance principal del informe: el codigo contiene rutas para correccion de sesiones, revision administrativa de sesiones y exportacion tipo manifiesto. No se recomienda usarlas como evidencia central del Capitulo IV; deben tratarse como prototipos futuros condicionados a validacion por especialistas.
 
-El frontend envia solicitudes REST al backend usando `VITE_API_BASE` o `http://localhost:8001`. Las rutas protegidas reciben token Bearer. El backend valida el usuario, consulta PostgreSQL, filesystem, Ollama o el servicio histopatologico, y devuelve JSON para la interfaz.
+### Flujo de comunicacion
 
-Tabla de evidencia del apartado 4.3.5:
+1. El frontend envia solicitudes REST al backend usando token Bearer cuando la ruta lo requiere.
+2. FastAPI valida usuario, rol y payload mediante Pydantic y dependencias de seguridad.
+3. Segun el modulo, el backend consulta PostgreSQL, filesystem, OpenSlide, PyTorch/CONCH, pgvector u Ollama.
+4. La respuesta se retorna en JSON y el frontend actualiza la vista correspondiente.
+5. En histopatologia, cada analisis relevante genera `trace_id` y registro tecnico de sesion ROI.
 
-| Apartado | Componente implementado | Tecnologia/herramienta usada | Evidencia tecnica disponible | Evidencia visual sugerida | Validacion o prueba realizada | Estado actual | Limitaciones o pendiente |
-|---|---|---|---|---|---|---|---|
-| 4.3.5 | API principal | FastAPI/Uvicorn | `main.py`, `/health`, OpenAPI | Swagger `/docs` | Pytest 126 passed | Implementado | Migraciones formales pendientes. |
-| 4.3.5 | Routers modulares | FastAPI APIRouter | `routers/auth.py`, `admin.py`, `histopathology.py`, etc. | Captura Swagger por tags | Pytest | Implementado | Estandarizar nombres/respuestas. |
-| 4.3.5 | Seguridad | JWT HS256, PBKDF2 | `auth.py`, `auth_security.py` | Login exitoso y cuenta pendiente | `test_auth_security.py`, `test_user_approval.py` | Implementado | Configurar secreto JWT real en produccion. |
-| 4.3.5 | Integracion Ollama | httpx | `chat.py`, `sct.py`, `docker-compose.yml` | Consola Ollama/backend | Prueba manual recomendada | Implementado/parcial | Depende de modelo local descargado y servicio activo. |
-| 4.3.5 | Histopatologia API | FastAPI + PyTorch | `histopathology.py` | Endpoint `/status` y resultado ROI | Tests histopathology | Implementado/parcial | Uso educativo, no diagnostico. |
+### Decisiones tecnicas adoptadas
 
-## 4.3.6. Implementacion de la Base de Datos
+| Decision | Justificacion |
+|---|---|
+| FastAPI | Permite tipado, validacion automatica, documentacion OpenAPI y desarrollo rapido. |
+| Routers modulares | Separa responsabilidades y facilita documentar endpoints por modulo. |
+| JWT | Permite proteger rutas y diferenciar roles. |
+| PostgreSQL | Entrega persistencia robusta para usuarios, imagenes, SCT, RAG y trazabilidad. |
+| pgvector | Permite busqueda semantica documental sin incorporar otro motor externo. |
+| Ollama | Permite ejecutar LLM local para chatbot y SCT. |
+| OpenSlide/DZI | Permite trabajar con laminas WSI de gran tamano sin cargarlas completas. |
 
-La persistencia utiliza PostgreSQL 15 mediante SQLAlchemy. En Docker se declara la imagen `pgvector/pgvector:pg15`, lo que permite usar la extension `vector` cuando esta disponible. Las tablas se crean al iniciar el backend mediante `Base.metadata.create_all(bind=engine)` y migraciones ligeras de compatibilidad en `main.py`.
+### Evidencias recomendadas
 
-Entidades principales:
+- Captura de Swagger/OpenAPI con routers principales.
+- Captura de `/health` respondiendo correctamente.
+- Consola Uvicorn o Docker Compose con backend activo.
+- Prueba de login y respuesta de `/api/auth/me`.
+- Prueba de endpoint `/api/histopathology/status`.
+- Prueba de generacion SCT y envio de intento.
+- Prueba de busqueda RAG.
 
-| Modelo | Tabla | Funcion |
+### Limitaciones actuales
+
+- No existen migraciones Alembic formales; algunas compatibilidades se resuelven al iniciar la aplicacion.
+- Varias funciones dependen de servicios locales activos, como Ollama, OpenSlide o CUDA/PyTorch.
+- Algunas rutas experimentales no deben considerarse alcance principal del informe.
+- La validacion clinica del modelo visual no forma parte de esta etapa.
+- Falta endurecer configuracion productiva de secretos, CORS, rate limits y despliegue.
+
+## 3. Informacion actualizada para 4.3.6. Implementacion de la Base de Datos
+
+### Motor y acceso a datos
+
+La base de datos utiliza PostgreSQL mediante SQLAlchemy. En el entorno Docker se emplea una imagen con soporte pgvector (`pgvector/pgvector:pg15`), lo que permite almacenar y consultar embeddings vectoriales para el modulo RAG. El acceso a datos se organiza mediante modelos SQLAlchemy definidos en `backend/app/models.py` y sesiones configuradas en `backend/app/db.py`.
+
+### Modelos/tablas principales reales
+
+| Modelo | Funcion en el prototipo | Estado en informe |
 |---|---|---|
-| `User` | `users` | Usuarios, rol, estado de cuenta, aprobacion. |
-| `MedicalImage` | `medical_images` | Metadata de imagenes, ruta del archivo, DZI y usuario uploader. |
-| `Case` | `cases` | Casos clinicos usados como contexto para chatbot/RAG basico. |
-| `Document` | `documents` | Documentos academicos cargados para RAG documental. |
-| `DocumentChunk` | `document_chunks` | Fragmentos vectorizados de documentos. |
-| Tabla pgvector dinamica | `document_vector_embeddings` | Embeddings vectoriales para busqueda semantica con pgvector. |
-| `ChatLog` | `chat_logs` | Preguntas y respuestas del chatbot por usuario. |
-| `AIConfiguration` | `ai_configurations` | Parametros IA, RAG, correo y comportamiento. |
-| `EmailTemplate` | `email_templates` | Plantillas de correo para aprobacion/rechazo/suspension. |
-| `SCTTest` | `sct_tests` | Tests SCT generados y guardados. |
-| `SCTAttempt` | `sct_attempts` | Intentos individuales por estudiante: respuestas, puntaje exacto y parcial, timestamps. |
-| `HeatmapJob` | `heatmap_jobs` | Jobs de heatmap asincronicos con estado, progreso, tiles procesados y resultado. |
-| `HistopathologySession` | `histopathology_sessions` | Analisis ROI por usuario, imagen, coordenadas, clase, probabilidades y QC. |
-| `HistopathologyCorrection` | `histopathology_corrections` | Correcciones docentes sobre sesiones histopatologicas. |
+| `User` | Usuarios, rol, estado de aprobacion y control de acceso. | Principal |
+| `MedicalImage` | Metadata de imagenes medicas, rutas, estado DZI y usuario uploader. | Principal |
+| `Case` | Casos clinicos para contexto educativo y RAG basico. | Principal |
+| `Document` | Documento academico cargado para RAG documental. | Principal |
+| `DocumentChunk` | Fragmentos textuales usados para recuperacion. | Principal |
+| `document_vector_embeddings` | Tabla vectorial para embeddings con pgvector cuando esta disponible. | Principal/parcial |
+| `ChatLog` | Registro de preguntas y respuestas del chatbot. | Principal |
+| `AIConfiguration` | Parametros de IA, RAG, modelos, correo y comportamiento. | Principal |
+| `EmailTemplate` | Plantillas de correo para eventos administrativos. | Principal |
+| `SCTTest` | Tests SCT generados y guardados. | Principal |
+| `SCTAttempt` | Intentos individuales por estudiante con respuestas, puntaje y timestamps. | Principal |
+| `HeatmapJob` | Jobs asincronicos de heatmap con estado, progreso, request y resultado. | Principal |
+| `HistopathologySession` | Sesiones ROI con imagen, usuario, coordenadas, resultado, probabilidades, metricas y `trace_id`. | Principal |
+| `HistopathologyCorrection` | Entidad experimental de correccion/anotacion. | Fuera del alcance actual del informe |
 
-Relaciones principales:
+### Relaciones principales
 
-- `User` 1:N `MedicalImage`.
-- `User` 1:N `HistopathologySession`.
-- `User` 1:N `SCTAttempt`.
-- `MedicalImage` 1:N `HistopathologySession`.
-- `HistopathologySession` 1:1 `HistopathologyCorrection`.
-- `SCTTest` 1:N `SCTAttempt`.
-- `Document` 1:N `DocumentChunk`.
-- `DocumentChunk` 1:1 aproximado con `document_vector_embeddings` mediante `chunk_id`.
-- `User` puede aprobar a otros usuarios mediante `approved_by`.
+| Relacion | Descripcion |
+|---|---|
+| `User` 1:N `MedicalImage` | Un usuario puede registrar imagenes. |
+| `User` 1:N `HistopathologySession` | Un usuario genera sesiones ROI trazables. |
+| `MedicalImage` 1:N `HistopathologySession` | Una imagen puede tener multiples analisis ROI. |
+| `User` 1:N `ChatLog` | Cada consulta queda asociada a un usuario cuando hay sesion. |
+| `Document` 1:N `DocumentChunk` | Un documento se divide en fragmentos recuperables. |
+| `SCTTest` 1:N `SCTAttempt` | Un test puede tener multiples intentos. |
+| `User` 1:N `SCTAttempt` | Un estudiante puede registrar multiples intentos. |
+| `HeatmapJob` por `job_id`/`trace_id` | Cada job mantiene progreso y resultado tecnico del mapa. |
 
-Informacion persistida actualmente:
+### Informacion persistida actualmente
 
-- Usuarios y estado de aprobacion.
-- Imagenes medicas y rutas de archivos.
+- Usuarios, roles, estado de aprobacion y datos de acceso.
+- Metadata de imagenes medicas y rutas de archivos.
 - Casos clinicos.
-- Documentos RAG y chunks.
-- Logs de chat individuales.
-- Configuracion IA y correo.
+- Documentos RAG, chunks y embeddings.
+- Logs individuales del chatbot.
+- Configuracion IA y configuracion de correo.
 - Tests SCT guardados.
-- Intentos SCT por estudiante con respuestas individuales, puntaje y timestamps (`sct_attempts`).
-- Jobs de heatmap con estado, progreso y resultado en tabla `heatmap_jobs`.
-- Sesiones ROI histopatologicas.
-- Correcciones docentes.
-- Heatmaps en JSON dentro de `artifacts/histopathology/heatmaps`.
+- Intentos SCT por estudiante mediante `SCTAttempt`.
+- Sesiones ROI histopatologicas con imagen, usuario, ROI 1, ROI 2, estado, clase, confianza, probabilidades, metricas QC y `trace_id`.
+- Jobs asincronicos de heatmap con progreso y resultado resumido en base de datos.
+- Artefactos de heatmap en archivos JSON bajo `artifacts/histopathology/heatmaps`.
 
-Informacion pendiente o parcial:
+### Aclaraciones solicitadas
 
-- Conversaciones completas de chatbot como hilo en base de datos; actualmente el backend guarda intercambio pregunta/respuesta y el frontend conserva hilos en `localStorage`.
-- Migraciones Alembic formales.
-- Politica definitiva de aislamiento por propietario de imagen en todos los modulos.
-- Historial SCT institucional y rubricas de revision docente sobre respuestas.
+| Punto | Estado real |
+|---|---|
+| Intentos SCT por estudiante | Implementados mediante `SCTAttempt` y endpoints protegidos. |
+| Heatmaps | El job y su progreso se guardan en base de datos; los mapas/resultados detallados tambien se almacenan como artefactos JSON. |
+| Sesiones ROI | Se guardan con imagen, usuario, coordenadas, resultado, probabilidades, metricas de calidad y `trace_id`. |
+| Correcciones docentes | Existen en codigo, pero no deben ser entidad principal del informe. |
+| Reentrenamiento con correcciones | No debe declararse implementado; corresponde a trabajo futuro con datos validados. |
 
-Tabla de evidencia del apartado 4.3.6:
+### Evidencias recomendadas
 
-| Apartado | Componente implementado | Tecnologia/herramienta usada | Evidencia tecnica disponible | Evidencia visual sugerida | Validacion o prueba realizada | Estado actual | Limitaciones o pendiente |
-|---|---|---|---|---|---|---|---|
-| 4.3.6 | Base relacional | PostgreSQL 15 | `docker-compose.yml`, `db.py` | Captura contenedor DB o tablas | Pytest con DB/test doubles segun tests | Implementado | Agregar Alembic. |
-| 4.3.6 | ORM | SQLAlchemy | `models.py` | DER actualizado | Revision de modelos | Implementado | Documentacion DB anterior esta desactualizada. |
-| 4.3.6 | RAG vectorial | pgvector + JSON embeddings | `pgvector_store.py`, `DocumentChunk` | Captura documentos/chunks | `test_embedding_service.py`, `test_rag_utils.py` | Implementado/parcial | Verificar extension vector en ambiente productivo. |
-| 4.3.6 | Historial ROI | SQLAlchemy JSON | `HistopathologySession` | Registro con `trace_id` | Tests histopathology | Implementado | Completar vistas de historial transversal. |
-| 4.3.6 | Intentos SCT | SQLAlchemy | `SCTAttempt`, `models.py`, `sct.py` | Tabla `sct_attempts` con registros por estudiante | Revision manual tras completar test | Implementado | Historial institucional y rubrica docente pendientes. |
-| 4.3.6 | Jobs heatmap en DB | SQLAlchemy | `HeatmapJob`, `heatmap_jobs.py` | Tabla `heatmap_jobs`; jobs sobreviven reinicio | Revision manual | Implementado | Resultados de heatmap siguen en JSON filesystem. |
-| 4.3.6 | Heatmaps persistidos | JSON filesystem | `heatmap_store.py` | Carpeta `artifacts/.../heatmaps` | `test_heatmap_store.py` | Implementado/parcial | Resultados en JSON; metadatos de job ahora en DB. |
+- Diagrama entidad-relacion actualizado.
+- Captura de tablas principales en cliente SQL.
+- Registro de usuario pendiente/aprobado.
+- Registro de `histopathology_sessions` con `trace_id`.
+- Registro de `sct_attempts`.
+- Registro de `heatmap_jobs`.
+- Documento RAG con chunks asociados.
 
-## 4.3.7. Implementacion del Visor Histopatologico
+### Limitaciones actuales
 
-El visor histopatologico utiliza OpenSeadragon para imagenes con DZI y Fabric.js para visualizacion/anotacion de imagenes raster no DZI. El flujo principal esta en `ImagesPage.jsx` y `OpenSeadragonViewer.jsx`.
+- Falta integrar Alembic para migraciones versionadas.
+- El almacenamiento de artefactos histopatologicos combina base de datos y filesystem.
+- La politica de retencion de artefactos, patches y heatmaps debe definirse antes de produccion.
+- La entidad experimental de correccion debe quedar fuera del relato principal del informe.
 
-Carga e importacion de imagenes:
+## 4. Informacion actualizada para 4.3.7. Implementacion del Visor Histopatologico
 
-- Carga por navegador: `POST /api/medical-images/upload`.
-- Importacion local CAMELYON17: `GET /api/medical-images/local/camelyon17` y `POST /api/medical-images/import-local/camelyon17`.
-- Formatos permitidos: `.svs`, `.jpg`, `.jpeg`, `.png`, `.tiff`, `.tif`.
-- Las laminas WSI grandes se preparan con DZI dinamico, generando manifiesto y tiles bajo demanda.
+### Tecnologia usada
 
-DZI y tiles:
+El visor histopatologico utiliza OpenSeadragon en el frontend para navegar imagenes en formato DZI. En el backend se utiliza OpenSlide para leer regiones de imagenes WSI y generar tiles bajo demanda. Pillow se usa como respaldo para formatos raster convencionales.
 
-- Manifiesto DZI: `GET /api/medical-images/dzi/{image_id}.dzi`.
-- Tiles: `GET /api/medical-images/dzi/{image_id}_files/{level}/{col}_{row}.{fmt}`.
-- Para WSI, `process_wsi_to_dzi` crea el XML DZI sin pregenerar todos los tiles.
-- Si falta un tile WSI, `get_dynamic_wsi_tile` lo genera bajo demanda con OpenSlide.
+### Formatos soportados
 
-Decisiones tecnicas:
+El sistema acepta archivos como SVS, TIFF/TIF, PNG, JPG y JPEG. Para imagenes WSI de gran tamano, se recomienda trabajar con DZI/tiles para evitar cargar archivos completos en el navegador.
 
-- DZI evita cargar imagenes de varios GB completas en el navegador.
-- Importacion local CAMELYON17 evita subir archivos de 3 GB por HTTP.
-- OpenSeadragon permite zoom y pan fluido.
-- OpenSlide permite leer regiones y tiles desde laminas WSI reales.
+### Flujo de carga e importacion
 
-Tabla de evidencia del apartado 4.3.7:
+1. El administrador o usuario autorizado carga una imagen con `POST /api/medical-images/upload` o registra una imagen CAMELYON17 local con `POST /api/medical-images/import-local/camelyon17`.
+2. El backend guarda metadata de la imagen y prepara la informacion DZI.
+3. El frontend lista las imagenes disponibles.
+4. Al abrir una imagen, OpenSeadragon solicita el manifiesto DZI.
+5. El visor pide tiles progresivamente segun zoom y posicion.
+6. Si el tile no existe fisicamente, el backend puede generarlo dinamicamente usando OpenSlide.
 
-| Apartado | Componente implementado | Tecnologia/herramienta usada | Evidencia tecnica disponible | Evidencia visual sugerida | Validacion o prueba realizada | Estado actual | Limitaciones o pendiente |
-|---|---|---|---|---|---|---|---|
-| 4.3.7 | Biblioteca de imagenes | React + FastAPI | `ImagesPage.jsx`, `medical_images.py` | Lista de imagenes con DZI | Prueba manual recomendada | Implementado | Gestion por propietario parcial. |
-| 4.3.7 | Visor DZI | OpenSeadragon | `OpenSeadragonViewer.jsx` | Visor con zoom 40x | Prueba manual con CAMELYON17 | Implementado | Requiere DZI y OpenSlide. |
-| 4.3.7 | Tiles dinamicos | OpenSlide DeepZoom | `get_dynamic_wsi_tile` | Red de tiles cargando progresivamente | Prueba manual visor | Implementado/parcial | Cache de tiles DZI fisicos no centralizado. |
-| 4.3.7 | Importacion CAMELYON17 | Filesystem + DB | `/local/camelyon17`, `/import-local/camelyon17` | Panel importar lamina local | Prueba manual previa | Implementado | Requiere archivos ya descargados en servidor. |
+### Endpoints usados
 
-## 4.3.8. Implementacion del Modulo ROI
+| Funcion | Endpoint |
+|---|---|
+| Listar imagenes | `GET /api/medical-images/list` |
+| Subir imagen | `POST /api/medical-images/upload` |
+| Importar CAMELYON17 local | `GET /api/medical-images/local/camelyon17`, `POST /api/medical-images/import-local/camelyon17` |
+| Obtener imagen raster | `GET /api/medical-images/view/{image_id}` |
+| Obtener DZI | `GET /api/medical-images/dzi/{image_id}.dzi` |
+| Obtener tile | `GET /api/medical-images/dzi/{image_id}_files/{level}/{col}_{row}.{fmt}` |
+| Obtener metadata DZI | `GET /api/medical-images/dzi/{image_id}/info` |
 
-El modulo ROI permite seleccionar una region amplia de trabajo (ROI 1) y una subregion especifica (ROI 2). En el frontend, `OpenSeadragonViewer.jsx` transforma coordenadas del visor a coordenadas de imagen nivel 0. En backend, `roi.py` valida limites, tamanos y contencion.
+### Integracion frontend-backend
 
-Validaciones implementadas:
+`frontend/src/pages/ImagesPage.jsx` gestiona biblioteca y seleccion de imagen. `frontend/src/components/OpenSeadragonViewer.jsx` carga el visor, administra ROI y muestra resultados. El backend entrega DZI, tiles, metadata y endpoints de inferencia.
 
-- ROI no debe exceder dimensiones de lamina.
-- ROI 2 debe estar contenida dentro de ROI 1.
-- ROI 2 debe medir al menos 32x32 pixeles.
-- ROI 2 no debe superar 4096x4096 pixeles.
-- Backend repite validacion, por lo que no depende solo de la UI.
+### Evidencias visuales recomendadas
 
-Extraccion de patches:
+- Biblioteca de imagenes medicas.
+- Registro de imagen CAMELYON17 local.
+- Visor OpenSeadragon con lamina cargada.
+- Zoom progresivo sobre tejido.
+- Solicitudes de tiles en navegador o Swagger.
 
-- `OpenSlidePatchExtractor.get_slide_dimensions` obtiene dimensiones.
-- `extract_roi2` lee la region desde OpenSlide o usa Pillow como fallback.
-- Se genera `trace_id` por analisis.
-- Se guardan artefactos de depuracion mediante `debug_patches.py`.
-- Se persiste sesion en `histopathology_sessions` con usuario, imagen, ROI 1, ROI 2, estado, clase, probabilidades y metricas de calidad.
+### Validaciones realizadas
 
-Flujo completo:
+- Pruebas manuales de carga de imagenes y apertura del visor.
+- Pruebas de DZI/tiles con imagenes CAMELYON17.
+- Validacion de importacion local para evitar carga de archivos de varios GB por navegador.
 
-1. Usuario abre una imagen DZI.
+### Limitaciones actuales
+
+- Requiere OpenSlide en el servidor para WSI.
+- La carga directa por navegador no es recomendable para laminas de varios GB.
+- La cache de tiles fisicos puede optimizarse para escenarios multiusuario.
+- La preparacion de laminas depende de que los archivos existan en el servidor.
+
+## 5. Informacion actualizada para 4.3.8. Implementacion del Modulo ROI
+
+### Funcionamiento de ROI 1 y ROI 2
+
+ROI 1 representa una region amplia de exploracion dentro de la lamina. ROI 2 representa una subregion especifica, contenida dentro de ROI 1, que se extrae como patch para analisis visual. Esta separacion permite mantener contexto visual para el usuario y reducir la carga computacional del modelo.
+
+### Validaciones geometricas
+
+| Validacion | Estado |
+|---|---|
+| Coordenadas dentro de los limites de imagen | Implementado |
+| ROI 2 contenida dentro de ROI 1 | Implementado |
+| Tamano minimo de ROI 2 | Implementado, al menos 32x32 pixeles |
+| Tamano maximo de ROI 2 | Implementado, hasta 4096x4096 pixeles |
+| Validacion backend ademas de frontend | Implementado |
+
+### Extraccion de patch y trazabilidad
+
+El backend extrae la region seleccionada con OpenSlide o Pillow. Cada analisis genera un `trace_id`, que permite vincular la solicitud con el resultado, las metricas de calidad, los artefactos de depuracion y el registro persistido en base de datos.
+
+### Datos guardados en la sesion ROI
+
+- Usuario asociado.
+- Imagen asociada.
+- ROI 1 y ROI 2.
+- Estado del analisis.
+- Clase educativa resultante.
+- Confianza/probabilidad.
+- Probabilidades por clase.
+- Metricas de calidad del tejido.
+- `trace_id`.
+- Timestamp de creacion.
+
+### Flujo completo
+
+1. Usuario abre imagen en visor DZI.
 2. Selecciona ROI 1.
 3. Selecciona ROI 2 dentro de ROI 1.
-4. Frontend valida contencion y tamano.
-5. Frontend envia `POST /api/histopathology/analyze-roi`.
-6. Backend valida geometria contra dimensiones reales.
-7. Backend extrae patch RGB.
-8. Se evalua control de calidad.
-9. Se ejecuta CONCH/PyTorch si la ROI es evaluable.
-10. Se devuelve resultado educativo y se persiste la sesion.
+4. Frontend valida ubicacion y tamano.
+5. Backend vuelve a validar contra dimensiones reales.
+6. Backend extrae patch.
+7. Se aplica control de calidad.
+8. Si la region es evaluable, se ejecuta inferencia visual.
+9. Se entrega resultado educativo con probabilidades y advertencia no diagnostica.
+10. Se guarda una sesion ROI con `trace_id`.
 
-Tabla de evidencia del apartado 4.3.8:
+### Endpoints utilizados
 
-| Apartado | Componente implementado | Tecnologia/herramienta usada | Evidencia tecnica disponible | Evidencia visual sugerida | Validacion o prueba realizada | Estado actual | Limitaciones o pendiente |
-|---|---|---|---|---|---|---|---|
-| 4.3.8 | ROI 1/ROI 2 | React + OpenSeadragon | `OpenSeadragonViewer.jsx` | ROI 1 azul y ROI 2 naranja | Prueba manual recomendada | Implementado | Mejorar UX para reajuste fino de ROI. |
-| 4.3.8 | Validacion geometrica | Python/Pydantic | `roi.py`, `schemas.py` | Error cuando ROI 2 queda fuera | `test_histopathology_roi.py` | Implementado | Agregar mas mensajes pedagogicos. |
-| 4.3.8 | Extraccion patch | OpenSlide/Pillow | `patch_extractor.py` | Patch debug con trace_id | Tests y prueba ROI | Implementado | Depende de OpenSlide para WSI. |
-| 4.3.8 | Persistencia de sesion | SQLAlchemy | `HistopathologySession`, `/sessions` | Historial educativo de ROI | Tests histopathology | Implementado | Intentos SCT no siguen el mismo nivel de persistencia. |
+- `POST /api/histopathology/analyze-roi`.
+- `POST /api/histopathology/scan-roi`.
+- `GET /api/histopathology/sessions`.
+- `GET /api/histopathology/sessions/{session_id}`.
+- `DELETE /api/histopathology/sessions/{session_id}`.
 
-## 4.3.9. Implementacion del Modelo Visual CONCH/PyTorch
+### Evidencias visuales recomendadas
 
-El modelo visual usa CONCH como extractor congelado de caracteristicas y una cabeza clasificadora PyTorch entrenada sobre embeddings. La integracion esta en `app/histopathology/ml`.
+- ROI 1 seleccionada en azul.
+- ROI 2 seleccionada dentro de ROI 1.
+- Resultado educativo con clase, probabilidades, QC y `trace_id`.
+- Historial de sesiones ROI.
+- Patch de depuracion asociado al analisis.
 
-Arquitectura:
+### Limitaciones actuales
 
-- Backbone: CONCH `conch_ViT-B-16`.
-- Uso: extractor congelado, sin reentrenar el backbone.
-- Entrada: patch RGB, preprocesado por CONCH, tipicamente 224x224.
-- Embedding: 512 dimensiones segun endpoint de estado.
-- Cabeza: clasificador 3 clases sobre embeddings CONCH.
-- Checkpoint activo en Docker: `tri_head_camelyon17_stage10_balanced_v1_weighted.pt`.
+- La seleccion manual de ROI puede requerir mejor UX para ajuste fino.
+- La interpretacion del resultado sigue siendo educativa y no diagnostica.
+- No se incluye revision experta como parte del flujo actual.
+- Se requiere ampliar datos validados para mejorar robustez del modelo.
 
-Clases/salidas:
+## 6. Informacion actualizada para 4.3.9. Implementacion del Modelo Visual CONCH/PyTorch
+
+### Modelo visual utilizado
+
+El prototipo integra CONCH como extractor visual especializado en histopatologia y una cabeza clasificadora implementada en PyTorch. CONCH funciona como backbone congelado, es decir, no se reentrena durante el uso del prototipo. La cabeza clasificadora recibe embeddings de 512 dimensiones y produce la salida educativa.
+
+### Arquitectura general
+
+| Componente | Descripcion |
+|---|---|
+| Backbone | CONCH `conch_ViT-B-16` |
+| Estado del backbone | Congelado |
+| Entrada | Patch RGB extraido desde ROI 2 |
+| Preprocesamiento | Transformacion CONCH, usualmente hacia entrada tipo 224x224 |
+| Embedding | Vector de 512 dimensiones |
+| Clasificador | Cabeza PyTorch entrenada sobre embeddings |
+| Checkpoint activo | `tri_head_camelyon17_stage10_balanced_v1_weighted.pt` |
+
+### Clases de salida actuales
 
 - `no_metastasico`.
 - `metastasico`.
 - `estroma`.
-- Salidas derivadas por decision: `roi_no_evaluable`, `resultado_incierto`, `no_metastasico_probable`.
 
-Control de calidad:
+Ademas, el sistema puede entregar estados derivados como `roi_no_evaluable`, `resultado_incierto` o baja sospecha/no metastasico probable cuando las condiciones de calidad o confianza lo justifican.
 
-Antes de inferir se evalua la ROI con `roi_quality.py`, que estima:
+### Control de calidad de ROI
 
-- fraccion de fondo blanco;
-- fraccion de tejido util;
-- fraccion nuclear/celular;
-- predominio estromal;
-- estroma con baja celularidad.
+Antes de forzar una prediccion, el sistema evalua la calidad de la region. El objetivo es evitar clasificaciones sobre fondo, tejido insuficiente, estroma predominante o regiones no evaluables.
 
-Si la ROI no es evaluable, el sistema evita dar una clasificacion cerrada y devuelve recomendacion educativa. Si el modelo predice `estroma`, tambien se abstiene como `roi_no_evaluable`. Si la confianza no supera el umbral configurado, devuelve resultado incierto o baja sospecha no metastasica.
+| Criterio | Uso |
+|---|---|
+| Fondo blanco | Detectar region sin tejido suficiente. |
+| Fraccion de tejido | Estimar si hay material util para analizar. |
+| Fraccion nuclear/celular | Evaluar celularidad orientativa. |
+| Predominio estromal | Evitar confundir estroma/fibrosis con tumor. |
+| Confianza del modelo | Evitar conclusiones cerradas si la probabilidad no supera el umbral. |
 
-Heatmaps:
+### Forma de inferencia
 
-- `POST /api/histopathology/heatmaps/jobs` crea un job asincronico en memoria.
-- El backend divide ROI 1 en tiles.
-- Cada tile se evalua con QC e inferencia.
-- Se genera resumen con mejor tile, tiles sospechosos, cache hit/miss y decision ROI.
-- Se guarda JSON por `trace_id` y ultimo mapa por imagen.
-- Existe cache por tile en `heatmap_tile_cache.py`.
-- Hay limites por rol para carga simultanea y cantidad de tiles.
+1. Se extrae patch desde ROI 2.
+2. Se convierte/preprocesa para CONCH.
+3. CONCH genera embedding.
+4. La cabeza PyTorch calcula probabilidades.
+5. Se aplica logica de decision educativa y control de calidad.
+6. El backend devuelve clase, confianza, probabilidades, QC, `trace_id` y advertencia de uso no diagnostico.
 
-Entrenamiento y validacion offline:
+### Uso de CAMELYON17
 
-- Scripts en `backend/histopathology_offline`.
-- Evaluacion con XML CAMELYON17.
-- Stage 10 es el checkpoint activo.
-- Stage 14 amplio datos con prioridad 1 CAMELYON17, pero no reemplazo Stage 10 porque la mejora fue marginal.
+CAMELYON17 se utiliza como base estructurada para entrenamiento y evaluacion preliminar. Las anotaciones XML oficiales permiten diferenciar regiones tumorales y no tumorales sin depender de etiquetado manual del desarrollador. Las etapas offline documentadas permiten comparar checkpoints y evitar reemplazar el modelo activo si una nueva etapa no mejora de forma suficiente.
 
-Tabla de evidencia del apartado 4.3.9:
+### Heatmaps
 
-| Apartado | Componente implementado | Tecnologia/herramienta usada | Evidencia tecnica disponible | Evidencia visual sugerida | Validacion o prueba realizada | Estado actual | Limitaciones o pendiente |
-|---|---|---|---|---|---|---|---|
-| 4.3.9 | Extractor CONCH | PyTorch + CONCH | `conch_feature_extractor.py` | Endpoint `/status` model_ready | Prueba status recomendada | Implementado/parcial | Requiere dependencias CONCH/checkpoint. |
-| 4.3.9 | Cabeza clasificadora | PyTorch | `inference_service.py`, checkpoint Stage 10 | Resultado con probabilidades | Evaluaciones Stage 10/14 documentadas | Implementado/parcial | Dataset limitado a tarea CAMELYON/PCam. |
-| 4.3.9 | Control de calidad | Heuristicas H&E | `roi_quality.py` | ROI no evaluable por estroma/fondo | `test_histopathology_roi_quality.py` | Implementado | Heuristico, no reemplaza revision experta. |
-| 4.3.9 | Heatmaps ROI | FastAPI background tasks + DB | `heatmap_jobs.py`, `heatmap_store.py`, tabla `heatmap_jobs` | Overlay por tiles en visor | `test_heatmap_*` | Implementado | Jobs persisten en DB; sobreviven reinicio del backend. |
-| 4.3.9 | Auditoria | JSONL/artifacts | `audit_log.py`, `debug_patches.py` | Trace_id y patch debug | Tests audit log | Implementado | Gestion de retencion pendiente. |
+El heatmap divide ROI 1 en tiles, analiza cada tile y genera una visualizacion de sospecha educativa. Los jobs se ejecutan de forma asincronica, mantienen progreso y permiten cargar mapas previamente generados. Este flujo esta pensado para evitar bloquear la interfaz y controlar la carga computacional.
 
-## 4.3.10. Implementacion del RAG y Retroalimentacion Educativa
+### Endpoints principales
 
-El sistema incorpora dos niveles de recuperacion:
+- `GET /api/histopathology/status`.
+- `POST /api/histopathology/analyze-roi`.
+- `POST /api/histopathology/scan-roi`.
+- `POST /api/histopathology/heatmaps/jobs`.
+- `GET /api/histopathology/heatmaps/jobs/{job_id}`.
+- `GET /api/histopathology/heatmaps/image/{image_id}/latest`.
+- `GET /api/histopathology/heatmaps/{trace_id}`.
 
-1. RAG basico con casos clinicos: el chatbot busca coincidencias en la tabla `cases`.
-2. RAG documental: permite crear documentos, fragmentarlos, vectorizarlos y recuperarlos semanticamente.
+### Evidencias recomendadas
 
-Implementacion actual:
+- Endpoint `/api/histopathology/status` mostrando modelo listo.
+- Resultado ROI metastasico con probabilidades.
+- Resultado ROI no metastasico o no evaluable.
+- Heatmap de ROI con tiles coloreados.
+- Registro de `trace_id`.
+- Reportes offline de CAMELYON17 si estan disponibles.
 
-- CRUD documental en `/api/rag/documents`.
-- Fragmentacion mediante `chunk_text` en `rag_utils.py`.
-- Embeddings con `sentence-transformers` si esta disponible.
-- Fallback de embeddings locales por hashing si no esta disponible el modelo neuronal.
-- Uso de pgvector cuando la extension esta disponible.
-- Fallback a similitud coseno sobre JSON embeddings.
-- Busqueda en `/api/rag/search`.
-- Integracion con `POST /api/chat`, que recupera fuentes y las incorpora al prompt.
-- Panel de documentos RAG en `ConfigPage.jsx`.
-- Panel de configuracion IA con flags `rag_enabled`, `pgvector_enabled`, `neural_embeddings_enabled`, `embedding_model` y `max_context_documents`.
+### Limitaciones actuales
 
-Flujo de RAG:
+- No existe validacion clinica formal.
+- No existe revision experta como parte de esta etapa.
+- El modelo esta orientado a uso educativo, no diagnostico.
+- La robustez depende de ampliar datos validados, especialmente regiones no metastasicas, estroma y negativos dificiles.
+- El rendimiento depende de disponibilidad de GPU/CUDA o ejecucion CPU.
 
-1. Docente/admin crea o actualiza documento RAG.
-2. Backend divide el texto en chunks.
+## 7. Informacion actualizada para 4.3.10. Implementacion del RAG y Retroalimentacion Educativa
+
+### Estado actual del RAG
+
+El prototipo cuenta con un RAG documental implementado de forma parcial-funcional y un RAG basico basado en casos clinicos. El RAG documental permite registrar contenido textual, dividirlo en fragmentos, generar embeddings y recuperar fragmentos relevantes durante una consulta. Cuando pgvector esta disponible, se utiliza busqueda vectorial en PostgreSQL. Si no esta disponible, se recurre a un fallback con embeddings almacenados y similitud local.
+
+### Componentes implementados
+
+| Componente | Evidencia tecnica | Estado |
+|---|---|---|
+| Casos clinicos como contexto | `backend/app/routers/cases.py`, modelo `Case` | Implementado API |
+| Documentos RAG | `backend/app/routers/rag.py`, modelo `Document` | Implementado/parcial |
+| Chunks | `DocumentChunk`, `rag_utils.py` | Implementado |
+| Embeddings | `embedding_service.py` | Implementado/parcial |
+| pgvector | `pgvector_store.py`, Docker con `pgvector/pgvector:pg15` | Implementado/parcial |
+| Fallback | Embeddings JSON/similitud local | Implementado |
+| Integracion chatbot | `chat.py`, recuperacion de fuentes/contexto | Implementado/parcial |
+| Panel admin RAG | `frontend/src/pages/ConfigPage.jsx` | Implementado/parcial |
+
+### Flujo RAG
+
+1. Un administrador registra contenido documental.
+2. El backend divide el contenido en chunks.
 3. Cada chunk se vectoriza.
-4. Si pgvector esta disponible, se guarda en `document_vector_embeddings`.
-5. Ante una consulta, el backend vectoriza la pregunta.
-6. Recupera documentos/chunks relevantes.
-7. Construye contexto con fuentes.
-8. El chatbot genera respuesta educativa apoyada en ese contexto.
+4. Los embeddings se guardan en pgvector o fallback JSON.
+5. El usuario realiza una consulta al chatbot.
+6. El backend recupera contexto relevante desde documentos/casos.
+7. El contexto se incorpora al prompt educativo.
+8. El chatbot responde con retroalimentacion contextualizada.
 
-Estado real:
+### Endpoints principales
 
-RAG documental esta implementado en backend y UI, con busqueda vectorial y fallback. Queda parcial porque falta carga real de PDF/URL: la UI muestra origen PDF/URL, pero el backend actual recibe documento como titulo/contenido/tags. Tambien falta evaluacion formal de calidad de recuperacion y citacion academica mas robusta en la respuesta.
+- `GET /api/rag/documents`.
+- `POST /api/rag/documents`.
+- `GET /api/rag/documents/{document_id}`.
+- `PUT /api/rag/documents/{document_id}`.
+- `DELETE /api/rag/documents/{document_id}`.
+- `POST /api/rag/documents/{document_id}/reindex`.
+- `GET /api/rag/search`.
+- `POST /api/chat`.
 
-Tabla de evidencia del apartado 4.3.10:
+### Evidencias recomendadas
 
-| Apartado | Componente implementado | Tecnologia/herramienta usada | Evidencia tecnica disponible | Evidencia visual sugerida | Validacion o prueba realizada | Estado actual | Limitaciones o pendiente |
-|---|---|---|---|---|---|---|---|
-| 4.3.10 | RAG documental | FastAPI + SQLAlchemy | `rag.py`, `Document`, `DocumentChunk` | Panel Documentos RAG | `test_rag_utils.py`, `test_embedding_service.py` | Implementado/parcial | PDF/URL no ingestan contenido automaticamente. |
-| 4.3.10 | Embeddings neuronales | sentence-transformers | `embedding_service.py` | Estado integracion IA | Tests embedding | Implementado/parcial | Depende de modelo local/descarga. |
-| 4.3.10 | pgvector | PostgreSQL pgvector | `pgvector_store.py`, `docker-compose.yml` | Captura extension/vector store | Prueba recomendada `/api/admin/integrations/status` | Implementado/parcial | Fallback JSON si pgvector no esta disponible. |
-| 4.3.10 | Retroalimentacion con contexto | Ollama + prompt | `chat.py`, `build_rag_context` | Respuesta con fuentes RAG | Prueba manual recomendada | Implementado/parcial | Citas/fuentes en formato academico aun mejorables. |
+- Panel de documentos RAG.
+- Documento creado con titulo, contenido y tags.
+- Estado de integracion RAG/pgvector/embeddings.
+- Resultado de busqueda RAG.
+- Respuesta del chatbot usando contexto documental.
 
-## 4.3.11. Implementacion del Chatbot Educativo y Modulo SCT
+### Validaciones realizadas
+
+- Pruebas unitarias de utilidades RAG y servicio de embeddings.
+- Pruebas manuales recomendadas de creacion, reindexacion, busqueda y respuesta con fuentes.
+
+### Limitaciones actuales
+
+- La ingestion automatica de PDF/URL no esta completamente resuelta; el flujo principal trabaja con contenido textual cargado.
+- La calidad de citacion y trazabilidad de fuentes puede mejorar.
+- La disponibilidad del modelo neuronal de embeddings puede depender del entorno.
+- Falta una evaluacion formal de recuperacion con preguntas y respuestas esperadas.
+
+## 8. Informacion actualizada para 4.3.11. Implementacion del Chatbot Educativo y Modulo SCT
 
 ### A) Chatbot educativo
 
-El chatbot educativo esta implementado en frontend mediante `ChatbotPage.jsx` y en backend mediante `POST /api/chat`. Usa Ollama como servicio local de modelo generativo y por defecto el modelo `llama3:8b`.
+El chatbot educativo se implementa mediante una interfaz React y el endpoint `POST /api/chat`. El backend se conecta con Ollama/LLaMA para generar respuestas educativas. El sistema incorpora restricciones de alcance, contexto RAG y registro de intercambios.
 
-Funcionamiento:
+| Aspecto | Estado |
+|---|---|
+| Modelo usado | Ollama/LLaMA, configurable segun entorno. |
+| Endpoint principal | `POST /api/chat`. |
+| Uso de RAG | Implementado/parcial con documentos y casos. |
+| Historial | Intercambios guardados en `ChatLog`; hilos completos principalmente en cliente/localStorage. |
+| Acciones del hilo | Gestionadas en frontend. |
+| Exportacion | Si existe en UI, debe documentarse como funcion de apoyo, no como modulo central. |
+| Restriccion educativa | El prompt y la logica limitan el uso no diagnostico y consultas fuera de ambito. |
 
-1. El usuario escribe una consulta.
-2. El frontend envia `POST /api/chat` con token si existe.
-3. Backend valida que el mensaje no este vacio.
-4. Si esta activo, clasifica si la consulta pertenece al ambito medico.
-5. Recupera contexto desde casos clinicos y RAG documental.
-6. Construye prompt educativo, con limites de no diagnostico.
-7. Envia la solicitud a Ollama.
-8. Guarda pregunta/respuesta en `ChatLog`.
-9. Devuelve respuesta y fuentes RAG al frontend.
+Flujo:
 
-Limitaciones educativas:
+1. Usuario ingresa una consulta.
+2. Frontend envia mensaje al backend.
+3. Backend valida contenido y usuario si hay token.
+4. Se recupera contexto de casos/documentos si RAG esta activo.
+5. Backend consulta Ollama.
+6. Se guarda el intercambio en `ChatLog`.
+7. Frontend muestra respuesta educativa.
 
-- El prompt indica que no reemplaza evaluacion clinica.
-- Se filtran consultas fuera del ambito medico.
-- Se ignoran instrucciones de usuario que intenten cambiar reglas internas.
+Evidencias recomendadas:
 
-Estado:
+- Pantalla del chatbot.
+- Consulta medica y respuesta educativa.
+- Respuesta con contexto/fuentes RAG.
+- Registro `ChatLog` en base de datos.
 
-Implementado/parcial. La respuesta y logs individuales estan persistidos; las conversaciones como hilos se gestionan en el navegador mediante `localStorage` por usuario.
+Limitaciones:
+
+- Las conversaciones completas como hilos no estan completamente normalizadas en base de datos.
+- La calidad depende del modelo local.
+- No debe usarse como herramienta diagnostica.
 
 ### B) Modulo SCT
 
-El modulo SCT permite generar tests de Script Concordance Test mediante Ollama, resolverlos en el frontend y guardar tests generados en PostgreSQL.
+El modulo SCT permite generar, guardar, listar, responder y registrar intentos de pruebas Script Concordance Test.
 
-Parametros de generacion:
+| Funcion | Estado real |
+|---|---|
+| Generacion SCT | Implementada con Ollama/LLaMA. |
+| Parametros | Tema/foco, dificultad, cantidad de items y escala -2 a +2. |
+| Guardado de tests | Implementado en `SCTTest`. |
+| Listado de tests | Implementado. |
+| Eliminacion | Implementada. |
+| Resolucion por estudiante | Implementada en frontend. |
+| Retroalimentacion | Implementada por item y puntaje. |
+| Calculo de puntaje | Implementado para coincidencia directa/parcial segun logica del backend/frontend. |
+| Persistencia individual de intentos | Implementada mediante `SCTAttempt`. |
+| Revision docente SCT | No incluir como funcionalidad activa; reformular como futuro control de calidad de items y retroalimentaciones. |
 
-- Tema o foco medico (`focus`).
-- Dificultad: `pregrado`, `internado`, `residente`.
-- Cantidad de items (`num_items`).
-- Escala de respuesta de -2 a +2.
-
-Endpoints:
+Endpoints principales:
 
 - `POST /api/sct/generate`.
 - `GET /api/sct/example`.
 - `POST /api/sct/save`.
 - `GET /api/sct/list`.
-- `GET /api/sct/my-attempts` (requiere JWT).
-- `GET /api/sct/attempts/{attempt_id}` (requiere JWT; docente puede ver intentos de otros).
-- `POST /api/sct/{test_id}/attempt` (requiere JWT).
 - `GET /api/sct/{test_id}`.
 - `DELETE /api/sct/{test_id}`.
+- `POST /api/sct/{test_id}/attempt`.
+- `GET /api/sct/my-attempts`.
+- `GET /api/sct/attempts/{attempt_id}`.
 
-Funcionamiento:
+Flujo:
 
-1. El usuario define tema, dificultad y cantidad de items.
-2. Backend solicita a LLaMA/Ollama generar JSON de items SCT.
-3. Frontend presenta vineta, hipotesis, nueva informacion y escala.
-4. El estudiante responde.
-5. La UI calcula puntaje y muestra explicacion por item.
-6. Al enviar el test, `SCTPage.jsx` llama a `POST /api/sct/{test_id}/attempt` con las respuestas y timestamp de inicio. Si el test fue generado en sesion y no estaba guardado, se auto-guarda primero para obtener un ID valido.
-7. El backend calcula puntaje exacto (coincidencia directa) y persiste el intento en `sct_attempts`.
-8. Los tests pueden guardarse y luego cargarse desde la biblioteca; los intentos quedan vinculados al usuario y al test.
+1. Usuario define tema, dificultad y numero de items.
+2. Backend genera items SCT con LLM.
+3. Frontend muestra vineta, hipotesis, nueva informacion y escala.
+4. Estudiante responde cada item.
+5. Sistema calcula resultado y retroalimentacion.
+6. Si el test no estaba guardado, el frontend lo guarda primero.
+7. Backend registra intento individual en `SCTAttempt`.
 
-Pendiente:
+Evidencias recomendadas:
 
-- Historial SCT institucional con vista docente de intentos por cohorte.
-- Rubricas o revision docente de respuestas individuales.
-- Mayor control de calidad de items generados por LLM.
+- Formulario de generacion SCT.
+- Test generado.
+- Resolucion de items con escala.
+- Retroalimentacion y puntaje.
+- Registro de intento en base de datos.
 
-Tabla de evidencia del apartado 4.3.11:
+Limitaciones:
 
-| Apartado | Componente implementado | Tecnologia/herramienta usada | Evidencia tecnica disponible | Evidencia visual sugerida | Validacion o prueba realizada | Estado actual | Limitaciones o pendiente |
-|---|---|---|---|---|---|---|---|
-| 4.3.11 A | Chatbot | React + FastAPI + Ollama | `ChatbotPage.jsx`, `chat.py` | Conversacion educativa | Prueba manual recomendada | Implementado/parcial | Hilos completos en localStorage. |
-| 4.3.11 A | Filtro de alcance medico | Prompt + Ollama JSON | `_classify_medical_scope` | Consulta no medica rechazada | `test_chat_prompt.py` | Implementado | Depende del modelo local. |
-| 4.3.11 A | RAG en chat | Casos + documentos | `retrieve_rag_hits`, `build_rag_context` | Respuesta con fuentes | Prueba RAG recomendada | Implementado/parcial | Mejorar citacion y evaluacion de fuentes. |
-| 4.3.11 B | Generacion SCT | Ollama LLaMA 3 | `sct.py`, `SCT_SYSTEM_PROMPT` | Formulario generar SCT | Prueba manual recomendada | Implementado/parcial | Modelo hardcodeado en `sct.py`. |
-| 4.3.11 B | Resolucion y persistencia SCT | React + FastAPI | `SCTPage.jsx`, `api.js`, `sct.py`, `SCTAttempt` | Test respondido con puntaje; intento guardado en DB | Prueba manual recomendada | Implementado | Historial institucional y rubrica docente pendientes. |
-| 4.3.11 B | Banco SCT | PostgreSQL JSON | `SCTTest`, `SCTAttempt`, endpoints SCT | Listado tests e intentos por usuario | Prueba API recomendada | Implementado | Falta versionado/autor/propietario en tests. |
+- Falta analitica institucional por cohorte.
+- Falta control de calidad formal de items generados.
+- La generacion depende de Ollama y del modelo configurado.
 
-## Lista consolidada de capturas recomendadas para Capitulo IV
+## 9. Evidencias y capturas recomendadas para el informe
 
-### 4.3.4 Front-End
+| Apartado | Figura sugerida | Que debe mostrar | Que valida | Prioridad |
+|---|---|---|---|---|
+| 4.3.5 | Figura 4.X. Swagger/OpenAPI del backend | Tags y endpoints principales | Existencia de API modular | Alta |
+| 4.3.5 | Figura 4.X. Backend en ejecucion | Consola Uvicorn/Docker sin errores | Servicio activo | Alta |
+| 4.3.5 | Figura 4.X. Endpoint de salud | Respuesta `/health` | Disponibilidad basica | Alta |
+| 4.3.6 | Figura 4.X. Tablas principales en PostgreSQL | `users`, `medical_images`, `histopathology_sessions`, `sct_attempts`, `heatmap_jobs` | Persistencia | Alta |
+| 4.3.6 | Figura 4.X. Registro de sesion ROI | Fila con `trace_id`, coordenadas y resultado | Trazabilidad ROI | Alta |
+| 4.3.6 | Figura 4.X. Intento SCT persistido | Registro `sct_attempts` | Persistencia individual SCT | Alta |
+| 4.3.7 | Figura 4.X. Biblioteca de imagenes | Lista de imagenes medicas | Gestion de imagenes | Alta |
+| 4.3.7 | Figura 4.X. Importacion CAMELYON17 | Panel o respuesta de importacion local | Flujo para WSI pesadas | Media |
+| 4.3.7 | Figura 4.X. Visor OpenSeadragon | Lamina DZI con zoom | Visualizacion histopatologica | Alta |
+| 4.3.8 | Figura 4.X. Seleccion ROI 1 | Region amplia marcada | Delimitacion de contexto | Alta |
+| 4.3.8 | Figura 4.X. Seleccion ROI 2 | Subregion contenida en ROI 1 | Validacion geometrica | Alta |
+| 4.3.8 | Figura 4.X. Resultado ROI | Clase, probabilidades, QC y `trace_id` | Flujo completo ROI | Alta |
+| 4.3.9 | Figura 4.X. Estado del modelo visual | `/api/histopathology/status` | Modelo listo y dispositivo | Alta |
+| 4.3.9 | Figura 4.X. Heatmap ROI | Overlay por tiles | Analisis por region | Alta |
+| 4.3.9 | Figura 4.X. Resultado no evaluable | Fondo/estroma/baja calidad | Control de calidad | Media |
+| 4.3.10 | Figura 4.X. Panel documentos RAG | Documento creado y chunks | RAG documental | Alta |
+| 4.3.10 | Figura 4.X. Configuracion IA/RAG | Flags de RAG, pgvector, embeddings | Parametrizacion IA | Media |
+| 4.3.10 | Figura 4.X. Respuesta con contexto | Chatbot usando fuentes | Recuperacion aumentada | Alta |
+| 4.3.11 | Figura 4.X. Chatbot educativo | Consulta y respuesta | Asistente IA | Alta |
+| 4.3.11 | Figura 4.X. Generacion SCT | Tema, dificultad, cantidad | Creacion de test | Alta |
+| 4.3.11 | Figura 4.X. Resolucion SCT | Escala y respuestas | Interaccion estudiante | Alta |
+| 4.3.11 | Figura 4.X. Puntaje SCT | Retroalimentacion e intento guardado | Evaluacion y persistencia | Alta |
+| General | Figura 4.X. Configuracion/usuarios | Gestion de cuenta aprobada | Seguridad y roles | Media |
 
-- Figura 4.X. Pagina inicial publica de ASOFAMECH.
-- Figura 4.X. Interfaz de inicio de sesion.
-- Figura 4.X. Formulario de registro con cuenta pendiente de aprobacion.
-- Figura 4.X. Dashboard principal con modulos educativos.
-- Figura 4.X. Sidebar con control visual por rol.
-- Figura 4.X. Panel de configuracion con pestanas administrativas.
+## 10. Pruebas y validaciones
 
-### 4.3.5 Back-End
+| Prueba | Modulo | Descripcion | Resultado esperado | Resultado actual a registrar | Evidencia disponible | Estado |
+|---|---|---|---|---|---|---|
+| Build frontend | Frontend | Ejecutar `npm.cmd run build` en `frontend` | Build exitoso | Build exitoso; 58 modulos transformados; warning de bundle >500 kB | Vite build | Alta |
+| Pruebas backend | Backend | Ejecutar `python -m pytest tests -q` | Suite aprobada | 126 passed, 4 warnings de Pydantic v2 | Pytest | Alta |
+| Login | Auth | Iniciar sesion con usuario aprobado | Token y dashboard | Captura login/dashboard | UI + `/api/auth/me` | Alta |
+| Usuarios/roles | Seguridad | Verificar estudiante vs administrador | Menus restringidos | Captura sidebar por rol | UI + endpoints admin | Alta |
+| Carga de imagenes | Imagenes | Subir/importar imagen | Registro en biblioteca | Captura biblioteca | Endpoint upload/import | Alta |
+| DZI/tiles | Visor | Abrir DZI y navegar | Tiles cargan con zoom | Captura visor/red | OpenSeadragon | Alta |
+| ROI | Histopatologia | Seleccionar ROI 1 y ROI 2 | Coordenadas validas | Captura ROI | UI + endpoint ROI | Alta |
+| Modelo IA | Histopatologia | Analizar ROI 2 | Resultado con probabilidades | Captura resultado | `/analyze-roi` | Alta |
+| Heatmap | Histopatologia | Generar mapa de ROI 1 | Job progresa y overlay aparece | Captura progreso/mapa | Jobs heatmap | Alta |
+| Chatbot | IA educativa | Enviar consulta medica | Respuesta educativa | Captura chat | `/api/chat` | Alta |
+| RAG | RAG | Crear documento y consultar | Recupera contexto | Captura documento/respuesta | `/api/rag/search` | Alta |
+| Generacion SCT | SCT | Crear test por tema | Items generados | Captura test | `/api/sct/generate` | Alta |
+| Persistencia SCT | SCT | Completar test | Intento guardado | Tabla `sct_attempts` | `/api/sct/{id}/attempt` | Alta |
+| Base de datos | DB | Revisar tablas y registros | Datos persistidos | Captura cliente SQL | PostgreSQL | Alta |
+| Configuracion IA | Admin | Cambiar flags/modelos | Config guardada | Captura config | `/api/admin/ai-config` | Media |
 
-- Figura 4.X. Documentacion Swagger/OpenAPI de FastAPI.
-- Figura 4.X. Consola de Uvicorn con backend iniciado.
-- Figura 4.X. Respuesta del endpoint `/health`.
-- Figura 4.X. Respuesta autenticada de `/api/auth/me`.
-
-### 4.3.6 Base de Datos
-
-- Figura 4.X. Contenedor PostgreSQL/pgvector en Docker.
-- Figura 4.X. Tablas principales en cliente SQL.
-- Figura 4.X. Registro de usuario aprobado.
-- Figura 4.X. Registro de sesion histopatologica con `trace_id`.
-- Figura 4.X. Documento RAG con chunks indexados.
-
-### 4.3.7 Visor Histopatologico
-
-- Figura 4.X. Biblioteca de imagenes histopatologicas.
-- Figura 4.X. Importacion local de lamina CAMELYON17.
-- Figura 4.X. Visor OpenSeadragon con lamina DZI.
-- Figura 4.X. Zoom progresivo sobre imagen histopatologica.
-
-### 4.3.8 ROI
-
-- Figura 4.X. Seleccion de ROI 1.
-- Figura 4.X. Seleccion de ROI 2 dentro de ROI 1.
-- Figura 4.X. Resultado educativo con coordenadas y `trace_id`.
-- Figura 4.X. Historial de sesiones ROI.
-
-### 4.3.9 Modelo Visual
-
-- Figura 4.X. Estado del modelo histopatologico.
-- Figura 4.X. Resultado ROI clasificado como metastasico/no metastasico.
-- Figura 4.X. Resultado ROI no evaluable por estroma o baja calidad.
-- Figura 4.X. Heatmap educativo por ROI.
-- Figura 4.X. Mapa preparado con nombre y nota docente.
-
-### 4.3.10 RAG
-
-- Figura 4.X. Panel de documentos RAG.
-- Figura 4.X. Estado de integracion RAG, pgvector y embeddings.
-- Figura 4.X. Documento RAG creado.
-- Figura 4.X. Respuesta del chatbot apoyada en fuentes cargadas.
-
-### 4.3.11 Chatbot y SCT
-
-- Figura 4.X. Interfaz del chatbot educativo.
-- Figura 4.X. Respuesta educativa con advertencia no diagnostica.
-- Figura 4.X. Generacion de test SCT.
-- Figura 4.X. Test SCT respondido por estudiante.
-- Figura 4.X. Retroalimentacion y puntaje SCT.
-- Figura 4.X. Gestion de tests SCT en configuracion.
-
-## Lista consolidada de pruebas y evidencias de ejecucion
-
-| Evidencia | Comando o accion | Resultado esperado |
-|---|---|---|
-| Build frontend | `npm.cmd run build` en `frontend` | Build exitoso; advertencia de bundle grande aceptada. |
-| Backend corriendo | `docker compose up backend db ollama` o servicio local Uvicorn | Consola sin errores criticos. |
-| Swagger/OpenAPI | Abrir `http://localhost:8001/docs` | Ver routers por modulo. |
-| Pytest | `backend/.venv/Scripts/python.exe -m pytest tests -q` | 126 pruebas aprobadas. |
-| Login | Registrar, aprobar y entrar | Token guardado y acceso a dashboard. |
-| Aprobacion usuario | Crear usuario pendiente y aprobar desde admin | Cambio a `approved`, correo/outbox. |
-| Carga imagen | Subir JPG/PNG/TIFF/SVS | Registro en biblioteca. |
-| Importacion CAMELYON17 | Importar lamina local | Imagen aparece sin subir GB por navegador. |
-| Visor | Abrir imagen con DZI | OpenSeadragon muestra zoom/pan. |
-| ROI | Seleccionar ROI 1 y ROI 2 | Coordenadas visibles y validas. |
-| Inferencia IA | Analizar ROI 2 | Resultado con clase, probabilidad, QC y `trace_id`. |
-| Heatmap | Generar mapa de ROI 1 | Job con progreso y overlay por tiles. |
-| Chatbot | Enviar consulta medica | Respuesta educativa y log en backend. |
-| RAG | Crear documento y preguntar sobre el tema | Respuesta con contexto recuperado. |
-| SCT | Generar, responder y guardar test | Items, puntaje y test en listado. |
-| Persistencia | Recargar sesion/imagen | Historial ROI y documentos se mantienen. |
-
-## Flujo general de implementacion del sistema
-
-1. El usuario accede a la plataforma web desde el navegador.
-2. El usuario se registra o inicia sesion.
-3. Si la cuenta esta pendiente, el administrador debe aprobarla.
-4. Al aprobarse, el usuario recibe autorizacion de acceso y puede ingresar.
-5. El dashboard presenta los modulos principales: asistente IA, SCT e imagenes IA.
-6. En el chatbot, el usuario formula una consulta medica educativa.
-7. El backend filtra alcance, recupera contexto RAG/casos y consulta Ollama.
-8. En SCT, el usuario genera o carga un test, responde items y recibe retroalimentacion.
-9. En imagenes, el usuario selecciona una lamina DZI.
-10. El visor carga tiles y permite navegar con zoom/pan.
-11. El usuario define ROI 1 y ROI 2.
-12. El backend valida coordenadas y extrae el patch.
-13. El sistema aplica QC y, si corresponde, ejecuta CONCH/PyTorch.
-14. Se devuelve una prediccion educativa con probabilidades y advertencia no diagnostica.
-15. Se registra la sesion con `trace_id`.
-16. Docentes/admin pueden preparar heatmaps, revisar sesiones y corregir resultados para dataset futuro.
-
-## Decisiones tecnicas principales
-
-| Decision | Justificacion |
-|---|---|
-| React/Vite | Permite construir SPA modular, rapida de iterar y con build liviano para prototipo. |
-| FastAPI | Facilita endpoints REST, documentacion Swagger automatica, tipado y validacion Pydantic. |
-| PostgreSQL | Motor robusto para usuarios, SCT, documentos, sesiones ROI y trazabilidad. |
-| pgvector | Permite busqueda vectorial documental en la misma base de datos. |
-| Docker Compose | Orquesta PostgreSQL, backend y Ollama en un entorno reproducible. |
-| OpenSeadragon/DZI | Resuelve visualizacion de imagenes de alta resolucion sin cargar la lamina completa. |
-| ROI 1 y ROI 2 | Reduce carga computacional y permite separar contexto amplio de patch especifico de inferencia. |
-| CONCH/PyTorch | CONCH aporta embeddings histopatologicos especializados; PyTorch permite cabezas entrenables. |
-| Modelo congelado | Reduce costo de entrenamiento y riesgo de sobreajuste; solo se entrena clasificador sobre embeddings. |
-| Ollama/LLaMA | Permite IA generativa local, controlable y sin depender necesariamente de APIs externas. |
-| RAG | Reduce respuestas genericas al incorporar documentos y casos propios de la plataforma. |
-| SCT | Se alinea con evaluacion de razonamiento clinico y permite retroalimentacion educativa estructurada. |
-
-## Redaccion academica base para el informe
-
-### 4.3.4. Implementacion del Front-End
-
-El front-end de ASOFAMECH se implemento como una aplicacion web de pagina unica desarrollada con React y Vite. Esta decision permitio construir una interfaz modular, con rutas diferenciadas para la pagina publica, autenticacion, dashboard, asistente educativo, modulo SCT, visor histopatologico y paneles administrativos. La navegacion se estructuro mediante React Router DOM, mientras que los componentes visuales se organizaron en carpetas de paginas y componentes reutilizables.
-
-La interfaz considera distintos perfiles de usuario. En la capa visual, el sidebar presenta u oculta opciones segun el rol del usuario, permitiendo que estudiantes accedan a los modulos formativos y que profesores o administradores accedan a configuracion, revision docente, gestion de imagenes, documentos RAG, usuarios, correo y tests SCT. El rol se determina decodificando el payload del token JWT en el cliente, evitando depender exclusivamente del valor almacenado en `localStorage`, el cual puede quedar desactualizado si el servidor modifica el rol del usuario. Como decision de implementacion, el front-end mantiene parte del estado de experiencia en el navegador, como historial conversacional y metricas de uso, mientras que los resultados SCT y los intentos individuales se persisten en el backend.
-
-La validacion tecnica del front-end se realizo mediante el proceso de build de Vite, el cual compilo correctamente la aplicacion. Como limitacion actual, el bundle principal supera 500 kB, por lo que una mejora futura es aplicar division de codigo por rutas para optimizar la carga inicial.
+## 11. Textos academicos base
 
 ### 4.3.5. Implementacion del Back-End
 
-El back-end se desarrollo con FastAPI, organizando la logica en routers por dominio funcional. Esta estructura permite separar autenticacion, administracion, chatbot, casos clinicos, SCT, imagenes medicas, RAG e histopatologia. El archivo principal configura CORS, expone un endpoint de salud, crea tablas de base de datos al inicio y registra los routers de la aplicacion.
+El back-end de ASOFAMECH se implemento mediante FastAPI, organizando la logica del sistema en routers especializados segun dominio funcional. Esta decision permitio separar autenticacion, administracion de usuarios, imagenes medicas, analisis histopatologico, RAG, chatbot, casos clinicos y modulo SCT. La aplicacion principal configura CORS, registra los routers, expone un endpoint de salud y establece la conexion con la base de datos.
 
-La comunicacion con el front-end se realiza mediante endpoints REST que retornan respuestas JSON. Las rutas protegidas utilizan token Bearer y validacion de usuario desde base de datos. Para las funcionalidades de inteligencia artificial, el back-end se comunica con Ollama mediante httpx, mientras que el modulo histopatologico integra OpenSlide, PyTorch y servicios propios de inferencia.
+La comunicacion con el front-end se realiza mediante servicios REST que retornan respuestas JSON. Las rutas protegidas utilizan autenticacion mediante JWT y validacion de usuario desde base de datos. Para los servicios de inteligencia artificial, el back-end se comunica con Ollama en el caso del chatbot y SCT, mientras que el modulo histopatologico integra OpenSlide, Pillow, PyTorch y CONCH para el procesamiento de imagenes y patches. Esta arquitectura permite mantener separada la logica de interfaz, persistencia, inferencia visual y recuperacion documental.
 
-La evidencia de implementacion incluye la documentacion Swagger/OpenAPI, el endpoint `/health`, las pruebas automatizadas del backend y la organizacion modular de routers. Durante la revision se ejecutaron 126 pruebas automatizadas con resultado exitoso. Como mejora futura se recomienda incorporar migraciones formales con Alembic y fortalecer pruebas de integracion completas.
+Como evidencia tecnica se consideran la documentacion Swagger/OpenAPI, el endpoint `/health`, las pruebas automatizadas del backend y los endpoints funcionales de autenticacion, imagenes, histopatologia, RAG, chatbot y SCT. El estado actual es funcional para el prototipo educativo, aunque quedan pendientes mejoras de despliegue productivo, migraciones formales, endurecimiento de seguridad y validaciones de integracion en entorno real.
 
 ### 4.3.6. Implementacion de la Base de Datos
 
-La base de datos del prototipo utiliza PostgreSQL con SQLAlchemy como ORM. En el entorno Docker se utiliza una imagen con soporte pgvector, lo que permite extender la base relacional con busqueda vectorial para documentos academicos. Las entidades principales representan usuarios, imagenes medicas, casos clinicos, documentos RAG, logs de chat, configuraciones, tests SCT, sesiones histopatologicas y correcciones docentes.
+La base de datos se implemento con PostgreSQL y SQLAlchemy como capa ORM. El entorno contempla soporte para pgvector, permitiendo almacenar representaciones vectoriales de documentos para el modulo RAG. Las entidades principales representan usuarios, imagenes medicas, casos clinicos, documentos, fragmentos documentales, configuracion IA, logs de chatbot, pruebas SCT, intentos SCT, jobs de heatmap y sesiones histopatologicas ROI.
 
-La persistencia actual permite registrar usuarios aprobados o pendientes, almacenar metadata de imagenes, conservar tests SCT generados, guardar documentos y fragmentos para RAG, registrar intercambios de chatbot y almacenar sesiones ROI con coordenadas, probabilidades y trazabilidad mediante `trace_id`. Las correcciones docentes se almacenan como una entidad relacionada con las sesiones histopatologicas, permitiendo construir manifiestos para reentrenamiento futuro.
+Una decision relevante fue persistir la trazabilidad tecnica del modulo histopatologico mediante sesiones ROI. Cada sesion almacena la imagen, el usuario, las coordenadas de ROI 1 y ROI 2, el resultado educativo, probabilidades, metricas de calidad y un `trace_id`. Esto permite reconstruir el proceso de analisis sin declarar una validacion clinica. Asimismo, los intentos SCT por estudiante se almacenan mediante una entidad especifica, permitiendo conservar respuestas, puntaje y fecha de realizacion.
 
-Como mejora implementada en la misma sesion de revision, los jobs asincronicos de heatmap se migraron de un diccionario en memoria a la tabla `heatmap_jobs` en PostgreSQL, lo que garantiza que el estado de un job sobrevive reinicios del backend. De igual forma, se agrego el modelo `SCTAttempt` con su tabla correspondiente, que registra cada intento de estudiante con respuestas, puntaje y timestamps. Los resultados de heatmap siguen almacenandose como JSON en el filesystem; solo los metadatos del job se persistieron en DB. Como limitacion pendiente quedan las migraciones Alembic formales y la politica de aislamiento por propietario de imagen.
+Los heatmaps combinan persistencia en base de datos y filesystem: el job asincronico mantiene estado y progreso en PostgreSQL, mientras que los artefactos detallados del mapa se guardan como JSON. Como limitacion principal, el proyecto aun requiere migraciones formales y una politica clara de retencion de artefactos. Las entidades experimentales asociadas a correccion docente no se consideran parte del alcance principal del informe.
 
 ### 4.3.7. Implementacion del Visor Histopatologico
 
-El visor histopatologico se implemento usando OpenSeadragon para imagenes de alta resolucion servidas como DZI. Esta decision responde a la necesidad de navegar laminas histologicas de gran tamano sin transferir el archivo completo al navegador. El backend genera o sirve el manifiesto DZI y entrega tiles bajo demanda, apoyandose en OpenSlide para archivos WSI como SVS o TIFF.
+El visor histopatologico se implemento con OpenSeadragon para permitir la navegacion de imagenes de alta resolucion mediante DZI. Esta tecnologia permite cargar progresivamente tiles de la imagen en funcion del nivel de zoom y la posicion visible, evitando transferir una lamina completa al navegador. En el backend, OpenSlide permite leer regiones de archivos WSI y generar tiles dinamicamente cuando corresponde.
 
-El sistema permite cargar imagenes por navegador y tambien importar laminas CAMELYON17 ya descargadas localmente en el servidor. Esta ultima decision evita transferir archivos de varios gigabytes por HTTP, haciendo mas realista el flujo de trabajo con datos histopatologicos. En el front-end, el usuario selecciona una imagen de la biblioteca, el visor carga el DZI correspondiente y permite desplazamiento y zoom progresivo.
+El sistema permite cargar imagenes convencionales y registrar laminas CAMELYON17 disponibles localmente en el servidor. Esta ultima decision resuelve una limitacion practica importante, ya que las laminas histopatologicas pueden pesar varios gigabytes y no resulta eficiente subirlas por navegador. El flujo consiste en registrar la imagen, preparar o exponer su DZI, abrirla desde la biblioteca y navegarla con zoom y desplazamiento.
 
-Las evidencias recomendadas para el informe incluyen capturas de la biblioteca de imagenes, el visor con una lamina cargada, el zoom sobre tejido histologico y el endpoint DZI funcionando. La limitacion principal es que el flujo depende de OpenSlide y de que la imagen tenga DZI disponible.
+La evidencia funcional recomendada incluye capturas de la biblioteca de imagenes, importacion CAMELYON17, visor OpenSeadragon, zoom sobre tejido y respuesta de endpoints DZI/tiles. El modulo se encuentra implementado para el flujo principal, aunque su uso con WSI depende de la disponibilidad de OpenSlide y de una estrategia de cache adecuada para escenarios multiusuario.
 
 ### 4.3.8. Implementacion del Modulo ROI
 
-El modulo ROI permite delimitar una region amplia de exploracion y una subregion especifica para analisis con IA. La ROI 1 define el contexto de trabajo, mientras que la ROI 2 corresponde al patch que sera extraido y evaluado por el modelo. Esta separacion reduce la carga computacional y permite mantener un flujo pedagogico comprensible para el estudiante.
+El modulo ROI se diseno para que el usuario seleccione una region amplia de exploracion y una subregion especifica de analisis. ROI 1 representa el contexto visual dentro de la lamina, mientras que ROI 2 corresponde al patch enviado al modelo visual. Esta separacion reduce la carga computacional y mejora la comprension pedagogica del flujo, ya que el estudiante visualiza donde se origina la inferencia.
 
-La seleccion se realiza en el visor OpenSeadragon y las coordenadas se transforman al sistema de referencia de la imagen original. El backend valida que las regiones no excedan los limites de la lamina, que ROI 2 este contenida en ROI 1 y que su tamano sea adecuado. Posteriormente se extrae el patch mediante OpenSlide o Pillow, se genera un `trace_id` y se registra la sesion.
+La seleccion se realiza sobre el visor OpenSeadragon y las coordenadas se transforman al sistema de referencia de la imagen original. El backend valida limites, tamano y contencion de ROI 2 dentro de ROI 1 antes de extraer el patch. Posteriormente se genera un `trace_id`, se aplica control de calidad y se ejecuta el analisis visual cuando la region es evaluable. El resultado se guarda como sesion ROI junto con probabilidades, metricas y coordenadas.
 
-La evidencia funcional incluye capturas de ROI 1, ROI 2, coordenadas, resultado educativo, patch de depuracion y registro del `trace_id`. El modulo se encuentra implementado para el flujo principal de analisis, aunque puede mejorar en edicion fina de ROI y herramientas pedagogicas de comparacion.
+El estado actual del modulo permite completar el flujo imagen, ROI, extraccion, analisis y trazabilidad. Las evidencias recomendadas son capturas de ROI 1, ROI 2, resultado educativo, coordenadas y registro de sesion. Como limitacion, la seleccion manual podria mejorar con herramientas de ajuste fino y comparacion pedagogica entre regiones.
 
 ### 4.3.9. Implementacion del Modelo Visual CONCH/PyTorch
 
-El modulo de analisis visual utiliza CONCH como extractor congelado de caracteristicas histopatologicas y una cabeza clasificadora entrenada sobre embeddings. Esta arquitectura permite aprovechar un modelo visual especializado sin reentrenar el backbone completo, reduciendo costos computacionales y haciendo viable el prototipo en un entorno local.
+El modelo visual del prototipo utiliza CONCH como extractor congelado de caracteristicas histopatologicas y una cabeza clasificadora implementada en PyTorch. Esta arquitectura permite aprovechar representaciones visuales especializadas sin reentrenar el backbone completo, reduciendo costo computacional y riesgo de sobreajuste. La inferencia se realiza sobre patches extraidos desde ROI 2 y preprocesados segun los requerimientos de CONCH.
 
-La inferencia se ejecuta sobre patches extraidos desde ROI 2. Antes de clasificar, el sistema aplica un control de calidad que detecta exceso de fondo blanco, baja proporcion de tejido, baja celularidad y predominio estromal. Si la region no es adecuada, el sistema se abstiene y entrega una recomendacion educativa en lugar de forzar una clase. Cuando la inferencia procede, se devuelven clase, confianza, probabilidades, metadatos del modelo y advertencia de uso no diagnostico.
+Antes de clasificar, el sistema aplica control de calidad sobre la region para detectar fondo, baja proporcion de tejido, baja celularidad o predominio estromal. Si la ROI no es adecuada, el sistema entrega un estado no evaluable o incierto en lugar de forzar una prediccion. Cuando la inferencia procede, se devuelven clase, confianza, probabilidades por clase, metricas de calidad y advertencia de uso educativo no diagnostico.
 
-El checkpoint activo corresponde a una cabeza 3-class sobre embeddings CONCH entrenada para distinguir tejido no metastasico, metastasico y estroma. Las etapas offline documentadas muestran evaluaciones con CAMELYON17 y XML oficiales. El modelo se declara educativo y no diagnostico, debido a que la validacion clinica formal y la revision por patologo no forman parte del alcance actual.
+El checkpoint activo corresponde a una cabeza de tres clases para distinguir tejido no metastasico, metastasico y estroma. CAMELYON17 se utiliza como base estructurada para entrenamiento y evaluacion preliminar mediante anotaciones oficiales, evitando depender de etiquetado manual no experto. El modelo no cuenta con validacion clinica formal ni revision por patologo en esta etapa; por ello, sus resultados se presentan exclusivamente como retroalimentacion educativa.
 
 ### 4.3.10. Implementacion del RAG y Retroalimentacion Educativa
 
-El componente RAG se implemento para enriquecer las respuestas educativas con informacion cargada en la plataforma. El sistema permite registrar documentos, fragmentarlos, generar embeddings y recuperar contenido relevante frente a una consulta. Cuando pgvector esta disponible, la busqueda se realiza en PostgreSQL mediante vectores; en caso contrario, el sistema utiliza un mecanismo de similitud sobre embeddings almacenados como JSON.
+El componente RAG se implemento para enriquecer las respuestas educativas del chatbot mediante recuperacion de informacion desde documentos y casos clinicos. El sistema permite almacenar documentos textuales, dividirlos en fragmentos, generar embeddings y recuperar los fragmentos mas relevantes frente a una consulta. Cuando pgvector esta disponible, la busqueda se realiza mediante vectores en PostgreSQL; en caso contrario, se utiliza un mecanismo de similitud con embeddings almacenados.
 
-El chatbot utiliza el contexto recuperado para construir una respuesta mas contextualizada. Ademas, existe un mecanismo complementario basado en casos clinicos activos, lo que permite incorporar informacion del banco de casos al prompt educativo. La configuracion administrativa permite activar o desactivar RAG, seleccionar modelo de embeddings y revisar el estado de integraciones.
+Durante una consulta, el backend recupera contexto documental y casos clinicos relacionados, construye un prompt educativo y solicita la respuesta al modelo generativo. Esta decision reduce la dependencia de respuestas genericas y permite orientar la retroalimentacion hacia contenidos cargados en la plataforma. La configuracion administrativa permite controlar la activacion del RAG, el modelo de embeddings y el numero de documentos usados como contexto.
 
-El estado actual es funcional para texto cargado manualmente. Como trabajo futuro queda completar ingestion directa de PDF o URL, mejorar la citacion de fuentes y evaluar la calidad de recuperacion con un conjunto de preguntas de prueba.
+El estado actual es funcional para contenido textual cargado manualmente. Como limitaciones se identifican la ingestion automatica de PDF/URL, la calidad de citacion de fuentes y la necesidad de evaluar formalmente la recuperacion con preguntas de prueba. Estas mejoras pueden incorporarse en iteraciones posteriores.
 
 ### 4.3.11. Implementacion del Chatbot Educativo y Modulo SCT
 
-El chatbot educativo se implemento como una interfaz conversacional conectada a un endpoint FastAPI que consulta Ollama/LLaMA. Antes de responder, el sistema puede clasificar si la consulta pertenece al ambito medico y rechazar solicitudes fuera de alcance. Cuando RAG esta activo, recupera documentos o casos pertinentes y los incorpora al prompt. Cada intercambio se registra en base de datos como evidencia de uso, mientras que el hilo conversacional se conserva en el navegador.
+El chatbot educativo se implemento mediante una interfaz conversacional conectada a FastAPI y Ollama/LLaMA. El sistema procesa consultas de caracter medico-educativo, recupera contexto desde documentos RAG o casos clinicos cuando corresponde, genera una respuesta y registra el intercambio. El prompt limita el uso no diagnostico y busca mantener la respuesta dentro de un marco formativo.
 
-El modulo SCT permite generar pruebas de Script Concordance Test a partir de un tema, dificultad y cantidad de items. El backend solicita al modelo generativo una salida estructurada con vineta clinica, hipotesis, nueva informacion, respuesta esperada y explicacion. El estudiante responde usando una escala de -2 a +2 y la interfaz entrega puntaje y retroalimentacion por item.
+El modulo SCT permite generar pruebas Script Concordance Test a partir de un tema, dificultad y cantidad de items. Cada test contiene una vineta, hipotesis, nueva informacion, escala de respuesta y explicacion. El estudiante responde los items, recibe retroalimentacion y el sistema calcula un puntaje. Los tests pueden guardarse y listarse, y los intentos individuales quedan persistidos con respuestas, puntaje y timestamps.
 
-Los tests generados pueden guardarse, listarse, abrirse y eliminarse logicamente desde el sistema. La persistencia individual de intentos se implemento mediante el modelo `SCTAttempt` y tres nuevos endpoints protegidos por JWT. Al completar un test, el frontend envia las respuestas al backend, que calcula el puntaje y registra el intento vinculado al usuario y al test. Si el test fue generado en sesion sin haber sido guardado previamente, el frontend lo auto-guarda antes de enviar el intento, garantizando que el ID requerido exista en la base de datos. El historial de intentos es consultable por el propio estudiante y, con permisos de docente o administrador, tambien por otros usuarios. Como trabajo pendiente queda la vista institucional de intentos por cohorte y la rubrica de revision docente sobre respuestas individuales.
+Ambos modulos se encuentran implementados como herramientas educativas. Las principales limitaciones son la dependencia del modelo generativo local, la necesidad de control de calidad de los items SCT y la normalizacion futura de historiales conversacionales completos en base de datos. No se considera dentro del alcance actual una revision docente formal de respuestas SCT; se plantea como posible mejora futura orientada al control de calidad de contenidos y retroalimentaciones.
