@@ -3,19 +3,27 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional
 from ..db import get_db
-from ..models import Case
+from ..auth import get_current_user, require_roles
+from ..models import Case, User
 from ..schemas import CaseOut, CaseCreate
 
 router = APIRouter(prefix="/api", tags=["cases"])
 
 @router.get("/cases", response_model=list[CaseOut])
-def list_cases(db: Session = Depends(get_db)):
+def list_cases(
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
     cases = db.query(Case).filter(Case.is_active == True).all()
     return cases
 
 
 @router.post("/cases", response_model=CaseOut)
-def create_case(case_data: CaseCreate, db: Session = Depends(get_db)):
+def create_case(
+    case_data: CaseCreate,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(require_roles("docente", "administrador")),
+):
     """
     Crea un nuevo caso clínico
     """
@@ -35,7 +43,8 @@ def create_case(case_data: CaseCreate, db: Session = Depends(get_db)):
 def search_cases(
     q: Optional[str] = Query(None, description="Búsqueda por palabras clave"),
     limit: int = Query(5, description="Número máximo de resultados"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """
     Busca casos clínicos por palabras clave en título, descripción, 

@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..auth import get_optional_current_user
+from ..auth import get_current_user
 from ..db import get_db
 from ..models import Case, ChatLog, User
 from .admin import get_ai_config_map, parse_bool
@@ -297,7 +297,7 @@ def _config_int(config: dict[str, str], key: str, default: int) -> int:
 async def chat(
     req: ChatRequest,
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     user_text = req.text.strip()
     if not user_text:

@@ -1,11 +1,11 @@
-import { authFetch, authHeaders } from "./authClient";
+import { authFetch } from "./authClient";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
 
 export async function sendChatMessage(text) {
-  const res = await fetch(`${API_BASE}/api/chat`, {
+  const res = await authFetch("/api/chat", {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   });
 
@@ -139,7 +139,7 @@ export async function getDashboardRanking() {
 }
 
 export async function generateSCT(numItems = 5, difficulty = "pregrado", focus = "tuberculosis pulmonar") {
-  const res = await fetch(`${API_BASE}/api/sct/generate`, {
+  const res = await authFetch("/api/sct/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ 
@@ -167,7 +167,7 @@ export async function getExampleSCT() {
 }
 
 export async function saveSCTTest(name, difficulty, focus, numItems, items) {
-  const res = await fetch(`${API_BASE}/api/sct/save`, {
+  const res = await authFetch("/api/sct/save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -187,7 +187,7 @@ export async function saveSCTTest(name, difficulty, focus, numItems, items) {
 }
 
 export async function listSCTTests() {
-  const res = await fetch(`${API_BASE}/api/sct/list`);
+  const res = await authFetch("/api/sct/list");
   
   if (!res.ok) {
     throw new Error(`Error API SCT List: ${res.status}`);
@@ -197,7 +197,7 @@ export async function listSCTTests() {
 }
 
 export async function getSCTTest(testId) {
-  const res = await fetch(`${API_BASE}/api/sct/${testId}`);
+  const res = await authFetch(`/api/sct/${testId}`);
   
   if (!res.ok) {
     throw new Error(`Error API SCT Get: ${res.status}`);
@@ -207,7 +207,7 @@ export async function getSCTTest(testId) {
 }
 
 export async function deleteSCTTest(testId) {
-  const res = await fetch(`${API_BASE}/api/sct/${testId}`, {
+  const res = await authFetch(`/api/sct/${testId}`, {
     method: "DELETE",
   });
 
