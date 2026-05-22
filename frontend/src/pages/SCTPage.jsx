@@ -301,7 +301,7 @@ export function SCTPage() {
     let correct = 0;
     const results = currentTest.items.map((item) => {
       const ua = answers[item.id];
-      const ok = Math.abs(ua - (item.correctAnswer || 0)) <= 1;
+      const ok = ua === (item.correctAnswer || 0);
       if (ok) correct++;
       return { itemId: item.id, userAnswer: ua, correctAnswer: item.correctAnswer || 0, isCorrect: ok, ...item };
     });

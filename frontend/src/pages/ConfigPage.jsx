@@ -895,23 +895,6 @@ export function ConfigPage() {
     return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
   };
 
-  const handleRegenerateDzi = async () => {
-    try {
-      setLoadingImages(true);
-      const response = await authFetch("/api/medical-images/regenerate-dzi", { method: "POST" });
-      if (response.ok) {
-        showToast("Regeneración de DZI iniciada", "success");
-        await loadImageLibrary();
-      } else {
-        showToast("No se pudo iniciar la regeneración", "error");
-      }
-    } catch {
-      showToast("Error al regenerar DZI", "error");
-    } finally {
-      setLoadingImages(false);
-    }
-  };
-
   const formatRelativeTime = (dateStr) => {
     if (!dateStr) return "Sin actividad";
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -1040,9 +1023,6 @@ export function ConfigPage() {
                   </div>
                 </div>
                 <div className="cfg-inline-actions">
-                  <button className="cfg-view-btn" onClick={handleRegenerateDzi} disabled={loadingImages}>
-                    ↺ Regenerar DZI
-                  </button>
                   <button className="cfg-action-btn" onClick={() => setShowUploadModal(true)}>
                     ↑ Subir imagen
                   </button>

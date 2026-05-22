@@ -7,16 +7,43 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from ..schemas import (
     SCTGenerateRequest, SCTResponse, SCTItem, SCTSaveRequest, SCTTestOut, SCTTestDetail,
-    SCTAttemptCreate, SCTAttemptOut, SCTAttemptDetail,
+    SCTAnswerItem, SCTAttemptCreate, SCTAttemptOut, SCTAttemptDetail,
 )
 from ..models import SCTTest, SCTAttempt
 from ..db import get_db
-from ..auth import get_current_user
+from ..auth import get_current_user, require_roles
 from ..models import User
 
 router = APIRouter(prefix="/api/sct", tags=["SCT"])
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
+def is_sct_answer_correct(correct_answer: int, selected_answer: int) -> bool:
+    try:
+        return int(correct_answer) == int(selected_answer)
+    except (TypeError, ValueError):
+        return False
+
+
+def calculate_sct_attempt_score(items_json: list[dict], answers: list[SCTAnswerItem]) -> tuple[int, int, float]:
+    correct_map = {}
+    for item in items_json or []:
+        try:
+            correct_map[int(item["id"])] = int(item["correct_answer"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    correct_count = 0
+    for answer in answers:
+        item_id = int(answer.item_id)
+        if item_id in correct_map and is_sct_answer_correct(
+            correct_map[item_id],
+            answer.selected_answer,
+        ):
+            correct_count += 1
+
+    total = len(items_json or [])
+    score = round(correct_count / total, 4) if total > 0 else 0.0
+    return correct_count, total, score
 
 # Plantilla de prompt genérica para generar ítems SCT sobre cualquier tema médico
 SCT_SYSTEM_PROMPT = """Eres un experto en educación médica con amplio conocimiento en todas las especialidades clínicas.
@@ -117,7 +144,10 @@ Si dificultad = "residente":
 Genera ahora {num_items} ítems SCT EXCLUSIVAMENTE sobre {focus} con nivel de dificultad {difficulty}."""
 
 @router.post("/generate", response_model=SCTResponse)
-async def generate_sct_items(request: SCTGenerateRequest):
+async def generate_sct_items(
+    request: SCTGenerateRequest,
+    _current_user: User = Depends(get_current_user),
+):
     """
     Genera ítems de Script Concordance Test sobre tuberculosis usando LLaMA 3.
     
@@ -246,7 +276,11 @@ async def get_example_sct():
     )
 
 @router.post("/save", response_model=SCTTestOut)
-async def save_sct_test(request: SCTSaveRequest, db: Session = Depends(get_db)):
+async def save_sct_test(
+    request: SCTSaveRequest,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
     """
     Guarda un test SCT generado en la base de datos.
     
@@ -291,7 +325,10 @@ async def save_sct_test(request: SCTSaveRequest, db: Session = Depends(get_db)):
         )
 
 @router.get("/list", response_model=List[SCTTestOut])
-async def list_sct_tests(db: Session = Depends(get_db)):
+async def list_sct_tests(
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
     """
     Lista todos los tests SCT guardados.
     """
@@ -316,7 +353,11 @@ async def list_sct_tests(db: Session = Depends(get_db)):
         )
 
 @router.delete("/{test_id}")
-async def delete_sct_test(test_id: int, db: Session = Depends(get_db)):
+async def delete_sct_test(
+    test_id: int,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(require_roles("docente", "administrador")),
+):
     """
     Elimina (soft-delete) un test SCT por ID.
     """
@@ -397,12 +438,7 @@ async def submit_sct_attempt(
     if not test:
         raise HTTPException(status_code=404, detail="Test SCT no encontrado")
 
-    correct_map = {item["id"]: item["correct_answer"] for item in test.items_json}
-    correct_count = sum(
-        1 for a in request.answers if correct_map.get(a.item_id) == a.selected_answer
-    )
-    total = len(test.items_json)
-    score = round(correct_count / total, 4) if total > 0 else 0.0
+    correct_count, total, score = calculate_sct_attempt_score(test.items_json, request.answers)
 
     started_at = None
     if request.started_at:
@@ -441,7 +477,11 @@ async def submit_sct_attempt(
 
 
 @router.get("/{test_id}", response_model=SCTTestDetail)
-async def get_sct_test(test_id: int, db: Session = Depends(get_db)):
+async def get_sct_test(
+    test_id: int,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
+):
     """
     Obtiene un test SCT específico por ID.
     """
