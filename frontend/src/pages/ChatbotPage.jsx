@@ -7,6 +7,7 @@ import { clearAuthSession, userStorageKey } from "../authClient";
 
 const STORAGE_KEY = "asofamech_chat_history";
 const NEW_CHAT_FLAG = "asofamech_new_chat_requested";
+const RAG_SOURCE_MIN_DISPLAY_SCORE = 0.45;
 const BOT_WELCOME =
   "¡Hola! Soy tu asistente educativo médico. Puedo ayudarte con preguntas sobre enfermedades, síntomas, diagnósticos, tratamientos, prevención, exámenes, medicamentos y casos de estudio. Solo respondo temas del ámbito médico y de salud. ¿En qué puedo ayudarte hoy?";
 
@@ -30,6 +31,27 @@ function getMsgType(messageType) {
   if (messageType === "out_of_scope") return "warning";
   if (messageType === "ambiguous") return "info";
   return "answer";
+}
+
+function getRagSourceTags(source) {
+  const tags = source?.tags;
+  if (Array.isArray(tags)) return tags.filter(Boolean);
+  if (typeof tags === "string") {
+    return tags
+      .split(/[,;|]/)
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function isRelevantRagSource(source) {
+  if (source?.score == null) return true;
+  return Number(source.score) >= RAG_SOURCE_MIN_DISPLAY_SCORE;
+}
+
+function getRelevantRagSources(sources) {
+  return Array.isArray(sources) ? sources.filter(isRelevantRagSource) : [];
 }
 
 function getTimestamp() {
@@ -197,9 +219,9 @@ export function ChatbotPage() {
   const activeRagSources = useMemo(() => {
     if (!current) return [];
     const botMsgs = current.messages.filter(
-      (m) => m.sender === "bot" && Array.isArray(m.ragSources) && m.ragSources.length > 0
+      (m) => m.sender === "bot" && getRelevantRagSources(m.ragSources).length > 0
     );
-    return botMsgs.length > 0 ? botMsgs[botMsgs.length - 1].ragSources : [];
+    return botMsgs.length > 0 ? getRelevantRagSources(botMsgs[botMsgs.length - 1].ragSources) : [];
   }, [current]);
 
   // Topic counts across all conversations
@@ -645,11 +667,10 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                               />
                               <div className="mc-bubble-time">{msg.time}</div>
                               {msg.sender === "bot" &&
-                                Array.isArray(msg.ragSources) &&
-                                msg.ragSources.length > 0 && (
+                                getRelevantRagSources(msg.ragSources).length > 0 && (
                                   <div className="mc-cited-sources">
-                                    <div className="mc-cited-label">FUENTES CITADAS</div>
-                                    {msg.ragSources.map((src, si) => (
+                                    <div className="mc-cited-label">FUENTES CITADAS DESDE RAG</div>
+                                    {getRelevantRagSources(msg.ragSources).map((src, si) => (
                                       <div key={si} className="mc-cited-item">
                                         <span className="mc-cited-title">
                                           {src.title || src}
@@ -729,6 +750,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                 ) : (
                   <div className="mc-rag-sources">
                     {activeRagSources.slice(0, 5).map((src, i) => {
+                      const tags = getRagSourceTags(src);
                       const pct =
                         src.score != null
                           ? Math.round(src.score * 100)
@@ -743,9 +765,9 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                             </div>
                             <div className={`mc-rag-card-pct ${tier}`}>{pct}%</div>
                           </div>
-                          {(src.tags?.length > 0 || src.chunk_index != null) && (
+                          {(tags.length > 0 || src.chunk_index != null) && (
                             <div className="mc-rag-card-ref">
-                              {src.tags?.slice(0, 2).join(" · ")}
+                              {tags.slice(0, 2).join(" · ")}
                               {src.chunk_index != null &&
                                 ` · sec. ${src.chunk_index + 1}`}
                             </div>

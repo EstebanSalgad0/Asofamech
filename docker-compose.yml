@@ -42,6 +42,8 @@ services:
       - HISTO_PRIVILEGED_HEATMAP_JOBS_PER_WINDOW=${HISTO_PRIVILEGED_HEATMAP_JOBS_PER_WINDOW:-20}
       - HISTO_HEATMAP_RATE_LIMIT_WINDOW_SECONDS=${HISTO_HEATMAP_RATE_LIMIT_WINDOW_SECONDS:-60}
       - HISTO_HF_TOKEN=${HISTO_HF_TOKEN:-}
+      - RAG_MIN_NEURAL_SCORE=${RAG_MIN_NEURAL_SCORE:-0.45}
+      - RAG_MIN_LOCAL_SCORE=${RAG_MIN_LOCAL_SCORE:-0.12}
       - HF_HOME=/root/.cache/huggingface
       - ASOFAMECH_JWT_SECRET=${ASOFAMECH_JWT_SECRET:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}
@@ -74,6 +76,17 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: ${FRONTEND_API_BASE:-http://localhost:8001}
+    container_name: asofamech_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
 
   ollama:
     image: ollama/ollama:latest

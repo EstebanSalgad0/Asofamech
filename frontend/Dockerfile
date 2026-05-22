@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
@@ -6,9 +6,15 @@ COPY package.json package-lock.json* ./
 RUN npm install
 
 COPY . .
+ARG VITE_API_BASE=http://localhost:8001
+ENV VITE_API_BASE=${VITE_API_BASE}
+RUN npm run build
 
-# Vite por defecto escucha en 5173, pero en nuestro vite.config.js
-# lo fijamos al 3000.
-EXPOSE 3000
+FROM nginx:1.27-alpine
 
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
