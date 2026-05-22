@@ -56,7 +56,9 @@ backend/uploads/
 
 # Histopathology AI artifacts and datasets
 backend/artifacts/
-backend/data/
+backend/data/*
+!backend/data/rag/
+!backend/data/rag/**
 backend/sample_pcam_patches/
 backend/sample_sln_breast/
 backend/sample_wsi/

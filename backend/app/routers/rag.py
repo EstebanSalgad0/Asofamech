@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -23,6 +25,8 @@ from .admin import get_ai_config_map, parse_bool
 
 
 router = APIRouter(prefix="/api/rag", tags=["rag"])
+DEFAULT_NEURAL_MIN_SCORE = 0.45
+DEFAULT_LOCAL_MIN_SCORE = 0.12
 
 
 class DocumentIn(BaseModel):
@@ -114,6 +118,20 @@ def ensure_vector_index(db: Session) -> None:
     db.commit()
 
 
+def _relevance_threshold(provider: str | None) -> float:
+    is_neural = (provider or "").startswith("sentence-transformers:")
+    env_key = "RAG_MIN_NEURAL_SCORE" if is_neural else "RAG_MIN_LOCAL_SCORE"
+    default = DEFAULT_NEURAL_MIN_SCORE if is_neural else DEFAULT_LOCAL_MIN_SCORE
+    try:
+        return float(os.getenv(env_key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _is_relevant_score(score: float, provider: str | None) -> bool:
+    return score >= _relevance_threshold(provider)
+
+
 def retrieve_rag_hits(db: Session, query: str, limit: int = 4) -> list[RagHit]:
     ensure_vector_index(db)
     config = get_ai_config_map(db)
@@ -132,6 +150,10 @@ def retrieve_rag_hits(db: Session, query: str, limit: int = 4) -> list[RagHit]:
             hits: list[RagHit] = []
             seen_documents: set[int] = set()
             for row in vector_rows:
+                provider = row.get("provider") or embedding.provider
+                score = round(float(row["score"] or 0.0), 6)
+                if not _is_relevant_score(score, provider):
+                    continue
                 document_id = int(row["document_id"])
                 if document_id in seen_documents:
                     continue
@@ -141,11 +163,11 @@ def retrieve_rag_hits(db: Session, query: str, limit: int = 4) -> list[RagHit]:
                         id=document_id,
                         title=row["title"],
                         tags=row["tags"] or "",
-                        score=round(float(row["score"] or 0.0), 6),
+                        score=score,
                         snippet=make_snippet(row["chunk_content"], query),
                         chunk_id=int(row["chunk_id"]),
                         chunk_index=int(row["chunk_index"]),
-                        provider=row.get("provider") or embedding.provider,
+                        provider=provider,
                     )
                 )
                 if len(hits) >= max(1, min(limit, 8)):
@@ -163,7 +185,10 @@ def retrieve_rag_hits(db: Session, query: str, limit: int = 4) -> list[RagHit]:
             chunk.content,
             chunk.document.tags or "",
         ) * 0.03
-        chunk_hits.append((chunk, vector_score + lexical_boost))
+        combined_score = vector_score + lexical_boost
+        if not _is_relevant_score(combined_score, embedding.provider):
+            continue
+        chunk_hits.append((chunk, combined_score))
 
     chunk_hits.sort(key=lambda item: item[1], reverse=True)
 
