@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional
 from ..db import get_db
-from ..auth import get_current_user, require_roles
+from ..auth import PERM_MANAGE_CASES, get_current_user, require_permission
 from ..models import Case, User
 from ..schemas import CaseOut, CaseCreate
 
@@ -22,7 +22,7 @@ def list_cases(
 def create_case(
     case_data: CaseCreate,
     db: Session = Depends(get_db),
-    _current_user: User = Depends(require_roles("docente", "administrador")),
+    _current_user: User = Depends(require_permission(PERM_MANAGE_CASES)),
 ):
     """
     Crea un nuevo caso clínico
@@ -42,7 +42,7 @@ def create_case(
 @router.get("/cases/search", response_model=list[CaseOut])
 def search_cases(
     q: Optional[str] = Query(None, description="Búsqueda por palabras clave"),
-    limit: int = Query(5, description="Número máximo de resultados"),
+    limit: int = Query(5, ge=1, le=50, description="Número máximo de resultados"),
     db: Session = Depends(get_db),
     _current_user: User = Depends(get_current_user),
 ):

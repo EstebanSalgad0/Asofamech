@@ -8,7 +8,11 @@ import shutil
 import traceback
 from datetime import datetime
 from io import BytesIO
-from ..auth import get_current_user as jwt_get_current_user
+from ..auth import (
+    PERM_MANAGE_IMAGES,
+    get_current_user as jwt_get_current_user,
+    require_permission,
+)
 from ..db import get_db
 from ..models import MedicalImage, User
 
@@ -24,6 +28,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(DZI_DIR, exist_ok=True)
 
 WSI_EXTENSIONS = {".svs", ".tif", ".tiff"}
+ALLOWED_TILE_FORMATS = {"jpeg", "jpg", "png"}
+MAX_IMAGE_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
 
 def _image_payload(image: MedicalImage) -> dict:
@@ -40,23 +46,6 @@ def _image_payload(image: MedicalImage) -> dict:
         "uploader_name": image.uploader.name if image.uploader else "Desconocido",
     }
 
-def _legacy_get_current_user(db: Session = Depends(get_db)) -> User:
-    """Mock function - reemplazar con tu sistema de autenticación real"""
-    # Por ahora retorna un usuario de prueba
-    user = db.query(User).filter(User.email == "admin@asofamech.com").first()
-    if not user:
-        # Crear usuario admin de prueba si no existe
-        user = User(
-            email="admin@asofamech.com",
-            name="Administrador",
-            password_hash="hashed_password",
-            role="administrador"
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    return user
-
 get_current_user = jwt_get_current_user
 
 @router.post("/upload")
@@ -66,19 +55,12 @@ async def upload_medical_image(
     description: Optional[str] = Form(None),
     pathology_type: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
 ):
     """
     Subir una imagen médica (SVS, JPG, PNG, etc.)
     Solo usuarios con rol docente o administrador pueden subir
     """
-    # Verificar permisos
-    if current_user.role not in ["docente", "administrador"]:
-        raise HTTPException(
-            status_code=403, 
-            detail="No tienes permisos para subir imágenes. Solo docentes y administradores."
-        )
-    
     # Obtener extensión del archivo
     file_extension = os.path.splitext(file.filename)[1].lower()
     allowed_extensions = [".svs", ".jpg", ".jpeg", ".png", ".tiff", ".tif"]
@@ -97,9 +79,15 @@ async def upload_medical_image(
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
-        # Obtener tamaño del archivo
+
+        # Validar tamaño después de guardar
         file_size = os.path.getsize(file_path)
+        if file_size > MAX_IMAGE_UPLOAD_BYTES:
+            os.remove(file_path)
+            raise HTTPException(
+                status_code=413,
+                detail=f"El archivo supera el límite permitido de {MAX_IMAGE_UPLOAD_BYTES // (1024 * 1024)} MB",
+            )
         
         # Crear registro en la base de datos
         medical_image = MedicalImage(
@@ -163,25 +151,21 @@ async def upload_medical_image(
         if os.path.exists(file_path):
             os.remove(file_path)
         raise
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
-        # Limpiar archivo si hubo error
         if os.path.exists(file_path):
             os.remove(file_path)
-        raise HTTPException(status_code=500, detail=f"Error al subir imagen: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error interno al procesar la imagen subida")
 
 
 @router.get("/local/camelyon17")
 async def list_local_camelyon17_images(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
 ):
     """
     Listar laminas CAMELYON17 ya descargadas en el servidor.
     """
-    if current_user.role not in ["docente", "administrador"]:
-        raise HTTPException(status_code=403, detail="Solo docentes y administradores pueden listar laminas locales")
-
     base_dir = os.path.abspath(CAMELYON17_IMAGES_DIR)
     if not os.path.isdir(base_dir):
         return []
@@ -214,17 +198,11 @@ async def import_local_camelyon17_image(
     description: Optional[str] = Form(None),
     pathology_type: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
 ):
     """
     Registrar una lamina CAMELYON17 local sin subirla por HTTP.
     """
-    if current_user.role not in ["docente", "administrador"]:
-        raise HTTPException(
-            status_code=403,
-            detail="No tienes permisos para importar imagenes. Solo docentes y administradores."
-        )
-
     safe_name = os.path.basename(filename)
     if safe_name != filename:
         raise HTTPException(status_code=400, detail="Nombre de archivo invalido")
@@ -269,7 +247,7 @@ async def import_local_camelyon17_image(
         db.commit()
         raise HTTPException(
             status_code=422,
-            detail=f"No se pudo preparar el visor DZI para la lamina local: {exc}",
+            detail="No se pudo preparar el visor DZI para la lámina local.",
         ) from exc
 
     return {
@@ -294,7 +272,8 @@ async def list_medical_images(
 @router.get("/view/{image_id}")
 async def view_image(
     image_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """
     Ver/servir una imagen médica optimizada para el navegador
@@ -344,7 +323,7 @@ async def view_image(
             print(f"Error procesando SVS: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Error procesando archivo SVS: {str(e)}. Intenta subir la imagen en formato JPG o PNG."
+                detail="Error al procesar el archivo SVS. Intenta subir la imagen en formato JPG o PNG.",
             )
     else:
         # Para otros formatos, servir directamente
@@ -357,7 +336,8 @@ async def view_image(
 @router.get("/download/{image_id}")
 async def download_image(
     image_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """
     Descargar/servir una imagen médica
@@ -383,15 +363,12 @@ async def download_image(
 async def delete_medical_image(
     image_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
 ):
     """
     Eliminar una imagen médica
     Solo docentes y administradores
     """
-    if current_user.role not in ["docente", "administrador"]:
-        raise HTTPException(status_code=403, detail="No tienes permisos para eliminar imágenes")
-    
     image = db.query(MedicalImage).filter(MedicalImage.id == image_id).first()
     
     if not image:
@@ -421,7 +398,8 @@ async def delete_medical_image(
 @router.get("/dzi/{image_id}.dzi")
 async def get_dzi_manifest(
     image_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """
     Servir el manifiesto DZI de una imagen (para OpenSeadragon)
@@ -455,11 +433,15 @@ async def get_dzi_tile(
     col: int,
     row: int,
     fmt: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(get_current_user),
 ):
     """
     Servir un tile DZI de una imagen (para OpenSeadragon)
     """
+    if fmt not in ALLOWED_TILE_FORMATS:
+        raise HTTPException(status_code=400, detail="Formato de tile no permitido")
+
     image = db.query(MedicalImage).filter(
         MedicalImage.id == image_id,
         MedicalImage.is_active == True
@@ -475,7 +457,7 @@ async def get_dzi_tile(
         return get_dynamic_wsi_tile(image, level, col, row)
 
     if not os.path.exists(tile_path):
-        raise HTTPException(status_code=404, detail=f"Tile no encontrado: {tile_path}")
+        raise HTTPException(status_code=404, detail="Tile no encontrado")
 
     media_type = "image/jpeg" if fmt in ("jpg", "jpeg") else f"image/{fmt}"
     return FileResponse(tile_path, media_type=media_type)
@@ -588,7 +570,7 @@ def get_dynamic_wsi_tile(image: MedicalImage, level: int, col: int, row: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generando tile WSI: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al generar el tile WSI")
 
 
 def process_svs_to_dzi(medical_image: MedicalImage, db: Session):

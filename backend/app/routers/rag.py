@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from ..auth import require_roles
+from ..auth import PERM_MANAGE_RAG, require_permission, require_roles
 from ..db import get_db
 from ..embedding_service import embed_text_for_rag
 from ..models import Document, DocumentChunk, User
@@ -315,7 +315,7 @@ def build_rag_context(hits: list[RagHit]) -> str:
 
 @router.get("/documents", response_model=list[DocumentOut])
 def list_documents(
-    current_user: User = Depends(require_roles("docente", "administrador")),
+    current_user: User = Depends(require_permission(PERM_MANAGE_RAG)),
     db: Session = Depends(get_db),
 ):
     return [
@@ -327,7 +327,7 @@ def list_documents(
 @router.post("/documents", response_model=DocumentOut)
 def create_document(
     payload: DocumentIn,
-    current_user: User = Depends(require_roles("docente", "administrador")),
+    current_user: User = Depends(require_permission(PERM_MANAGE_RAG)),
     db: Session = Depends(get_db),
 ):
     config = get_ai_config_map(db)
@@ -361,7 +361,7 @@ async def upload_document(
     chunk_size: int | None = Form(default=None),
     chunk_overlap: int | None = Form(default=None),
     file: UploadFile = File(...),
-    current_user: User = Depends(require_roles("docente", "administrador")),
+    current_user: User = Depends(require_permission(PERM_MANAGE_RAG)),
     db: Session = Depends(get_db),
 ):
     content, detected_type = await extract_text_from_upload(file)
@@ -398,7 +398,7 @@ async def upload_document(
 def update_document(
     document_id: int,
     payload: DocumentIn,
-    current_user: User = Depends(require_roles("docente", "administrador")),
+    current_user: User = Depends(require_permission(PERM_MANAGE_RAG)),
     db: Session = Depends(get_db),
 ):
     document = db.query(Document).filter(Document.id == document_id).first()
@@ -422,7 +422,7 @@ def update_document(
 @router.delete("/documents/{document_id}")
 def delete_document(
     document_id: int,
-    current_user: User = Depends(require_roles("docente", "administrador")),
+    current_user: User = Depends(require_permission(PERM_MANAGE_RAG)),
     db: Session = Depends(get_db),
 ):
     document = db.query(Document).filter(Document.id == document_id).first()
@@ -437,7 +437,7 @@ def delete_document(
 @router.post("/documents/{document_id}/reindex", response_model=DocumentOut)
 def reindex_document(
     document_id: int,
-    current_user: User = Depends(require_roles("docente", "administrador")),
+    current_user: User = Depends(require_permission(PERM_MANAGE_RAG)),
     db: Session = Depends(get_db),
 ):
     document = db.query(Document).filter(Document.id == document_id).first()
@@ -451,7 +451,7 @@ def reindex_document(
 
 @router.post("/reindex")
 def reindex_all_documents(
-    current_user: User = Depends(require_roles("docente", "administrador")),
+    current_user: User = Depends(require_permission(PERM_MANAGE_RAG)),
     db: Session = Depends(get_db),
 ):
     total = 0
