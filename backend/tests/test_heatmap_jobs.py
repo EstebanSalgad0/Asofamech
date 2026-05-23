@@ -46,6 +46,13 @@ class HeatmapJobsTestCase(unittest.TestCase):
         self.assertEqual(job["total_tiles"], 0)
         self.assertIsNone(job["result"])
         self.assertIsNone(job["error"])
+        self.assertIsNone(job["user_id"])
+
+    def test_create_job_stores_user_id_when_present(self):
+        payload = self._payload()
+        payload["user_id"] = 7
+        job = heatmap_jobs.create_heatmap_job(payload)
+        self.assertEqual(job["user_id"], 7)
 
     def test_create_job_assigns_unique_job_id(self):
         job_a = heatmap_jobs.create_heatmap_job(self._payload(trace_id="a"))

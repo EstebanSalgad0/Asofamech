@@ -9,7 +9,7 @@ import {
 } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
 import { clearAuthSession } from "../authClient";
-import { getDashboardStats, getDashboardRanking } from "../api";
+import { getDashboardStats, getDashboardRanking, getMyHistory } from "../api";
 
 const NEW_CHAT_FLAG = "asofamech_new_chat_requested";
 
@@ -52,6 +52,80 @@ function activitySubtitle(item) {
 function activityTitle(item) {
   if (!item?.title) return "Actividad";
   return item.title.split(" - ")[0];
+}
+
+function formatHistoryDate(value) {
+  if (!value) return "fecha no registrada";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "fecha no registrada";
+  return new Intl.DateTimeFormat("es-CL", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatSctScore(item) {
+  if (!item || item.total_items === 0) return "sin puntaje";
+  return `${item.correct_count}/${item.total_items} correctas`;
+}
+
+function makeHistoryGroups(historyData) {
+  const analyses = historyData?.analyses || [];
+  const sctAttempts = historyData?.sct_attempts || [];
+  const conversations = historyData?.conversations || [];
+  const heatmaps = historyData?.heatmaps || [];
+  return [
+    {
+      id: "analyses",
+      title: "Analisis ROI",
+      route: "/dashboard/images",
+      accent: "histo",
+      empty: "Sin analisis registrados",
+      items: analyses.slice(0, 3).map((item) => ({
+        id: `analysis-${item.id}`,
+        title: item.image_title || "Lamina histopatologica",
+        meta: `${item.clase || item.status || "registrado"} - ${formatHistoryDate(item.analyzed_at)}`,
+      })),
+    },
+    {
+      id: "sct",
+      title: "Intentos SCT",
+      route: "/dashboard/sct",
+      accent: "sct",
+      empty: "Sin intentos SCT",
+      items: sctAttempts.slice(0, 3).map((item) => ({
+        id: `sct-${item.id}`,
+        title: item.test_name || item.test_focus || "Test SCT",
+        meta: `${formatSctScore(item)} - ${formatHistoryDate(item.completed_at)}`,
+      })),
+    },
+    {
+      id: "chat",
+      title: "Conversaciones",
+      route: "/dashboard/chat",
+      accent: "chat",
+      empty: "Sin conversaciones guardadas",
+      items: conversations.slice(0, 3).map((item) => ({
+        id: `chat-${item.id}`,
+        title: item.question || "Consulta educativa",
+        meta: `${item.used_rag ? "con fuentes RAG" : "respuesta general"} - ${formatHistoryDate(item.created_at)}`,
+      })),
+    },
+    {
+      id: "heatmaps",
+      title: "Heatmaps",
+      route: "/dashboard/images",
+      accent: "histo",
+      empty: "Sin heatmaps registrados",
+      items: heatmaps.slice(0, 3).map((item) => ({
+        id: `heatmap-${item.trace_id || item.job_id}`,
+        title: item.roi_label || item.educational_label || item.status || "Heatmap",
+        meta: `${item.tile_count || item.total_tiles || 0} tiles - ${formatHistoryDate(item.analyzed_at || item.created_at)}`,
+      })),
+    },
+  ];
 }
 
 function ActivityGlyph({ type }) {
@@ -116,6 +190,7 @@ export function DashboardPage() {
   const [activityFilter, setActivityFilter] = useState("all");
   const [dashStats, setDashStats] = useState(null);
   const [rankingData, setRankingData] = useState(null);
+  const [historyData, setHistoryData] = useState(null);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -135,6 +210,7 @@ export function DashboardPage() {
 
     getDashboardStats().then(setDashStats).catch(() => {});
     getDashboardRanking().then(setRankingData).catch(() => {});
+    getMyHistory(10).then(setHistoryData).catch(() => {});
 
     const handleUnload = () => flushSession();
     window.addEventListener("beforeunload", handleUnload);
@@ -251,6 +327,7 @@ export function DashboardPage() {
   const ranking = rankingData?.ranking ?? [];
   const yourPosition = rankingData?.your_position;
   const percentile   = rankingData?.percentile;
+  const historyGroups = makeHistoryGroups(historyData);
 
   return (
     <>
@@ -323,6 +400,40 @@ export function DashboardPage() {
         </section>
 
         {/* ── Lower grid ────────────────────────────────── */}
+        <section className="home-v3-section home-v3-history-section">
+          <div className="home-v3-section-head">
+            <div>
+              <div className="home-v3-kicker">/ 02 - Historial</div>
+              <h2>Tu trazabilidad reciente</h2>
+            </div>
+            <span>Registros asociados a tu cuenta.</span>
+          </div>
+          <div className="home-v3-history-grid">
+            {historyGroups.map((group) => (
+              <div key={group.id} className="home-v3-history-card">
+                <div className="home-v3-history-card-head">
+                  <span className={`home-v3-activity-icon type-${group.accent}`}>
+                    <ActivityGlyph type={group.accent} />
+                  </span>
+                  <strong>{group.title}</strong>
+                </div>
+                <div className="home-v3-history-list">
+                  {group.items.length === 0 ? (
+                    <div className="home-v3-history-empty">{group.empty}</div>
+                  ) : (
+                    group.items.map((item) => (
+                      <button key={item.id} type="button" onClick={() => navigate(group.route)}>
+                        <span>{item.title}</span>
+                        <small>{item.meta}</small>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="home-v3-lower-grid">
           <div className="home-v3-activity-card">
             <div className="home-v3-card-head">

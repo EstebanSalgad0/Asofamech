@@ -56,6 +56,7 @@ def _job_to_dict(job) -> Dict[str, Any]:
     return {
         "job_id": job.job_id,
         "trace_id": job.trace_id,
+        "user_id": job.user_id,
         "status": job.status,
         "progress": job.progress,
         "processed_tiles": job.processed_tiles,
@@ -87,6 +88,7 @@ def create_heatmap_job(payload: Dict[str, Any]) -> Dict[str, Any]:
         job = HeatmapJob(
             job_id=job_id,
             trace_id=payload["trace_id"],
+            user_id=payload.get("user_id"),
             status="queued",
             progress=0.0,
             processed_tiles=0,

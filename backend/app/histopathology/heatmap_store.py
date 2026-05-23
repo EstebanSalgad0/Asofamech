@@ -68,6 +68,7 @@ def _history_item(result: Dict[str, Any], artifacts: Dict[str, str]) -> Dict[str
     summary = result.get("summary") or {}
     return {
         "trace_id": result.get("trace_id"),
+        "user_id": result.get("user_id"),
         "image_id": result.get("image_id"),
         "analyzed_at": result.get("analyzed_at"),
         "roi": result.get("roi"),
@@ -87,6 +88,13 @@ def _history_item(result: Dict[str, Any], artifacts: Dict[str, str]) -> Dict[str
         },
         "educational": normalize_heatmap_educational(result.get("educational")),
         "artifacts": artifacts,
+    }
+
+
+def _normalize_history_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        **item,
+        "educational": normalize_heatmap_educational(item.get("educational")),
     }
 
 
@@ -163,13 +171,32 @@ def load_heatmap_history_for_image(image_id: int, limit: int = 20) -> List[Dict[
     if not isinstance(history, list):
         return []
     safe_limit = max(1, min(int(limit), 100))
-    return [
-        {
-            **item,
-            "educational": normalize_heatmap_educational(item.get("educational")),
-        }
-        for item in history[:safe_limit]
-    ]
+    return [_normalize_history_item(item) for item in history[:safe_limit]]
+
+
+def load_heatmap_history_for_user(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+    safe_limit = max(1, min(int(limit), 100))
+    root = get_heatmap_dir() / "images"
+    if not root.exists():
+        return []
+
+    user_key = str(user_id)
+    items: List[Dict[str, Any]] = []
+    for history_path in root.glob("*/history.json"):
+        try:
+            history = _load_history_unlocked(history_path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        for item in history:
+            item_user_id = item.get("user_id")
+            if item_user_id is None and item.get("trace_id"):
+                trace = load_heatmap_by_trace(str(item["trace_id"]))
+                item_user_id = trace.get("user_id") if trace else None
+            if item_user_id is not None and str(item_user_id) == user_key:
+                items.append(_normalize_history_item(item))
+
+    items.sort(key=lambda item: str(item.get("analyzed_at") or ""), reverse=True)
+    return items[:safe_limit]
 
 
 def update_heatmap_educational_metadata(
