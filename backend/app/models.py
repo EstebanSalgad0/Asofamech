@@ -51,7 +51,16 @@ class Document(Base):
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)       # texto que luego se puede usar para RAG
     tags = Column(String(200), nullable=True)
+    source = Column(String(500), nullable=True)
+    document_type = Column(String(50), nullable=False, default="text")
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    indexing_status = Column(String(30), nullable=False, default="pending")  # pending, indexed, failed
+    indexing_error = Column(Text, nullable=True)
+    chunk_size = Column(Integer, nullable=False, default=180)
+    chunk_overlap = Column(Integer, nullable=False, default=40)
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+    creator = relationship("User")
 
 
 class DocumentChunk(Base):
@@ -61,6 +70,7 @@ class DocumentChunk(Base):
     chunk_index = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
     embedding = Column(JSON, nullable=False)
+    embedding_provider = Column(String(160), nullable=False, default="local-hashing")
     token_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 

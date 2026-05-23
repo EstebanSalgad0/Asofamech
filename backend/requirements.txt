@@ -7,4 +7,5 @@ python-dotenv
 python-multipart
 openslide-python
 Pillow
+pypdf
 pytest

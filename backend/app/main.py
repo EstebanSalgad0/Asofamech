@@ -77,6 +77,31 @@ def apply_compatibility_migrations() -> None:
         conn.execute(text("UPDATE users SET is_active = true WHERE is_active IS NULL"))
         conn.execute(text("UPDATE users SET approved_at = COALESCE(approved_at, created_at) WHERE account_status = 'approved'"))
 
+        table_names = set(inspector.get_table_names())
+        if "documents" in table_names:
+            document_columns = {column["name"] for column in inspector.get_columns("documents")}
+            if "source" not in document_columns:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN source VARCHAR(500) NULL"))
+            if "document_type" not in document_columns:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN document_type VARCHAR(50) DEFAULT 'text' NOT NULL"))
+            if "uploaded_at" not in document_columns:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL"))
+            if "created_by" not in document_columns:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN created_by INTEGER NULL"))
+            if "indexing_status" not in document_columns:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN indexing_status VARCHAR(30) DEFAULT 'indexed' NOT NULL"))
+            if "indexing_error" not in document_columns:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN indexing_error TEXT NULL"))
+            if "chunk_size" not in document_columns:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN chunk_size INTEGER DEFAULT 180 NOT NULL"))
+            if "chunk_overlap" not in document_columns:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN chunk_overlap INTEGER DEFAULT 40 NOT NULL"))
+
+        if "document_chunks" in table_names:
+            chunk_columns = {column["name"] for column in inspector.get_columns("document_chunks")}
+            if "embedding_provider" not in chunk_columns:
+                conn.execute(text("ALTER TABLE document_chunks ADD COLUMN embedding_provider VARCHAR(160) DEFAULT 'local-hashing' NOT NULL"))
+
 
 @app.on_event("startup")
 def on_startup():

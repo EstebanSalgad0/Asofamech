@@ -11,7 +11,8 @@ from ..auth_security import display_role, hash_password, normalize_email, normal
 from ..auth import require_admin
 from ..db import get_db
 from ..email_service import send_template_email
-from ..models import AIConfiguration, Document, EmailTemplate, User
+from ..models import AIConfiguration, Document, DocumentChunk, EmailTemplate, User
+from ..rag_utils import EMBEDDING_DIMENSIONS
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -70,6 +71,16 @@ DEFAULT_AI_CONFIG = {
         "value": os.getenv("RAG_PGVECTOR_ENABLED", "true"),
         "value_type": "boolean",
         "description": "Usa pgvector como indice de busqueda vectorial si PostgreSQL lo soporta.",
+    },
+    "rag_chunk_max_tokens": {
+        "value": os.getenv("RAG_CHUNK_MAX_TOKENS", "180"),
+        "value_type": "integer",
+        "description": "Tamano maximo de cada fragmento documental RAG.",
+    },
+    "rag_chunk_overlap_tokens": {
+        "value": os.getenv("RAG_CHUNK_OVERLAP_TOKENS", "40"),
+        "value_type": "integer",
+        "description": "Solapamiento entre fragmentos documentales RAG.",
     },
 }
 
@@ -495,6 +506,7 @@ async def integrations_status(
     from ..pgvector_store import pgvector_available
 
     documents_count = db.query(Document).count()
+    chunks_count = db.query(DocumentChunk).count()
     embedding_status = embedding_status_for_rag(
         model_name=config.get("embedding_model"),
         neural_enabled=parse_bool(config.get("neural_embeddings_enabled"), True),
@@ -516,10 +528,14 @@ async def integrations_status(
         "rag": {
             "enabled": parse_bool(config.get("rag_enabled"), True),
             "documents_count": documents_count,
+            "chunks_count": chunks_count,
             "retriever": "pgvector_cosine" if pgvector_ok and parse_bool(config.get("pgvector_enabled"), True) else "json_cosine",
             "pgvector_available": pgvector_ok,
             "embedding_provider": embedding_status.provider,
             "neural_embeddings": embedding_status.neural,
+            "vector_backend": "pgvector" if pgvector_ok and parse_bool(config.get("pgvector_enabled"), True) else "json",
+            "metric": "cosine",
+            "dimensions": EMBEDDING_DIMENSIONS,
         },
         "email": {
             "smtp_configured": _is_smtp_configured(db),

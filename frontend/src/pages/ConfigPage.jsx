@@ -18,6 +18,8 @@ import {
   reindexAllRagDocuments,
   reindexRagDocument,
   saveSCTTest,
+  searchRagDocuments,
+  uploadRagDocument,
   updateAIConfig,
   updateAdminUser,
   updateRagDocument,
@@ -40,7 +42,15 @@ const DEFAULT_HEATMAP_METADATA = {
   type: "referencia",
   note: "",
 };
-const DEFAULT_RAG_DOCUMENT = { title: "", tags: "", content: "" };
+const DEFAULT_RAG_DOCUMENT = {
+  title: "",
+  tags: "",
+  source: "",
+  document_type: "text",
+  content: "",
+  chunk_size: 180,
+  chunk_overlap: 40,
+};
 const RAG_PRESETS = [
   { title: "Harrison Principios de Medicina Interna", tags: "libro de texto", chunks: "4.820", iconBg: "rgba(59,130,246,0.1)", iconColor: "#3b82f6", content: "" },
   { title: "Guías SECOT prótesis 2023", tags: "guía clínica", chunks: "312", iconBg: "rgba(34,197,94,0.1)", iconColor: "#16a34a", content: "" },
@@ -113,6 +123,10 @@ export function ConfigPage() {
   const [savingRagDocument, setSavingRagDocument] = useState(false);
   const [indexingRag, setIndexingRag] = useState(false);
   const [ragSourceType, setRagSourceType] = useState("text");
+  const [ragFile, setRagFile] = useState(null);
+  const [ragSearchQuery, setRagSearchQuery] = useState("");
+  const [ragSearchResults, setRagSearchResults] = useState([]);
+  const [searchingRag, setSearchingRag] = useState(false);
   const [aiConfigItems, setAiConfigItems] = useState([]);
   const [loadingAIConfig, setLoadingAIConfig] = useState(false);
   const [savingAIConfig, setSavingAIConfig] = useState(false);
@@ -326,13 +340,24 @@ export function ConfigPage() {
   const resetRagDocumentForm = () => {
     setRagDocumentForm(DEFAULT_RAG_DOCUMENT);
     setEditingRagDocumentId(null);
+    setRagFile(null);
   };
 
   const handleSaveRagDocument = async (event) => {
     event.preventDefault();
     setSavingRagDocument(true);
     try {
-      if (editingRagDocumentId) {
+      if (ragSourceType === "file" && !editingRagDocumentId) {
+        if (!ragFile) throw new Error("Selecciona un archivo para cargar");
+        const form = new FormData();
+        form.append("file", ragFile);
+        form.append("title", ragDocumentForm.title || ragFile.name);
+        form.append("tags", ragDocumentForm.tags || "");
+        form.append("source", ragDocumentForm.source || ragFile.name);
+        form.append("chunk_size", String(ragDocumentForm.chunk_size || 180));
+        form.append("chunk_overlap", String(ragDocumentForm.chunk_overlap || 40));
+        await uploadRagDocument(form);
+      } else if (editingRagDocumentId) {
         await updateRagDocument(editingRagDocumentId, ragDocumentForm);
       } else {
         await createRagDocument(ragDocumentForm);
@@ -352,7 +377,11 @@ export function ConfigPage() {
     setRagDocumentForm({
       title: document.title || "",
       tags: document.tags || "",
+      source: document.source || "",
+      document_type: document.document_type || "text",
       content: document.content || "",
+      chunk_size: document.chunk_size || 180,
+      chunk_overlap: document.chunk_overlap ?? 40,
     });
   };
 
@@ -392,6 +421,20 @@ export function ConfigPage() {
       showToast(error.message || "No se pudo reindexar el corpus RAG", "error", 7000);
     } finally {
       setIndexingRag(false);
+    }
+  };
+
+  const handleSearchRagDocuments = async (event) => {
+    event.preventDefault();
+    if (!ragSearchQuery.trim()) return;
+    setSearchingRag(true);
+    try {
+      const payload = await searchRagDocuments(ragSearchQuery.trim(), 6);
+      setRagSearchResults(payload?.hits || []);
+    } catch (error) {
+      showToast(error.message || "No se pudo buscar en RAG", "error", 7000);
+    } finally {
+      setSearchingRag(false);
     }
   };
 
@@ -1362,9 +1405,10 @@ export function ConfigPage() {
           {/* ── RAG TAB ── */}
           {activeTab === "rag" && (() => {
             const totalChunks = ragDocuments.reduce((acc, doc) => acc + (doc.chunk_count || 0), 0);
+            const indexedDocs = ragDocuments.filter((doc) => doc.indexing_status === "indexed").length;
             const vectorBackend = integrationStatus?.vector_store?.backend || integrationStatus?.rag?.vector_backend || "pgvector";
             const vectorMetric  = integrationStatus?.vector_store?.metric  || integrationStatus?.rag?.metric  || "cosine";
-            const vectorDims    = integrationStatus?.vector_store?.dimensions || integrationStatus?.embedding?.dimensions || 384;
+            const vectorDims    = integrationStatus?.vector_store?.dimensions || integrationStatus?.rag?.dimensions || integrationStatus?.embedding?.dimensions || 384;
             return (
               <div className="cfg-section">
                 <div className="cfg-section-top">
@@ -1390,7 +1434,7 @@ export function ConfigPage() {
                     <div className="cfg-stat-lbl">Documentos cargados</div>
                     <div className="cfg-stat-val clr-coral">{ragDocuments.length}</div>
                     <div className="cfg-stat-sub">
-                      {ragDocuments.length === 0 ? "Sin contenido aún" : `${ragDocuments.length} fuente${ragDocuments.length !== 1 ? "s" : ""} activa${ragDocuments.length !== 1 ? "s" : ""}`}
+                      {ragDocuments.length === 0 ? "Sin contenido aun" : `${indexedDocs} indexado${indexedDocs !== 1 ? "s" : ""}`}
                     </div>
                   </div>
                   <div className="cfg-stat-card">
@@ -1433,12 +1477,19 @@ export function ConfigPage() {
                     />
                     <div className="cfg-rag-hint">Separadas por coma. Mejora la recuperación temática.</div>
 
+                    <label className="cfg-rag-label">FUENTE</label>
+                    <input
+                      className="cfg-modal-input"
+                      value={ragDocumentForm.source}
+                      onChange={(e) => updateRagDocumentForm("source", e.target.value)}
+                      placeholder="Ej: guia docente 2026, capitulo IV, paper interno"
+                    />
+
                     <label className="cfg-rag-label">ORIGEN</label>
                     <div className="cfg-rag-origin">
                       {[
                         { id: "text", label: "Texto pegado" },
-                        { id: "pdf",  label: "Subir PDF" },
-                        { id: "url",  label: "Desde URL" },
+                        { id: "file", label: "Archivo" },
                       ].map((opt) => (
                         <button
                           key={opt.id}
@@ -1459,30 +1510,60 @@ export function ConfigPage() {
                           value={ragDocumentForm.content}
                           onChange={(e) => updateRagDocumentForm("content", e.target.value)}
                           placeholder="Pega aquí el contenido educativo validado..."
-                          required
+                          required={ragSourceType === "text"}
                         />
                       </>
                     )}
-                    {ragSourceType === "pdf" && (
-                      <div className="cfg-rag-file-zone">
-                        <span style={{ fontSize: 28, opacity: 0.4 }}>📄</span>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>Arrastra un PDF o haz clic</div>
-                        <div style={{ fontSize: 11, color: "var(--muted)" }}>Se procesará y vectorizará automáticamente</div>
-                        <input type="file" accept=".pdf" style={{ display: "none" }} />
-                      </div>
-                    )}
-                    {ragSourceType === "url" && (
-                      <>
-                        <label className="cfg-rag-label">URL</label>
-                        <input className="cfg-modal-input" placeholder="https://..." />
-                      </>
+                    {ragSourceType === "file" && (
+                      <label className="cfg-rag-file-zone">
+                        <span className="cfg-rag-file-mark">DOC</span>
+                        <div className="cfg-rag-file-title">{ragFile ? ragFile.name : "Seleccionar archivo"}</div>
+                        <div className="cfg-rag-file-sub">PDF, DOCX, TXT o Markdown</div>
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,.txt,.md,.markdown"
+                          onChange={(e) => {
+                            const selected = e.target.files?.[0] || null;
+                            setRagFile(selected);
+                            if (selected) {
+                              updateRagDocumentForm("title", ragDocumentForm.title || selected.name.replace(/\.[^.]+$/, ""));
+                              updateRagDocumentForm("source", ragDocumentForm.source || selected.name);
+                            }
+                          }}
+                        />
+                      </label>
                     )}
 
+                    <div className="cfg-rag-chunk-grid">
+                      <div>
+                        <label className="cfg-rag-label">CHUNK</label>
+                        <input
+                          className="cfg-modal-input"
+                          type="number"
+                          min="80"
+                          max="500"
+                          value={ragDocumentForm.chunk_size}
+                          onChange={(e) => updateRagDocumentForm("chunk_size", Number(e.target.value))}
+                        />
+                      </div>
+                      <div>
+                        <label className="cfg-rag-label">OVERLAP</label>
+                        <input
+                          className="cfg-modal-input"
+                          type="number"
+                          min="0"
+                          max="120"
+                          value={ragDocumentForm.chunk_overlap}
+                          onChange={(e) => updateRagDocumentForm("chunk_overlap", Number(e.target.value))}
+                        />
+                      </div>
+                    </div>
+
                     <div className="cfg-rag-save-row">
-                      <button className="cfg-rag-save-btn" type="submit" disabled={savingRagDocument}>
+                      <button className="cfg-rag-save-btn" type="submit" disabled={savingRagDocument || (ragSourceType === "file" && !ragFile && !editingRagDocumentId)}>
                         {savingRagDocument ? "Guardando..." : "✓ Guardar e indexar"}
                       </button>
-                      <span className="cfg-rag-save-hint">Vectorización automática con sentence-transformers</span>
+                      <span className="cfg-rag-save-hint">{ragSourceType === "file" ? "Extraccion e indexacion automatica" : "Vectorizacion automatica"}</span>
                     </div>
                     {editingRagDocumentId && (
                       <button className="cfg-cancel-btn" type="button" onClick={() => { resetRagDocumentForm(); setRagSourceType("text"); }} style={{ marginTop: 8, width: "100%" }}>
@@ -1499,6 +1580,37 @@ export function ConfigPage() {
                         {ragDocuments.length} documentos
                       </span>
                     </div>
+
+                    <form className="cfg-rag-search" onSubmit={handleSearchRagDocuments}>
+                      <input
+                        className="cfg-modal-input"
+                        value={ragSearchQuery}
+                        onChange={(e) => setRagSearchQuery(e.target.value)}
+                        placeholder="Buscar en fuentes RAG..."
+                        minLength={3}
+                      />
+                      <button className="cfg-view-btn" type="submit" disabled={searchingRag || ragSearchQuery.trim().length < 3}>
+                        {searchingRag ? "Buscando..." : "Buscar"}
+                      </button>
+                    </form>
+
+                    {ragSearchResults.length > 0 && (
+                      <div className="cfg-rag-search-results">
+                        {ragSearchResults.map((hit) => (
+                          <div key={`${hit.id}-${hit.chunk_id}`} className="cfg-rag-hit">
+                            <div className="cfg-rag-hit-top">
+                              <span>{hit.title}</span>
+                              <strong>{Math.round((hit.score || 0) * 100)}%</strong>
+                            </div>
+                            <div className="cfg-rag-hit-snippet">{hit.snippet}</div>
+                            <div className="cfg-rag-doc-meta">
+                              <span>{hit.source || hit.document_type || "fuente interna"}</span>
+                              <span>chunk {hit.chunk_index ?? "-"}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {loadingRagDocuments && ragDocuments.length === 0 ? (
                       <div className="cfg-loading">Cargando documentos...</div>
@@ -1531,7 +1643,13 @@ export function ConfigPage() {
                               <div className="cfg-rag-doc-meta">
                                 <span className="cfg-rag-doc-tag">{doc.tags || "Sin etiquetas"}</span>
                                 <span>{doc.chunk_count || 0} chunks</span>
+                                <span>{doc.document_type || "text"}</span>
+                                <span className={`cfg-rag-status ${doc.indexing_status || "pending"}`}>{doc.indexing_status || "pending"}</span>
                               </div>
+                              <div className="cfg-rag-doc-source">
+                                {doc.source || "Sin fuente"} {doc.uploaded_at ? `· ${formatDateTime(doc.uploaded_at)}` : ""}
+                              </div>
+                              {doc.indexing_error && <div className="cfg-rag-doc-error">{doc.indexing_error}</div>}
                             </div>
                             <div className="cfg-inline-actions">
                               <button className="cfg-view-btn" type="button" onClick={() => { handleEditRagDocument(doc); setRagSourceType("text"); }}>Editar</button>

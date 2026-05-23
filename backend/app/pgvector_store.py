@@ -108,12 +108,15 @@ def search_pgvector(db: Session, query_vector: list[float], limit: int = 8) -> l
                 c.content AS chunk_content,
                 d.id AS document_id,
                 d.title AS title,
+                COALESCE(d.source, '') AS source,
+                COALESCE(d.document_type, 'text') AS document_type,
                 COALESCE(d.tags, '') AS tags,
                 e.provider AS provider,
                 1 - (e.embedding <=> CAST(:query_embedding AS vector)) AS score
             FROM document_vector_embeddings e
             JOIN document_chunks c ON c.id = e.chunk_id
             JOIN documents d ON d.id = e.document_id
+            WHERE d.indexing_status = 'indexed'
             ORDER BY e.embedding <=> CAST(:query_embedding AS vector)
             LIMIT :limit
             """
