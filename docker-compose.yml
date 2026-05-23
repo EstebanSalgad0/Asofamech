@@ -10,6 +10,11 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d app_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build:
@@ -60,9 +65,16 @@ services:
     ports:
       - "8001:8001"
     gpus: all
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
     depends_on:
-      - db
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload", "--reload-dir", "/app/app"]
+      db:
+        condition: service_healthy
+    command: ["--reload", "--reload-dir", "/app/app"]
     volumes:
       - ./backend/app:/app/app
       - ./backend/artifacts:/app/artifacts
@@ -80,13 +92,15 @@ services:
   frontend:
     build:
       context: ./frontend
-      args:
-        VITE_API_BASE: ${FRONTEND_API_BASE:-http://localhost:8001}
     container_name: asofamech_frontend
+    restart: unless-stopped
+    environment:
+      - API_BASE=${FRONTEND_API_BASE:-http://localhost:8001}
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   ollama:
     image: ollama/ollama:latest

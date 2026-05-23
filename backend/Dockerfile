@@ -27,5 +27,11 @@ RUN if [ "$INSTALL_RAG_NEURAL" = "true" ]; then \
 
 COPY app ./app
 COPY histopathology_offline ./histopathology_offline
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
+COPY start.sh ./start.sh
+RUN chmod +x start.sh
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload", "--reload-dir", "/app/app"]
+# start.sh corre "alembic upgrade head" y luego inicia uvicorn.
+# Los flags de uvicorn se pasan desde docker-compose (command:).
+ENTRYPOINT ["./start.sh"]
