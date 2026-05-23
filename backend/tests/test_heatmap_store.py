@@ -113,6 +113,17 @@ class HeatmapStoreTestCase(unittest.TestCase):
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["trace_id"], "trace-a")
 
+    def test_history_can_be_filtered_by_user(self):
+        result_a = self._make_result(image_id=10, trace_id="trace-user-a")
+        result_a["user_id"] = 1
+        result_b = self._make_result(image_id=11, trace_id="trace-user-b")
+        result_b["user_id"] = 2
+        heatmap_store.save_heatmap_result(result_a)
+        heatmap_store.save_heatmap_result(result_b)
+        history = heatmap_store.load_heatmap_history_for_user(1)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["trace_id"], "trace-user-a")
+
     def test_history_limit_is_applied(self):
         for n in range(5):
             heatmap_store.save_heatmap_result(self._make_result(image_id=12, trace_id=f"trace-{n}"))

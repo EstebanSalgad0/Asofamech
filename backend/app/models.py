@@ -82,6 +82,7 @@ class ChatLog(Base):
     user_id = Column(String(50), nullable=True)  # o "anon"
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
+    rag_sources = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -120,6 +121,7 @@ class HeatmapJob(Base):
     __tablename__ = "heatmap_jobs"
     job_id = Column(String(36), primary_key=True)
     trace_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     status = Column(String(20), nullable=False, default="queued")
     progress = Column(Float, nullable=False, default=0.0)
     processed_tiles = Column(Integer, nullable=False, default=0)
@@ -132,6 +134,8 @@ class HeatmapJob(Base):
     request_json = Column(JSON, nullable=True)
     result_json = Column(JSON, nullable=True)
     worker_limit = Column(Integer, nullable=False, default=1)
+
+    user = relationship("User")
 
 
 class SCTAttempt(Base):

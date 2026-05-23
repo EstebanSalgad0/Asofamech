@@ -152,6 +152,12 @@ export async function getDashboardRanking() {
   return parseJsonResponse(res, "No se pudo cargar el ranking");
 }
 
+export async function getMyHistory(limit = 10) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const res = await authFetch(`/api/history/me?${params.toString()}`);
+  return parseJsonResponse(res, "No se pudo cargar el historial");
+}
+
 export async function generateSCT(numItems = 5, difficulty = "pregrado", focus = "tuberculosis pulmonar") {
   const res = await authFetch("/api/sct/generate", {
     method: "POST",

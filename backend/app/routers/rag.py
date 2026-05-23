@@ -202,7 +202,12 @@ def _is_relevant_score(score: float, provider: str | None) -> bool:
     return score >= _relevance_threshold(provider)
 
 
-def retrieve_rag_hits(db: Session, query: str, limit: int = 4) -> list[RagHit]:
+def retrieve_rag_hits(
+    db: Session,
+    query: str,
+    limit: int = 4,
+    dedupe_documents: bool = True,
+) -> list[RagHit]:
     ensure_vector_index(db)
     config = get_ai_config_map(db)
     embedding = embed_text_for_rag(
@@ -225,7 +230,7 @@ def retrieve_rag_hits(db: Session, query: str, limit: int = 4) -> list[RagHit]:
                 if not _is_relevant_score(score, provider):
                     continue
                 document_id = int(row["document_id"])
-                if document_id in seen_documents:
+                if dedupe_documents and document_id in seen_documents:
                     continue
                 seen_documents.add(document_id)
                 hits.append(
@@ -272,7 +277,7 @@ def retrieve_rag_hits(db: Session, query: str, limit: int = 4) -> list[RagHit]:
     hits: list[RagHit] = []
     seen_documents: set[int] = set()
     for chunk, score in chunk_hits:
-        if chunk.document_id in seen_documents:
+        if dedupe_documents and chunk.document_id in seen_documents:
             continue
         seen_documents.add(chunk.document_id)
         hits.append(

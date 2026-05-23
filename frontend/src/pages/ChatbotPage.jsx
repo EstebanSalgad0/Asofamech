@@ -8,6 +8,7 @@ import { clearAuthSession, userStorageKey } from "../authClient";
 const STORAGE_KEY = "asofamech_chat_history";
 const NEW_CHAT_FLAG = "asofamech_new_chat_requested";
 const RAG_SOURCE_MIN_DISPLAY_SCORE = 0.45;
+const NO_RAG_CONTEXT_RE = /no se recuper[oó] contexto documental suficiente/i;
 const BOT_WELCOME =
   "¡Hola! Soy tu asistente educativo médico. Puedo ayudarte con preguntas sobre enfermedades, síntomas, diagnósticos, tratamientos, prevención, exámenes, medicamentos y casos de estudio. Solo respondo temas del ámbito médico y de salud. ¿En qué puedo ayudarte hoy?";
 
@@ -52,6 +53,15 @@ function isRelevantRagSource(source) {
 
 function getRelevantRagSources(sources) {
   return Array.isArray(sources) ? sources.filter(isRelevantRagSource) : [];
+}
+
+function getResponseSources(data) {
+  return data?.source_chunks || data?.rag_sources || data?.sources || [];
+}
+
+function didUseRag(data, sources) {
+  if (typeof data?.used_rag === "boolean") return data.used_rag;
+  return getRelevantRagSources(sources).length > 0;
 }
 
 function getTimestamp() {
@@ -302,12 +312,15 @@ export function ChatbotPage() {
     try {
       const data = await sendChatMessage(userMsg.text);
       const allBotTexts = (data.messages || []).map((m) => m.text || "").join("\n\n");
-      const ragSources = data.rag_sources || [];
+      const ragSources = getResponseSources(data);
       const botMsg = {
         sender: "bot",
         text: allBotTexts,
         time: getTimestamp(),
         ragSources,
+        usedRag: didUseRag(data, ragSources),
+        educationalWarning: data.warning || "",
+        hasRagMetadata: true,
         msgType: getMsgType(data.message_type),
       };
       const withResponse = {
@@ -348,12 +361,15 @@ export function ChatbotPage() {
     try {
       const data = await sendChatMessage(inputText);
       const allBotTexts = (data.messages || []).map((m) => m.text || "").join("\n\n");
-      const ragSources = data.rag_sources || [];
+      const ragSources = getResponseSources(data);
       const botMsg = {
         sender: "bot",
         text: allBotTexts,
         time: getTimestamp(),
         ragSources,
+        usedRag: didUseRag(data, ragSources),
+        educationalWarning: data.warning || "",
+        hasRagMetadata: true,
         msgType: getMsgType(data.message_type),
       };
       trackConsultation();
@@ -659,6 +675,15 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                               <div className="mc-msg-av mc-av-bot">m</div>
                             )}
                             <div className="mc-msg-bubble">
+                              {msg.sender === "bot" && msg.hasRagMetadata && (
+                                <div className={`mc-rag-use-note ${msg.usedRag ? "used" : "fallback"}`}>
+                                  {msg.usedRag
+                                    ? "Respuesta apoyada en documentos de la plataforma"
+                                    : NO_RAG_CONTEXT_RE.test(msg.educationalWarning || "")
+                                      ? "Sin contexto documental suficiente para esta consulta"
+                                      : "Respuesta educativa general"}
+                                </div>
+                              )}
                               <div
                                 className="message-text"
                                 dangerouslySetInnerHTML={{
@@ -684,6 +709,16 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                                           <span className="mc-cited-score">
                                             {Math.round(src.score * 100)}%
                                           </span>
+                                        )}
+                                        {src.source && (
+                                          <span className="mc-cited-ref">
+                                            {src.source}
+                                          </span>
+                                        )}
+                                        {src.snippet && (
+                                          <div className="mc-cited-snippet">
+                                            {src.snippet}
+                                          </div>
                                         )}
                                       </div>
                                     ))}
@@ -745,7 +780,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                 <div className="mc-rag-header">Contexto RAG activo</div>
                 {activeRagSources.length === 0 ? (
                   <div className="mc-rag-empty">
-                    Sin fuentes activas en este hilo
+                    Sin fuentes documentales activas en este hilo
                   </div>
                 ) : (
                   <div className="mc-rag-sources">
@@ -770,6 +805,11 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                               {tags.slice(0, 2).join(" · ")}
                               {src.chunk_index != null &&
                                 ` · sec. ${src.chunk_index + 1}`}
+                            </div>
+                          )}
+                          {src.snippet && (
+                            <div className="mc-rag-card-snippet">
+                              {src.snippet}
                             </div>
                           )}
                         </div>

@@ -5,7 +5,7 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError
 import time
 import os
 
-from .routers import admin, auth, chat, cases, dashboard, rag, sct, medical_images, histopathology
+from .routers import admin, auth, chat, cases, dashboard, history, rag, sct, medical_images, histopathology
 from .db import Base, engine
 
 app = FastAPI(title="Backend ASOFAMECH Educativo")
@@ -102,6 +102,17 @@ def apply_compatibility_migrations() -> None:
             if "embedding_provider" not in chunk_columns:
                 conn.execute(text("ALTER TABLE document_chunks ADD COLUMN embedding_provider VARCHAR(160) DEFAULT 'local-hashing' NOT NULL"))
 
+        if "chat_logs" in table_names:
+            chat_log_columns = {column["name"] for column in inspector.get_columns("chat_logs")}
+            if "rag_sources" not in chat_log_columns:
+                conn.execute(text("ALTER TABLE chat_logs ADD COLUMN rag_sources JSON NULL"))
+
+        if "heatmap_jobs" in table_names:
+            heatmap_job_columns = {column["name"] for column in inspector.get_columns("heatmap_jobs")}
+            if "user_id" not in heatmap_job_columns:
+                conn.execute(text("ALTER TABLE heatmap_jobs ADD COLUMN user_id INTEGER NULL"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_heatmap_jobs_user_id ON heatmap_jobs (user_id)"))
+
 
 @app.on_event("startup")
 def on_startup():
@@ -124,6 +135,7 @@ app.include_router(chat.router)
 app.include_router(cases.router)
 app.include_router(dashboard.router)
 app.include_router(rag.router)
+app.include_router(history.router)
 app.include_router(admin.router)
 app.include_router(sct.router)
 app.include_router(auth.router)

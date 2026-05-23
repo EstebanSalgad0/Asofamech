@@ -29,6 +29,7 @@ from ..histopathology.heatmap_jobs import (
 from ..histopathology.heatmap_store import (
     delete_heatmap_by_trace,
     load_heatmap_history_for_image,
+    load_heatmap_history_for_user,
     load_heatmap_by_trace,
     load_latest_heatmap_for_image,
     save_heatmap_result,
@@ -290,6 +291,22 @@ def _require_docente_or_admin(current_user) -> None:
             status_code=403,
             detail="Solo docentes y administradores pueden realizar esta accion.",
         )
+
+
+def _can_access_owned_resource(current_user, user_id: int | str | None) -> bool:
+    if user_id is None:
+        return True
+    if getattr(current_user, "role", None) in {"docente", "administrador"}:
+        return True
+    return str(user_id) == str(getattr(current_user, "id", ""))
+
+
+def _heatmap_response_payload(payload: dict, current_user) -> dict:
+    if getattr(current_user, "role", None) in {"docente", "administrador"}:
+        return payload
+    redacted = {**payload}
+    redacted.pop("user_id", None)
+    return redacted
 
 
 def _save_histopathology_session(
@@ -589,6 +606,7 @@ def _execute_heatmap_scan(
 
     response_payload = {
         "trace_id": trace_id,
+        "user_id": user_id,
         "analyzed_at": analyzed_at,
         "image_id": request.image_id,
         "status": "completed",
@@ -1212,6 +1230,7 @@ async def create_heatmap_scan_job(
     job = create_heatmap_job(
         {
             "trace_id": trace_id,
+            "user_id": getattr(current_user, "id", None),
             "request": request_payload,
         }
     )
@@ -1235,7 +1254,21 @@ async def get_heatmap_scan_job(
     job = get_heatmap_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job de heatmap no encontrado")
+    if not _can_access_owned_resource(current_user, job.get("user_id")):
+        raise HTTPException(status_code=403, detail="Sin acceso a este job de heatmap")
     return job
+
+
+@router.get("/heatmaps/my-history")
+async def get_my_heatmap_history(
+    limit: int = Query(20, ge=1, le=100),
+    current_user=Depends(get_current_user),
+):
+    items = load_heatmap_history_for_user(current_user.id, limit=limit)
+    return {
+        "count": len(items),
+        "items": [_heatmap_response_payload(item, current_user) for item in items],
+    }
 
 
 @router.get("/heatmaps/image/{image_id}/latest")
@@ -1256,7 +1289,7 @@ async def get_latest_heatmap(
     if not heatmap:
         raise HTTPException(status_code=404, detail="No hay heatmap guardado para esta imagen")
 
-    return heatmap
+    return _heatmap_response_payload(heatmap, current_user)
 
 
 @router.get("/heatmaps/image/{image_id}/history")
@@ -1278,7 +1311,7 @@ async def get_heatmap_history(
     return {
         "image_id": image_id,
         "count": len(items),
-        "items": items,
+        "items": [_heatmap_response_payload(item, current_user) for item in items],
     }
 
 
@@ -1290,8 +1323,10 @@ async def get_heatmap_by_trace(
     heatmap = load_heatmap_by_trace(trace_id)
     if not heatmap:
         raise HTTPException(status_code=404, detail="Heatmap no encontrado")
+    if not _can_access_owned_resource(current_user, heatmap.get("user_id")):
+        raise HTTPException(status_code=403, detail="Sin acceso a este heatmap")
 
-    return heatmap
+    return _heatmap_response_payload(heatmap, current_user)
 
 
 @router.delete("/heatmaps/{trace_id}", status_code=204)
