@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { sendChatMessage } from "../api";
 import { startSession, flushSession, trackConsultation, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
-import { clearAuthSession, userStorageKey } from "../authClient";
+import { clearAuthSession, getStoredRole, userStorageKey } from "../authClient";
 
 const STORAGE_KEY = "asofamech_chat_history";
 const NEW_CHAT_FLAG = "asofamech_new_chat_requested";
@@ -183,8 +183,7 @@ export function ChatbotPage() {
       return;
     }
     setUser(JSON.parse(userData));
-    const savedRole = localStorage.getItem("role");
-    if (savedRole) setRole(savedRole);
+    setRole(getStoredRole());
     startSession();
     let stored = loadConversations();
     const wantsNew = sessionStorage.getItem(NEW_CHAT_FLAG) === "1";
@@ -450,10 +449,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
     navigate("/");
   };
 
-  const handleRoleChange = (val) => {
-    setRole(val);
-    localStorage.setItem("role", val);
-  };
+  const handleRoleChange = () => setRole(getStoredRole());
 
   if (!user) return null;
 

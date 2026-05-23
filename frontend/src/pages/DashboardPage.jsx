@@ -8,7 +8,7 @@ import {
   timeAgo,
 } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
-import { clearAuthSession } from "../authClient";
+import { clearAuthSession, getStoredRole } from "../authClient";
 import { getDashboardStats, getDashboardRanking, getMyHistory } from "../api";
 
 const NEW_CHAT_FLAG = "asofamech_new_chat_requested";
@@ -201,8 +201,7 @@ export function DashboardPage() {
       return;
     }
     setUser(JSON.parse(userData));
-    const savedRole = localStorage.getItem("role");
-    if (savedRole) setRole(savedRole);
+    setRole(getStoredRole());
 
     startSession();
     setMetrics(getMetrics());
@@ -235,7 +234,7 @@ export function DashboardPage() {
   }, []);
 
   const handleLogout = () => { flushSession(); clearAuthSession(); navigate("/"); };
-  const handleRoleChange = (val) => { setRole(val); localStorage.setItem("role", val); };
+  const handleRoleChange = () => setRole(getStoredRole());
   const openNewChat = () => { sessionStorage.setItem(NEW_CHAT_FLAG, "1"); navigate("/dashboard/chat"); };
 
   const filteredActivity = useMemo(() => {

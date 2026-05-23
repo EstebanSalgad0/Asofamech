@@ -323,6 +323,8 @@ export function OpenSeadragonViewer({ imageData }) {
     const viewer = OpenSeadragon({
       element: viewerRef.current,
       tileSources: `${API_BASE}/api/medical-images/dzi/${imageData.id}.dzi`,
+      loadTilesWithAjax: true,
+      ajaxHeaders: histopathologyHeaders(),
       crossOriginPolicy: 'Anonymous',
       showZoomControl: false,
       showHomeControl: false,

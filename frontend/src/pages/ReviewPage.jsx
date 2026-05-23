@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
-import { API_BASE, authFetch, clearAuthSession } from "../authClient";
+import { API_BASE, authFetch, canManageEducationalContent, clearAuthSession, getStoredRole } from "../authClient";
 
 const DOCENTE_LABEL_OPTIONS = [
   { value: "correcto", label: "Correcto" },
@@ -70,17 +70,16 @@ export function ReviewPage() {
   useEffect(() => {
     const userData = localStorage.getItem("user");
     const token = localStorage.getItem("auth_token");
-    const savedRole = localStorage.getItem("role");
     if (!userData || !token) {
       clearAuthSession();
       navigate("/auth");
       return;
     }
     const parsedUser = JSON.parse(userData);
-    const effectiveRole = savedRole || parsedUser.role_label || "Estudiante";
+    const effectiveRole = getStoredRole();
     setUser(parsedUser);
     setRole(effectiveRole);
-    if (effectiveRole !== "Profesor" && effectiveRole !== "Administrador") {
+    if (!canManageEducationalContent(effectiveRole)) {
       navigate("/dashboard");
       return;
     }
@@ -126,7 +125,7 @@ export function ReviewPage() {
   }, [filterImageId, filterLabel, filterClase, filterCorrected, filterDataset]);
 
   useEffect(() => {
-    if (user && (role === "Profesor" || role === "Administrador")) {
+    if (user && canManageEducationalContent(role)) {
       loadSessions();
     }
   }, [user, role, loadSessions]);
