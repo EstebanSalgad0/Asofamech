@@ -103,8 +103,13 @@ export function authHeaders(extra = {}) {
 
 export async function authFetch(pathOrUrl, options = {}) {
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API_BASE}${pathOrUrl}`;
-  return fetch(url, {
+  const res = await fetch(url, {
     ...options,
     headers: authHeaders(options.headers || {}),
   });
+  if (res.status === 401) {
+    clearAuthSession();
+    window.location.href = "/auth";
+  }
+  return res;
 }

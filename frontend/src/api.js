@@ -160,80 +160,38 @@ export async function generateSCT(numItems = 5, difficulty = "pregrado", focus =
   const res = await authFetch("/api/sct/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ 
-      num_items: numItems,
-      difficulty: difficulty,
-      focus: focus
-    }),
+    body: JSON.stringify({ num_items: numItems, difficulty, focus }),
   });
-
-  if (!res.ok) {
-    throw new Error(`Error API SCT: ${res.status}`);
-  }
-
-  return res.json();
+  return parseJsonResponse(res, "Error al generar el test SCT");
 }
 
 export async function getExampleSCT() {
   const res = await authFetch("/api/sct/example");
-  
-  if (!res.ok) {
-    throw new Error(authErrorMessage(res.status, `Error API SCT Example: ${res.status}`));
-  }
-
-  return res.json();
+  return parseJsonResponse(res, "Error al cargar el test de ejemplo");
 }
 
 export async function saveSCTTest(name, difficulty, focus, numItems, items) {
   const res = await authFetch("/api/sct/save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name,
-      difficulty,
-      focus,
-      num_items: numItems,
-      items
-    }),
+    body: JSON.stringify({ name, difficulty, focus, num_items: numItems, items }),
   });
-
-  if (!res.ok) {
-    throw new Error(`Error API SCT Save: ${res.status}`);
-  }
-
-  return res.json();
+  return parseJsonResponse(res, "No se pudo guardar el test SCT");
 }
 
 export async function listSCTTests() {
   const res = await authFetch("/api/sct/list");
-  
-  if (!res.ok) {
-    throw new Error(`Error API SCT List: ${res.status}`);
-  }
-
-  return res.json();
+  return parseJsonResponse(res, "No se pudieron cargar los tests SCT");
 }
 
 export async function getSCTTest(testId) {
   const res = await authFetch(`/api/sct/${testId}`);
-  
-  if (!res.ok) {
-    throw new Error(`Error API SCT Get: ${res.status}`);
-  }
-
-  return res.json();
+  return parseJsonResponse(res, "No se pudo cargar el test SCT");
 }
 
 export async function deleteSCTTest(testId) {
-  const res = await authFetch(`/api/sct/${testId}`, {
-    method: "DELETE",
-  });
-
-  if (!res.ok) {
-    throw new Error(`Error API SCT Delete: ${res.status}`);
-  }
-
-  return res.json();
+  const res = await authFetch(`/api/sct/${testId}`, { method: "DELETE" });
+  return parseJsonResponse(res, "No se pudo eliminar el test SCT");
 }
 
 export async function submitSCTAttempt(testId, answers, startedAt = null) {

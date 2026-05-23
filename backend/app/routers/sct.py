@@ -160,9 +160,9 @@ Genera ahora {num_items} ítems SCT EXCLUSIVAMENTE sobre {focus} con nivel de di
 @router.post("/generate", response_model=SCTResponse)
 async def generate_sct_items(
     request: SCTGenerateRequest,
-    _current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(require_permission(PERM_MANAGE_SCT)),
 ):
-    """Genera ítems SCT via Ollama/LLaMA. Cualquier usuario autenticado puede generar."""
+    """Genera ítems SCT via Ollama/LLaMA. Requiere rol docente o administrador."""
     try:
         prompt = SCT_SYSTEM_PROMPT.format(
             num_items=request.num_items,
