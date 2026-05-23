@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, submitSCTAttempt } from "../api";
+import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, submitSCTAttempt, listMyAttempts, listAllAttempts, updateSCTTest } from "../api";
 import { startSession, flushSession, trackTestCompleted, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
-import { clearAuthSession, userStorageKey } from "../authClient";
+import { clearAuthSession, getStoredRole, userStorageKey, canManageEducationalContent } from "../authClient";
 
 /* ── Persistent SCT result log (one entry per completed test) ── */
 const SCT_RESULTS_KEY = "asofamech_sct_result_log";
@@ -107,6 +107,10 @@ export function SCTPage() {
   const [toast, setToast] = useState(null);
   const [saveNameInput, setSaveNameInput] = useState("");
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [canManage, setCanManage] = useState(false);
+  const [myDbAttempts, setMyDbAttempts] = useState([]);
+  const [allAttempts, setAllAttempts] = useState([]);
+  const [updatingStatusId, setUpdatingStatusId] = useState(null);
 
   // Config state
   const [configStep, setConfigStep] = useState(1);
@@ -132,11 +136,15 @@ export function SCTPage() {
       return;
     }
     setUser(JSON.parse(userData));
-    const savedRole = localStorage.getItem("role");
-    if (savedRole) setRole(savedRole);
+    const storedRole = getStoredRole();
+    setRole(storedRole);
+    const manage = canManageEducationalContent(storedRole);
+    setCanManage(manage);
     startSession();
     setResultLog(loadResultLog());
     loadSavedTests();
+    loadMyAttempts();
+    if (manage) loadAllAttempts();
     const handleUnload = () => flushSession();
     window.addEventListener("beforeunload", handleUnload);
     return () => {
@@ -151,6 +159,37 @@ export function SCTPage() {
       setSavedTests(tests || []);
     } catch {
       setSavedTests([]);
+    }
+  };
+
+  const loadMyAttempts = async () => {
+    try {
+      const data = await listMyAttempts();
+      setMyDbAttempts(data || []);
+    } catch {
+      setMyDbAttempts([]);
+    }
+  };
+
+  const loadAllAttempts = async () => {
+    try {
+      const data = await listAllAttempts();
+      setAllAttempts(data || []);
+    } catch {
+      setAllAttempts([]);
+    }
+  };
+
+  const handleUpdateTestStatus = async (testId, status) => {
+    setUpdatingStatusId(testId);
+    try {
+      await updateSCTTest(testId, { status });
+      await loadSavedTests();
+      showToast(`Estado actualizado a "${status}"`, "success");
+    } catch {
+      showToast("Error al actualizar el estado del test", "error");
+    } finally {
+      setUpdatingStatusId(null);
     }
   };
 
@@ -331,8 +370,8 @@ export function SCTPage() {
     (async () => {
       try {
         let dbId = currentTest.db_id;
-        if (!dbId) {
-          // Test generado pero no guardado: auto-guardar para obtener db_id
+        if (!dbId && canManage) {
+          // Solo docente/admin puede crear tests: auto-guardar para obtener db_id
           const saved = await saveSCTTest(
             currentTest.title,
             currentTest.difficulty.toLowerCase(),
@@ -356,6 +395,7 @@ export function SCTPage() {
         }
         if (dbId) {
           await submitSCTAttempt(dbId, backendAnswers, testStartedAt);
+          loadMyAttempts();
         }
       } catch {
         // fallo silencioso — el resultado local ya fue guardado
@@ -440,7 +480,7 @@ export function SCTPage() {
   };
 
   const handleLogout = () => { flushSession(); clearAuthSession(); navigate("/"); };
-  const handleRoleChange = (val) => { setRole(val); localStorage.setItem("role", val); };
+  const handleRoleChange = () => setRole(getStoredRole());
 
   if (!user) return null;
 
@@ -599,8 +639,10 @@ export function SCTPage() {
               </div>
             ))}
             <div className="sct-results-actions">
-              <button onClick={() => { setSaveNameInput(`Test SCT - ${currentTest?.focus || "general"}`); setShowSaveModal(true); }} className="sct-res-btn primary">💾 Guardar Test</button>
-              <button onClick={handleNewTest} className="sct-res-btn secondary">🔄 Nuevo Test</button>
+              {canManage && (
+                <button onClick={() => { setSaveNameInput(`Test SCT - ${currentTest?.focus || "general"}`); setShowSaveModal(true); }} className="sct-res-btn primary">Guardar Test</button>
+              )}
+              <button onClick={handleNewTest} className="sct-res-btn secondary">Nuevo Test</button>
             </div>
           </div>
         </div>
@@ -1030,24 +1072,27 @@ export function SCTPage() {
           {savedTests.length === 0 ? (
             <div className="sct3-library-empty">
               <span className="sct3-library-empty-icon">📄</span>
-              <div className="sct3-library-empty-title">No tienes tests guardados</div>
-              <div className="sct3-library-empty-desc">Genera tu primer test SCT y guárdalo para revisar más tarde</div>
+              <div className="sct3-library-empty-title">No hay tests disponibles</div>
+              <div className="sct3-library-empty-desc">
+                {canManage
+                  ? "Genera tu primer test SCT con el generador IA y guárdalo para publicarlo"
+                  : "Los tests publicados por tu docente aparecerán aquí"}
+              </div>
             </div>
           ) : (
             <div className="sct3-library-grid">
               {savedTests.map((test) => {
-                const hasDraft = !test.result_score;
+                const status = test.status || "published";
+                const statusLabel = { draft: "BORRADOR", published: "PUBLICADO", archived: "ARCHIVADO" }[status] || status.toUpperCase();
+                const statusCls = { draft: "draft", published: "result", archived: "archived" }[status] || "draft";
+                const isUpdating = updatingStatusId === test.id;
                 return (
-                  <div key={test.id} className="sct3-library-card">
+                  <div key={test.id} className={`sct3-library-card${status === "archived" ? " sct3-card-archived" : ""}`}>
                     <div className="sct3-library-card-top">
                       <div className="sct3-library-card-title">
                         Test SCT · <em>{(test.focus || test.name || "").split(" ")[0].toLowerCase()}</em>
                       </div>
-                      {hasDraft ? (
-                        <span className="sct3-lib-badge draft">DRAFT</span>
-                      ) : (
-                        <span className="sct3-lib-badge result">RESULTADO {test.result_score}%</span>
-                      )}
+                      <span className={`sct3-lib-badge ${statusCls}`}>{statusLabel}</span>
                     </div>
                     <div className="sct3-library-tags">
                       {test.difficulty && <span className="sct3-lib-tag">{test.difficulty}</span>}
@@ -1056,18 +1101,132 @@ export function SCTPage() {
                     </div>
                     <div className="sct3-library-date">{formatDate(test.created_at)}</div>
                     <div className="sct3-library-card-footer">
-                      <button className="sct3-open-btn" onClick={() => handleLoadTest(test.id)}>
-                        Abrir →
-                      </button>
+                      {status !== "archived" && (
+                        <button className="sct3-open-btn" onClick={() => handleLoadTest(test.id)}>
+                          Abrir →
+                        </button>
+                      )}
+                      {canManage && (
+                        <div className="sct3-status-btns">
+                          {status !== "published" && (
+                            <button
+                              className="sct3-status-btn publish"
+                              disabled={isUpdating}
+                              onClick={() => handleUpdateTestStatus(test.id, "published")}
+                            >
+                              Publicar
+                            </button>
+                          )}
+                          {status !== "draft" && (
+                            <button
+                              className="sct3-status-btn draft"
+                              disabled={isUpdating}
+                              onClick={() => handleUpdateTestStatus(test.id, "draft")}
+                            >
+                              Borrador
+                            </button>
+                          )}
+                          {status !== "archived" && (
+                            <button
+                              className="sct3-status-btn archive"
+                              disabled={isUpdating}
+                              onClick={() => handleUpdateTestStatus(test.id, "archived")}
+                            >
+                              Archivar
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
-              <div className="sct3-library-card new-template">
-                <div className="sct3-new-template-icon">+</div>
-                <div className="sct3-new-template-label">Nuevo desde plantilla</div>
-              </div>
             </div>
+          )}
+          {/* ── 04 — Mis intentos (BD) ── */}
+          <div className="sct3-section-head" style={{ marginTop: 48 }}>
+            <span className="sct3-section-num">/ 04 — Historial</span>
+          </div>
+          <div className="sct3-section-title-row">
+            <h2 className="sct3-section-title">Mis intentos</h2>
+            {myDbAttempts.length > 0 && (
+              <span className="sct3-section-meta">{myDbAttempts.length} intento{myDbAttempts.length !== 1 ? "s" : ""}</span>
+            )}
+          </div>
+          {myDbAttempts.length === 0 ? (
+            <div className="sct3-library-empty">
+              <span className="sct3-library-empty-icon">📊</span>
+              <div className="sct3-library-empty-title">Sin intentos registrados</div>
+              <div className="sct3-library-empty-desc">Completa un test publicado para ver tu historial aquí</div>
+            </div>
+          ) : (
+            <div className="sct3-attempts-table">
+              <div className="sct3-attempts-head">
+                <span>Test</span>
+                <span>Área</span>
+                <span>Dificultad</span>
+                <span>Correctas</span>
+                <span>Puntuación</span>
+                <span>Fecha</span>
+              </div>
+              {myDbAttempts.map((a) => (
+                <div key={a.id} className="sct3-attempts-row">
+                  <span className="sct3-att-name">{a.test_name || `Test #${a.test_id}`}</span>
+                  <span>{a.test_focus ? a.test_focus.split(",")[0].trim().slice(0, 14) : "—"}</span>
+                  <span>{a.test_difficulty || "—"}</span>
+                  <span>{a.correct_count}/{a.total_items}</span>
+                  <span className={`sct3-att-score ${a.score >= 70 ? "good" : a.score >= 50 ? "avg" : "low"}`}>
+                    {Math.round(a.score)}%
+                  </span>
+                  <span>{formatDate(a.completed_at)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── 05 — Revisión docente ── */}
+          {canManage && (
+            <>
+              <div className="sct3-section-head" style={{ marginTop: 48 }}>
+                <span className="sct3-section-num">/ 05 — Revisión</span>
+              </div>
+              <div className="sct3-section-title-row">
+                <h2 className="sct3-section-title">Intentos de estudiantes</h2>
+                {allAttempts.length > 0 && (
+                  <span className="sct3-section-meta">{allAttempts.length} intento{allAttempts.length !== 1 ? "s" : ""}</span>
+                )}
+              </div>
+              {allAttempts.length === 0 ? (
+                <div className="sct3-library-empty" style={{ marginBottom: 48 }}>
+                  <span className="sct3-library-empty-icon">📋</span>
+                  <div className="sct3-library-empty-title">Sin intentos aún</div>
+                  <div className="sct3-library-empty-desc">Los intentos de estudiantes aparecerán aquí una vez que completen tests publicados</div>
+                </div>
+              ) : (
+                <div className="sct3-attempts-table" style={{ marginBottom: 48 }}>
+                  <div className="sct3-attempts-head sct3-attempts-head-admin">
+                    <span>Estudiante</span>
+                    <span>Test</span>
+                    <span>Área</span>
+                    <span>Correctas</span>
+                    <span>Puntuación</span>
+                    <span>Fecha</span>
+                  </div>
+                  {allAttempts.map((a) => (
+                    <div key={a.id} className="sct3-attempts-row">
+                      <span className="sct3-att-name">{a.user_name || a.user_email || `#${a.user_id}`}</span>
+                      <span>{a.test_name || `Test #${a.test_id}`}</span>
+                      <span>{a.test_focus ? a.test_focus.split(",")[0].trim().slice(0, 14) : "—"}</span>
+                      <span>{a.correct_count}/{a.total_items}</span>
+                      <span className={`sct3-att-score ${a.score >= 70 ? "good" : a.score >= 50 ? "avg" : "low"}`}>
+                        {Math.round(a.score)}%
+                      </span>
+                      <span>{formatDate(a.completed_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

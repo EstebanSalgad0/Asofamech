@@ -23,9 +23,18 @@ import {
   updateAIConfig,
   updateAdminUser,
   updateRagDocument,
+  updateSCTTest,
 } from "../api";
 import { AppSidebar } from "../components/AppSidebar";
-import { API_BASE, authFetch, clearAuthSession, getAuthToken } from "../authClient";
+import {
+  API_BASE,
+  authFetch,
+  canManageAdminSettings,
+  canManageEducationalContent,
+  clearAuthSession,
+  getAuthToken,
+  getStoredRole,
+} from "../authClient";
 import { histopathologyHeaders } from "../histopathologyAccess";
 
 const HEATMAP_EDUCATIONAL_TYPES = [
@@ -92,7 +101,7 @@ const heatmapDecisionLabel = (decision) => {
 export function ConfigPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(() => localStorage.getItem("role") || "Estudiante");
+  const [role, setRole] = useState(() => getStoredRole());
   const [activeTab, setActiveTab] = useState("images");
   const [toast, setToast] = useState(null);
 
@@ -168,10 +177,9 @@ export function ConfigPage() {
     const token = localStorage.getItem("auth_token");
     if (!userData || !token) { clearAuthSession(); navigate("/auth"); return; }
     setUser(JSON.parse(userData));
-    const savedRole = localStorage.getItem("role");
-    if (savedRole) setRole(savedRole);
-    const effectiveRole = savedRole || role;
-    if (effectiveRole !== "Administrador" && effectiveRole !== "Profesor") {
+    const effectiveRole = getStoredRole();
+    setRole(effectiveRole);
+    if (!canManageEducationalContent(effectiveRole)) {
       navigate("/dashboard");
     }
     // Pre-calentar el backend para que la primera petición real sea rápida
@@ -187,16 +195,16 @@ export function ConfigPage() {
       loadRagDocuments();
     } else if (activeTab === "sct") {
       loadSCTTestList();
-    } else if (activeTab === "users" && role === "Administrador") {
+    } else if (activeTab === "users" && canManageAdminSettings(role)) {
       loadAdminUsers();
-    } else if (activeTab === "ai" && role === "Administrador") {
+    } else if (activeTab === "ai" && canManageAdminSettings(role)) {
       loadAIConfig();
       loadIntegrationStatus();
-    } else if (activeTab === "correo" && role === "Administrador") {
+    } else if (activeTab === "correo" && canManageAdminSettings(role)) {
       loadEmailConfig();
       loadEmailTemplates();
     }
-  }, [activeTab]);
+  }, [activeTab, role]);
 
   useEffect(() => {
     const firstDzi = imageLibrary.find((image) => image.has_dzi);
@@ -543,7 +551,7 @@ export function ConfigPage() {
   };
 
   const loadAdminUsers = async (overrides = {}) => {
-    if (role !== "Administrador") return;
+    if (!canManageAdminSettings(role)) return;
     const filters = {
       status: overrides.status !== undefined ? overrides.status : userStatusFilter,
       q: overrides.q !== undefined ? overrides.q : userSearch,
@@ -891,6 +899,17 @@ export function ConfigPage() {
     }
   };
 
+  const handleUpdateSCTStatus = async (testId, status) => {
+    try {
+      await updateSCTTest(testId, { status });
+      setSctTests((prev) => prev.map((t) => t.id === testId ? { ...t, status } : t));
+      const labels = { draft: "borrador", published: "publicado", archived: "archivado" };
+      showToast(`Test marcado como ${labels[status] || status}`, "success");
+    } catch {
+      showToast("Error al cambiar el estado del test", "error");
+    }
+  };
+
   const handleToggleTestDetail = async (testId) => {
     if (expandedTest === testId) { setExpandedTest(null); setExpandedTestData(null); return; }
     setExpandedTest(testId);
@@ -926,10 +945,7 @@ export function ConfigPage() {
     navigate("/");
   };
 
-  const handleRoleChange = (val) => {
-    setRole(val);
-    localStorage.setItem("role", val);
-  };
+  const handleRoleChange = () => setRole(getStoredRole());
 
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + " B";
@@ -1008,12 +1024,12 @@ export function ConfigPage() {
   const visibleTabs = [
     { id: "images", label: "Gestión de imágenes", icon: "IMG" },
     { id: "rag", label: "Documentos RAG", icon: "RAG" },
-    ...(role === "Administrador" ? [
+    { id: "sct", label: "Tests SCT", icon: "SCT" },
+    ...(canManageAdminSettings(role) ? [
       { id: "users", label: "Usuarios", icon: "USR" },
       { id: "ai", label: "Configuración IA", icon: "IA" },
       { id: "correo", label: "Gestión de Correo", icon: "✉" },
     ] : []),
-    { id: "sct", label: "Tests SCT", icon: "SCT" },
   ];
 
   return (
@@ -2335,9 +2351,21 @@ export function ConfigPage() {
                               <button className="cfg-sct-act-btn" type="button" onClick={() => handleToggleTestDetail(test.id)}>
                                 👁 {expandedTest === test.id ? "Ocultar" : "Ver ítems"}
                               </button>
-                              <button className="cfg-sct-act-btn" type="button">
-                                ⎘ Duplicar
-                              </button>
+                              {st !== "published" && (
+                                <button className="cfg-sct-act-btn status-publish" type="button" onClick={() => handleUpdateSCTStatus(test.id, "published")}>
+                                  ✓ Publicar
+                                </button>
+                              )}
+                              {st !== "draft" && (
+                                <button className="cfg-sct-act-btn status-draft" type="button" onClick={() => handleUpdateSCTStatus(test.id, "draft")}>
+                                  ✎ Borrador
+                                </button>
+                              )}
+                              {st !== "archived" && (
+                                <button className="cfg-sct-act-btn status-archive" type="button" onClick={() => handleUpdateSCTStatus(test.id, "archived")}>
+                                  ⬛ Archivar
+                                </button>
+                              )}
                               <button className="cfg-sct-act-btn danger" type="button" onClick={() => handleDeleteSCTTest(test.id, test.name)}>
                                 🗑 Eliminar
                               </button>

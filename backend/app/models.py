@@ -115,6 +115,10 @@ class SCTTest(Base):
     items_json = Column(JSON, nullable=False)           # Array de ítems SCT
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+    status = Column(String(20), nullable=False, default="published")  # draft | published | archived
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    creator = relationship("User", foreign_keys=[created_by])
 
 
 class HeatmapJob(Base):

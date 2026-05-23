@@ -5148,6 +5148,12 @@ a { color: inherit; text-decoration: none; }
 .cfg-sct-act-btn:hover { background: var(--bg-2); border-color: var(--muted); }
 .cfg-sct-act-btn.danger { color: #dc2626; border-color: rgba(220,38,38,0.25); }
 .cfg-sct-act-btn.danger:hover { background: rgba(220,38,38,0.06); border-color: #dc2626; }
+.cfg-sct-act-btn.status-publish { color: var(--accent-deep); border-color: rgba(30,201,154,0.3); }
+.cfg-sct-act-btn.status-publish:hover { background: rgba(30,201,154,0.08); border-color: var(--accent-deep); }
+.cfg-sct-act-btn.status-draft { color: #92400e; border-color: rgba(245,158,11,0.3); }
+.cfg-sct-act-btn.status-draft:hover { background: rgba(245,158,11,0.08); border-color: #d97706; }
+.cfg-sct-act-btn.status-archive { color: var(--muted); border-color: rgba(156,163,175,0.35); }
+.cfg-sct-act-btn.status-archive:hover { background: rgba(156,163,175,0.08); }
 
 /* Footer */
 .cfg-sct-panel-footer { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; border-top: 1.5px solid var(--line); }
@@ -7602,6 +7608,7 @@ a { color: inherit; text-decoration: none; }
 }
 .sct3-lib-badge.draft { background: rgba(245,158,11,0.1); color: #92400e; }
 .sct3-lib-badge.result { background: rgba(30,201,154,0.1); color: var(--accent-deep); }
+.sct3-lib-badge.archived { background: rgba(156,163,175,0.12); color: var(--muted); }
 .sct3-library-tags {
   display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px;
 }
@@ -7616,7 +7623,7 @@ a { color: inherit; text-decoration: none; }
   font-family: 'JetBrains Mono', monospace; margin-bottom: 14px;
 }
 .sct3-library-card-footer {
-  display: flex; justify-content: flex-end;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
 }
 .sct3-open-btn {
   background: none; border: none;
@@ -7625,6 +7632,53 @@ a { color: inherit; text-decoration: none; }
   font-family: inherit; transition: color 0.15s;
 }
 .sct3-open-btn:hover { color: var(--accent-deep); }
+.sct3-card-archived { opacity: 0.55; }
+.sct3-status-btns {
+  display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end;
+}
+.sct3-status-btn {
+  padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line);
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  font-family: inherit; transition: all 0.15s;
+  background: var(--bg-2); color: var(--ink-2);
+}
+.sct3-status-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.sct3-status-btn.publish { border-color: rgba(30,201,154,0.4); color: var(--accent-deep); }
+.sct3-status-btn.publish:hover:not(:disabled) { background: rgba(30,201,154,0.08); }
+.sct3-status-btn.draft { border-color: rgba(245,158,11,0.4); color: #92400e; }
+.sct3-status-btn.draft:hover:not(:disabled) { background: rgba(245,158,11,0.08); }
+.sct3-status-btn.archive { border-color: rgba(156,163,175,0.4); color: var(--muted); }
+.sct3-status-btn.archive:hover:not(:disabled) { background: rgba(156,163,175,0.08); }
+
+/* Attempts table */
+.sct3-attempts-table {
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 16px;
+}
+.sct3-attempts-head {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1fr 0.8fr 0.8fr 1fr;
+  background: var(--bg-2); padding: 10px 16px;
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  font-family: 'JetBrains Mono', monospace; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.sct3-attempts-head-admin {
+  grid-template-columns: 1.5fr 1.5fr 1.2fr 0.8fr 0.8fr 1fr;
+}
+.sct3-attempts-row {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1fr 0.8fr 0.8fr 1fr;
+  padding: 10px 16px; border-top: 1px solid var(--line);
+  font-size: 13px; color: var(--ink-2); align-items: center;
+}
+.sct3-attempts-head-admin ~ .sct3-attempts-row {
+  grid-template-columns: 1.5fr 1.5fr 1.2fr 0.8fr 0.8fr 1fr;
+}
+.sct3-attempts-row:nth-child(even) { background: rgba(0,0,0,0.015); }
+.sct3-att-name { font-weight: 600; color: var(--ink); }
+.sct3-att-score { font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.sct3-att-score.good { color: var(--accent-deep); }
+.sct3-att-score.avg { color: #d97706; }
+.sct3-att-score.low { color: var(--coral); }
 
 /* Test view */
 .sct-test-topbar {
