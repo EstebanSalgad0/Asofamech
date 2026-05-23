@@ -705,14 +705,16 @@ export function SCTPage() {
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
                 <path d="M4 4h12v12H4V4Zm3 4h6M7 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
-              Mis tests
+              {canManage ? "Mis tests" : "Ver tests"}
             </button>
-            <button className="sct3-demo-btn" onClick={handleDemoTest}>
-              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="M10 2l2.4 4.8 5.3.8-3.8 3.7.9 5.2L10 14l-4.8 2.5.9-5.2L2.3 7.6l5.3-.8L10 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-              </svg>
-              Empezar test demo
-            </button>
+            {canManage && (
+              <button className="sct3-demo-btn" onClick={handleDemoTest}>
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M10 2l2.4 4.8 5.3.8-3.8 3.7.9 5.2L10 14l-4.8 2.5.9-5.2L2.3 7.6l5.3-.8L10 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                </svg>
+                Empezar test demo
+              </button>
+            )}
           </div>
         </div>
 
@@ -828,7 +830,8 @@ export function SCTPage() {
             </div>
           </div>
 
-          {/* ── 02 — Config ── */}
+          {/* ── 02 — Config (solo docente/admin) ── */}
+          {canManage && <>
           <div className="sct3-section-head">
             <span className="sct3-section-num">/ 02 — Generador IA</span>
           </div>
@@ -1055,6 +1058,8 @@ export function SCTPage() {
               )}
             </div>
           </div>
+
+          </>}
 
           {/* ── 03 — Saved tests ── */}
           <div ref={savedRef} className="sct3-section-head" style={{ marginTop: 48 }}>
