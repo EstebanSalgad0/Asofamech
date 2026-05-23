@@ -38,6 +38,14 @@ export async function createRagDocument(document) {
   return parseJsonResponse(res, "No se pudo crear el documento RAG");
 }
 
+export async function uploadRagDocument(formData) {
+  const res = await authFetch("/api/rag/documents/upload", {
+    method: "POST",
+    body: formData,
+  });
+  return parseJsonResponse(res, "No se pudo cargar el archivo RAG");
+}
+
 export async function updateRagDocument(documentId, document) {
   const res = await authFetch(`/api/rag/documents/${documentId}`, {
     method: "PUT",
@@ -60,6 +68,12 @@ export async function reindexRagDocument(documentId) {
 export async function reindexAllRagDocuments() {
   const res = await authFetch("/api/rag/reindex", { method: "POST" });
   return parseJsonResponse(res, "No se pudo reindexar el corpus RAG");
+}
+
+export async function searchRagDocuments(query, limit = 4) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const res = await authFetch(`/api/rag/search?${params.toString()}`);
+  return parseJsonResponse(res, "No se pudo buscar en el corpus RAG");
 }
 
 export async function getAIConfig() {

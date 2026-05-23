@@ -4683,6 +4683,15 @@ a { color: inherit; text-decoration: none; }
   text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s;
 }
 .cfg-rag-file-zone:hover { border-color: var(--accent); background: rgba(30,201,154,0.04); }
+.cfg-rag-file-zone input { display: none; }
+.cfg-rag-file-mark {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 800;
+  padding: 5px 8px; border-radius: 6px; color: #2563eb; background: rgba(59,130,246,0.1);
+}
+.cfg-rag-file-title { font-size: 13px; font-weight: 700; color: var(--ink); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfg-rag-file-sub { font-size: 11px; color: var(--muted); }
+
+.cfg-rag-chunk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .cfg-rag-save-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
 .cfg-rag-save-btn {
@@ -4700,6 +4709,14 @@ a { color: inherit; text-decoration: none; }
   font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 999px;
   background: rgba(249,115,22,0.1); color: #ea580c;
 }
+.cfg-rag-search { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
+.cfg-rag-search-results { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.cfg-rag-hit {
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: white;
+}
+.cfg-rag-hit-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 700; color: var(--ink); }
+.cfg-rag-hit-top strong { font-family: 'JetBrains Mono', monospace; color: var(--accent); }
+.cfg-rag-hit-snippet { margin: 6px 0; font-size: 12px; line-height: 1.5; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 
 .cfg-rag-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 24px 16px; gap: 8px; }
 .cfg-rag-empty-icon { font-size: 32px; opacity: 0.25; }
@@ -4719,8 +4736,17 @@ a { color: inherit; text-decoration: none; }
 }
 .cfg-rag-doc-info { flex: 1; min-width: 0; }
 .cfg-rag-doc-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cfg-rag-doc-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.cfg-rag-doc-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
 .cfg-rag-doc-tag { padding: 1px 7px; border-radius: 4px; background: rgba(99,102,241,0.1); color: #4f46e5; font-weight: 600; font-size: 10px; }
+.cfg-rag-status {
+  padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 700;
+  background: rgba(107,114,128,0.1); color: #4b5563;
+}
+.cfg-rag-status.indexed { background: rgba(34,197,94,0.12); color: #15803d; }
+.cfg-rag-status.indexing, .cfg-rag-status.pending { background: rgba(245,158,11,0.14); color: #b45309; }
+.cfg-rag-status.failed { background: rgba(239,68,68,0.12); color: #dc2626; }
+.cfg-rag-doc-source { margin-top: 5px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cfg-rag-doc-error { margin-top: 5px; font-size: 11px; color: #dc2626; }
 
 .cfg-rag-presets { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
 .cfg-rag-presets-label { font-size: 9px; font-weight: 800; letter-spacing: 0.12em; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-bottom: 2px; }

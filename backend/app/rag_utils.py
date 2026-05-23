@@ -26,6 +26,8 @@ class RagHit:
     chunk_id: int | None = None
     chunk_index: int | None = None
     provider: str = "local-hashing"
+    source: str = ""
+    document_type: str = "text"
 
 
 def normalize_text(value: str) -> str:
