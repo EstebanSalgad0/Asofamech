@@ -1,4 +1,9 @@
-export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
+// En Docker el entrypoint inyecta window.__ASOFAMECH_CONFIG__ en runtime.
+// En dev local se usa VITE_API_BASE de .env.local como fallback.
+export const API_BASE =
+  (typeof window !== "undefined" && window.__ASOFAMECH_CONFIG__?.API_BASE) ||
+  import.meta.env.VITE_API_BASE ||
+  "http://localhost:8001";
 
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "user";
@@ -19,6 +24,7 @@ export function getStoredUser() {
 }
 
 const _ROLE_DISPLAY = { administrador: "Administrador", docente: "Profesor", estudiante: "Estudiante" };
+const _ROLE_NORMALIZED = { administrador: "administrador", admin: "administrador", administrator: "administrador", profesor: "docente", profesora: "docente", docente: "docente", teacher: "docente", estudiante: "estudiante", student: "estudiante" };
 
 function _getRoleFromToken() {
   const token = getAuthToken();
@@ -35,6 +41,30 @@ function _getRoleFromToken() {
 
 export function getStoredRole() {
   return _getRoleFromToken() || getStoredUser()?.role_label || localStorage.getItem(ROLE_KEY) || "Estudiante";
+}
+
+export function normalizeRole(role) {
+  const value = String(role || "").trim().toLowerCase();
+  return _ROLE_NORMALIZED[value] || "estudiante";
+}
+
+export function hasAnyRole(role, allowedRoles) {
+  const normalized = normalizeRole(role);
+  return allowedRoles.map(normalizeRole).includes(normalized);
+}
+
+export function canManageEducationalContent(role = getStoredRole()) {
+  return hasAnyRole(role, ["docente", "administrador"]);
+}
+
+export function canManageAdminSettings(role = getStoredRole()) {
+  return hasAnyRole(role, ["administrador"]);
+}
+
+export function authErrorMessage(status, fallback = "No se pudo completar la accion") {
+  if (status === 401) return "Sesion expirada o no autenticada. Vuelve a iniciar sesion.";
+  if (status === 403) return "No tienes permisos para realizar esta accion.";
+  return fallback;
 }
 
 export function getUserStorageScope(user = getStoredUser()) {

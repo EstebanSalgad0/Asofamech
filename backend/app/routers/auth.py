@@ -20,9 +20,21 @@ from ..models import User
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+# --- Rate limiting: login por IP+email ---
 FAILED_LOGIN_ATTEMPTS: dict[str, list[float]] = {}
-LOGIN_WINDOW_SECONDS = 10 * 60
-LOGIN_MAX_ATTEMPTS = 6
+LOGIN_WINDOW_SECONDS = 10 * 60   # ventana de 10 minutos
+LOGIN_MAX_ATTEMPTS = 6            # 6 fallos por IP+email
+
+# --- Rate limiting: login por IP (previene enumeración masiva de cuentas) ---
+IP_LOGIN_ATTEMPTS: dict[str, list[float]] = {}
+IP_LOGIN_WINDOW_SECONDS = 60 * 60  # ventana de 1 hora
+IP_LOGIN_MAX_ATTEMPTS = 30         # 30 intentos fallidos por IP en total
+
+# --- Rate limiting: registro por IP ---
+IP_REGISTER_ATTEMPTS: dict[str, list[float]] = {}
+REGISTER_WINDOW_SECONDS = 60 * 60  # ventana de 1 hora
+REGISTER_MAX_ATTEMPTS = 5          # 5 registros por IP por hora
 
 
 class AuthLoginRequest(BaseModel):
@@ -52,24 +64,35 @@ def _validate_password_strength(password: str) -> None:
         )
 
 
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
 def _attempt_key(request: Request, email: str) -> str:
-    client = request.client.host if request.client else "unknown"
-    return f"{client}:{email}"
+    return f"{_client_ip(request)}:{email}"
 
 
-def _prune_attempts(key: str, now: float) -> list[float]:
-    attempts = [
-        timestamp
-        for timestamp in FAILED_LOGIN_ATTEMPTS.get(key, [])
-        if now - timestamp <= LOGIN_WINDOW_SECONDS
-    ]
-    FAILED_LOGIN_ATTEMPTS[key] = attempts
-    return attempts
+def _prune(store: dict, key: str, window: float, now: float) -> list[float]:
+    pruned = [t for t in store.get(key, []) if now - t <= window]
+    store[key] = pruned
+    return pruned
 
+
+# ── Login por IP+email ────────────────────────────────────────────────────
 
 def _assert_login_not_limited(request: Request, email: str) -> None:
+    now = time.time()
+    ip = _client_ip(request)
+
+    ip_attempts = _prune(IP_LOGIN_ATTEMPTS, ip, IP_LOGIN_WINDOW_SECONDS, now)
+    if len(ip_attempts) >= IP_LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiados intentos desde esta direccion. Intenta nuevamente mas tarde.",
+        )
+
     key = _attempt_key(request, email)
-    attempts = _prune_attempts(key, time.time())
+    attempts = _prune(FAILED_LOGIN_ATTEMPTS, key, LOGIN_WINDOW_SECONDS, now)
     if len(attempts) >= LOGIN_MAX_ATTEMPTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -78,14 +101,41 @@ def _assert_login_not_limited(request: Request, email: str) -> None:
 
 
 def _record_failed_login(request: Request, email: str) -> None:
+    now = time.time()
+    ip = _client_ip(request)
+    ip_attempts = _prune(IP_LOGIN_ATTEMPTS, ip, IP_LOGIN_WINDOW_SECONDS, now)
+    ip_attempts.append(now)
+    IP_LOGIN_ATTEMPTS[ip] = ip_attempts
+
     key = _attempt_key(request, email)
-    attempts = _prune_attempts(key, time.time())
-    attempts.append(time.time())
+    attempts = _prune(FAILED_LOGIN_ATTEMPTS, key, LOGIN_WINDOW_SECONDS, now)
+    attempts.append(now)
     FAILED_LOGIN_ATTEMPTS[key] = attempts
 
 
 def _clear_failed_login(request: Request, email: str) -> None:
     FAILED_LOGIN_ATTEMPTS.pop(_attempt_key(request, email), None)
+
+
+# ── Registro por IP ───────────────────────────────────────────────────────
+
+def _assert_register_not_limited(request: Request) -> None:
+    ip = _client_ip(request)
+    now = time.time()
+    attempts = _prune(IP_REGISTER_ATTEMPTS, ip, REGISTER_WINDOW_SECONDS, now)
+    if len(attempts) >= REGISTER_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiadas solicitudes de registro desde esta direccion. Intenta mas tarde.",
+        )
+
+
+def _record_register_attempt(request: Request) -> None:
+    ip = _client_ip(request)
+    now = time.time()
+    attempts = _prune(IP_REGISTER_ATTEMPTS, ip, REGISTER_WINDOW_SECONDS, now)
+    attempts.append(now)
+    IP_REGISTER_ATTEMPTS[ip] = attempts
 
 
 def _issue_session(user: User) -> dict:
@@ -106,7 +156,8 @@ def _issue_session(user: User) -> dict:
 
 
 @router.post("/register")
-def register(payload: AuthRegisterRequest, db: Session = Depends(get_db)):
+def register(payload: AuthRegisterRequest, request: Request, db: Session = Depends(get_db)):
+    _assert_register_not_limited(request)
     email = _validate_email(payload.email)
     _validate_password_strength(payload.password)
     existing = db.query(User).filter(User.email == email).first()
@@ -144,6 +195,7 @@ def register(payload: AuthRegisterRequest, db: Session = Depends(get_db)):
         )
         db.add(user)
 
+    _record_register_attempt(request)
     db.commit()
     db.refresh(user)
     if bootstrap_first_user:

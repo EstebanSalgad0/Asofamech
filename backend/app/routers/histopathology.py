@@ -54,7 +54,12 @@ from ..histopathology.schemas import (
     ROIBox,
 )
 from ..models import HistopathologyCorrection, HistopathologySession, MedicalImage
-from ..auth import get_current_user
+from ..auth import (
+    PERM_MANAGE_EDUCATIONAL_CONTENT,
+    PERM_REVIEW_STUDENTS,
+    get_current_user,
+    user_has_permission,
+)
 from .chat import LLM_MODEL, OLLAMA_URL
 from .rag import build_rag_context, retrieve_rag_hits
 
@@ -278,7 +283,7 @@ def _decision_from_prediction(raw_prediction: dict, confidence_threshold: float)
 
 
 def _require_heatmap_manager(current_user) -> None:
-    if getattr(current_user, "role", None) not in {"docente", "administrador"}:
+    if not user_has_permission(current_user, PERM_MANAGE_EDUCATIONAL_CONTENT):
         raise HTTPException(
             status_code=403,
             detail="Solo docentes y administradores pueden modificar mapas educativos.",
@@ -286,7 +291,7 @@ def _require_heatmap_manager(current_user) -> None:
 
 
 def _require_docente_or_admin(current_user) -> None:
-    if getattr(current_user, "role", None) not in {"docente", "administrador"}:
+    if not user_has_permission(current_user, PERM_REVIEW_STUDENTS):
         raise HTTPException(
             status_code=403,
             detail="Solo docentes y administradores pueden realizar esta accion.",
