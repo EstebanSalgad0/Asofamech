@@ -54,6 +54,7 @@ class SCTSaveRequest(BaseModel):
     focus: str
     num_items: int
     items: List[SCTItem]
+    status: str = "published"  # draft | published | archived
 
 class SCTTestOut(BaseModel):
     id: int
@@ -62,7 +63,9 @@ class SCTTestOut(BaseModel):
     focus: str
     num_items: int
     created_at: str
-    
+    status: str = "published"
+    created_by: Optional[int] = None
+
     class Config:
         orm_mode = True
 
@@ -74,9 +77,15 @@ class SCTTestDetail(BaseModel):
     num_items: int
     items: List[SCTItem]
     created_at: str
+    status: str = "published"
 
     class Config:
         orm_mode = True
+
+class SCTTestUpdate(BaseModel):
+    name: Optional[str] = None
+    status: Optional[str] = None   # draft | published | archived
+    focus: Optional[str] = None
 
 
 class SCTAnswerItem(BaseModel):
@@ -102,8 +111,21 @@ class SCTAttemptOut(BaseModel):
         orm_mode = True
 
 
+class SCTAttemptWithTest(SCTAttemptOut):
+    """SCTAttemptOut enriquecido con metadatos del test para vistas de historial."""
+    test_name: str = ""
+    test_focus: str = ""
+    test_difficulty: str = ""
+
+
 class SCTAttemptDetail(SCTAttemptOut):
     answers_json: List[dict]
     test_name: str
     test_focus: str
     test_difficulty: str
+
+
+class SCTAttemptAdminOut(SCTAttemptWithTest):
+    """Para docente/admin: incluye identidad del estudiante."""
+    user_email: str = ""
+    user_name: str = ""

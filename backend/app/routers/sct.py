@@ -2,21 +2,28 @@ from fastapi import APIRouter, HTTPException, Depends
 import httpx
 import json
 import os
-from typing import List
-from sqlalchemy.orm import Session
+from typing import List, Optional
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
 from ..schemas import (
     SCTGenerateRequest, SCTResponse, SCTItem, SCTSaveRequest, SCTTestOut, SCTTestDetail,
-    SCTAnswerItem, SCTAttemptCreate, SCTAttemptOut, SCTAttemptDetail,
+    SCTTestUpdate, SCTAnswerItem, SCTAttemptCreate, SCTAttemptOut,
+    SCTAttemptWithTest, SCTAttemptDetail, SCTAttemptAdminOut,
 )
-from ..models import SCTTest, SCTAttempt
+from ..models import SCTTest, SCTAttempt, User
 from ..db import get_db
-from ..auth import get_current_user, require_roles
-from ..models import User
+from ..auth import (
+    PERM_MANAGE_SCT, PERM_REVIEW_STUDENTS,
+    get_current_user, require_permission, user_has_permission,
+)
 
 router = APIRouter(prefix="/api/sct", tags=["SCT"])
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
+
+VALID_STATUSES = {"draft", "published", "archived"}
+
+
 def is_sct_answer_correct(correct_answer: int, selected_answer: int) -> bool:
     try:
         return int(correct_answer) == int(selected_answer)
@@ -44,6 +51,20 @@ def calculate_sct_attempt_score(items_json: list[dict], answers: list[SCTAnswerI
     total = len(items_json or [])
     score = round(correct_count / total, 4) if total > 0 else 0.0
     return correct_count, total, score
+
+
+def _test_to_out(test: SCTTest) -> SCTTestOut:
+    return SCTTestOut(
+        id=test.id,
+        name=test.name,
+        difficulty=test.difficulty,
+        focus=test.focus,
+        num_items=test.num_items,
+        created_at=test.created_at.isoformat(),
+        status=test.status,
+        created_by=test.created_by,
+    )
+
 
 # Plantilla de prompt genérica para generar ítems SCT sobre cualquier tema médico
 SCT_SYSTEM_PROMPT = """Eres un experto en educación médica con amplio conocimiento en todas las especialidades clínicas.
@@ -90,21 +111,11 @@ Si dificultad = "residente":
   * **Historia de enfermedad actual EXTREMADAMENTE DETALLADA**: evolución temporal precisa (ej: "inicia hace 3 semanas con..., que progresa a..., agravándose en los últimos 5 días con..."), cronología de síntomas, factores agravantes y atenuantes
   * **Síntomas múltiples y específicos (MÍNIMO 7-8 síntomas)**: con características SEMIOLÓGICAS detalladas (localización, irradiación, calidad, intensidad en escala 1-10, duración, frecuencia, factores modificadores)
   * **Signos vitales COMPLETOS con valores numéricos PRECISOS**: FC (lpm), FR (rpm), PA (mmHg - sistólica/diastólica), Temperatura (°C), SatO2 (%), IMC si relevante
-  * **Examen físico EXHAUSTIVO por sistemas** con múltiples hallazgos positivos Y negativos relevantes: aspecto general, piel y mucosas, sistema cardiovascular, respiratorio (inspección, palpación, percusión, auscultación con localizaciones específicas), abdominal, neurológico, extremidades
-  * **Resultados de laboratorio MUY COMPLETOS con valores numéricos ESPECÍFICOS**:
-    - Hemograma completo: Hb (g/dL), Hto (%), leucocitos totales (/mm³) con diferencial completo (neutrófilos, linfocitos, monocitos, eosinófilos, basófilos en porcentaje y absolutos), plaquetas (/mm³)
-    - Química sanguínea: glucosa (mg/dL), creatinina (mg/dL), BUN (mg/dL), electrolitos (Na, K, Cl, Ca en mEq/L o mg/dL), ácido úrico
-    - Función hepática: AST (U/L), ALT (U/L), bilirrubina total y directa (mg/dL), fosfatasa alcalina (U/L), albúmina (g/dL), tiempo de protrombina (segundos, INR)
-    - Marcadores inflamatorios: PCR (mg/L), VSG (mm/h), procalcitonina si relevante
-    - Perfil lipídico si relevante: colesterol total, HDL, LDL, triglicéridos
-    - Otros según patología: gases arteriales completos (pH, pO2, pCO2, HCO3, SatO2), lactato, pruebas de función tiroidea, marcadores tumorales, serologías específicas
-  * **Resultados de imágenes MUY DETALLADOS** con hallazgos específicos y localizaciones anatómicas precisas:
-    - Radiografías: describir campos pulmonares, silueta cardiovascular, diafragmas, ángulos costofrénicos, lesiones con localizaciones (lóbulos, segmentos), tamaños en cm
-    - TC: describir hallazgos por cortes, densidades en unidades Hounsfield si relevante, extensión de lesiones, compromiso de estructuras, presencia/ausencia de contraste
-    - Ecografías: dimensiones de órganos, presencia de colecciones con volumen, características de masas
-  * **Estudios especializados si son pertinentes**: ECG con interpretación completa (ritmo, frecuencia, eje, intervalos, ondas, segmentos), espirometría con valores (FEV1, FVC, FEV1/FVC), ecocardiograma con fracción de eyección
-- **Hipótesis clínicas MUY COMPLEJAS**: deben involucrar complicaciones GRAVES (ej: insuficiencia respiratoria aguda, shock séptico, SDRA, coagulación intravascular diseminada), diagnósticos POCO FRECUENTES o atípicos, co-infecciones múltiples, reacciones adversas graves a medicamentos, resistencia antimicrobiana, enfermedades sistémicas
-- **Nueva información ALTAMENTE ESPECIALIZADA**: resultados de biopsias con histopatología detallada, cultivos especiales con antibiogramas, estudios inmunológicos complejos (complemento, anticuerpos específicos), evolución del paciente con deterioro progresivo o mejoría inesperada, respuesta paradójica a tratamiento, aparición de complicaciones nuevas con datos clínicos y paraclínicos adicionales
+  * **Examen físico EXHAUSTIVO por sistemas** con múltiples hallazgos positivos Y negativos relevantes
+  * **Resultados de laboratorio MUY COMPLETOS con valores numéricos ESPECÍFICOS**
+  * **Resultados de imágenes MUY DETALLADOS** con hallazgos específicos y localizaciones anatómicas precisas
+- **Hipótesis clínicas MUY COMPLEJAS**: complicaciones GRAVES, diagnósticos POCO FRECUENTES o atípicos
+- **Nueva información ALTAMENTE ESPECIALIZADA**: biopsias, cultivos especiales, estudios inmunológicos
 
 **CONTEXTO ESPECÍFICO**:
 - Tema médico: {focus}
@@ -116,13 +127,11 @@ Si dificultad = "residente":
 - NO incluyas casos de otras enfermedades o patologías
 - Todos los casos deben estar directamente relacionados con: {focus}
 - RESPETA ESTRICTAMENTE la longitud mínima de palabras según la dificultad
-- Para nivel RESIDENTE: casos DEBEN ser extensos y muy detallados con datos numéricos específicos
 - Usa terminología médica apropiada para {focus}
 - Sé preciso y basado en evidencia médica actualizada
 - **TODOS LOS CASOS DEBEN ESTAR COMPLETAMENTE EN ESPAÑOL - OBLIGATORIO**
 - **NUNCA GENERES TEXTO EN INGLÉS - TODO DEBE SER EN ESPAÑOL**
-- **NO incluyas orientación sexual del paciente (heterosexual, homosexual, lesbiana, bisexual, asexual, etc.) a menos que sea ABSOLUTAMENTE INDISPENSABLE para el razonamiento clínico del caso**
-- Enfócate en datos clínicamente relevantes: edad, género (solo si es pertinente), antecedentes médicos, medicación, síntomas, signos vitales, laboratorios, imágenes
+- **NO incluyas orientación sexual del paciente a menos que sea ABSOLUTAMENTE INDISPENSABLE para el razonamiento clínico**
 - La respuesta debe ser ÚNICAMENTE un JSON válido sin texto adicional
 
 **Formato de salida** (JSON estricto):
@@ -143,68 +152,48 @@ Si dificultad = "residente":
 
 Genera ahora {num_items} ítems SCT EXCLUSIVAMENTE sobre {focus} con nivel de dificultad {difficulty}."""
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Generación (IA)
+# ──────────────────────────────────────────────────────────────────────────────
+
 @router.post("/generate", response_model=SCTResponse)
 async def generate_sct_items(
     request: SCTGenerateRequest,
     _current_user: User = Depends(get_current_user),
 ):
-    """
-    Genera ítems de Script Concordance Test sobre tuberculosis usando LLaMA 3.
-    
-    - **num_items**: Cantidad de ítems a generar (default: 5)
-    - **difficulty**: Nivel de dificultad (pregrado, internado, residente)
-    - **focus**: Tema específico (default: "tuberculosis pulmonar")
-    """
-    print(f"[SCT] Recibida petición: num_items={request.num_items}, difficulty={request.difficulty}, focus={request.focus}")
+    """Genera ítems SCT via Ollama/LLaMA. Cualquier usuario autenticado puede generar."""
     try:
-        # Construir el prompt con los parámetros
         prompt = SCT_SYSTEM_PROMPT.format(
             num_items=request.num_items,
             difficulty=request.difficulty.value,
             focus=request.focus
         )
-        
-        # Preparar la petición a Ollama usando /api/chat
-        # Para nivel residente, usar parámetros que permitan mayor complejidad
         ollama_payload = {
             "model": "llama3:8b",
-            "messages": [
-                {"role": "system", "content": prompt}
-            ],
+            "messages": [{"role": "system", "content": prompt}],
             "stream": False,
-            "temperature": 0.8,  # Mayor creatividad para casos complejos
-            "top_p": 0.95,  # Permitir mayor diversidad en respuestas
-            "num_predict": 4096,  # Permitir respuestas más largas
+            "temperature": 0.8,
+            "top_p": 0.95,
+            "num_predict": 4096,
             "format": "json"
         }
-        
-        # Llamar a Ollama con timeout extendido (5 minutos para casos complejos)
         async with httpx.AsyncClient(timeout=300.0) as client:
-            response = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json=ollama_payload
-            )
+            response = await client.post(f"{OLLAMA_URL}/api/chat", json=ollama_payload)
             response.raise_for_status()
             data = response.json()
-        
-        # Extraer la respuesta del modelo
+
         llama_response = data.get("message", {}).get("content", "")
-        
         if not llama_response:
             raise HTTPException(status_code=500, detail="LLaMA 3 no generó respuesta")
-        
-        # Parsear el JSON generado por LLaMA
+
         try:
             sct_data = json.loads(llama_response)
             items_data = sct_data.get("items", [])
-            
             if not items_data:
                 raise ValueError("No se generaron ítems")
-            
-            # Validar y construir los ítems SCT
-            items = []
-            for idx, item in enumerate(items_data[:request.num_items], 1):
-                sct_item = SCTItem(
+            items = [
+                SCTItem(
                     id=idx,
                     vignette=item.get("vignette", ""),
                     hypothesis=item.get("hypothesis", ""),
@@ -212,43 +201,28 @@ async def generate_sct_items(
                     correct_answer=item.get("correct_answer", 0),
                     explanation=item.get("explanation", "")
                 )
-                items.append(sct_item)
-            
-            # Construir respuesta
+                for idx, item in enumerate(items_data[:request.num_items], 1)
+            ]
             return SCTResponse(
-                items=items,
-                total=len(items),
-                difficulty=request.difficulty.value,
-                focus=request.focus
+                items=items, total=len(items),
+                difficulty=request.difficulty.value, focus=request.focus
             )
-            
         except json.JSONDecodeError as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error al parsear respuesta de LLaMA 3: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Error al parsear respuesta de LLaMA 3: {e}")
         except ValueError as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error en la estructura de datos: {str(e)}"
-            )
-            
+            raise HTTPException(status_code=500, detail=f"Error en la estructura de datos: {e}")
+
     except httpx.HTTPError as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Error al conectar con Ollama: {str(e)}"
-        )
+        raise HTTPException(status_code=503, detail=f"Error al conectar con Ollama: {e}")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error interno: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error interno: {e}")
+
 
 @router.get("/example", response_model=SCTResponse)
-async def get_example_sct():
-    """
-    Devuelve un ejemplo estático de ítem SCT para pruebas.
-    """
+async def get_example_sct(_current_user: User = Depends(get_current_user)):
+    """Devuelve un ejemplo estático de ítem SCT para pruebas."""
     example_items = [
         SCTItem(
             id=1,
@@ -256,7 +230,7 @@ async def get_example_sct():
             hypothesis="Tuberculosis pulmonar activa",
             new_info="El resultado de la baciloscopía (BAAR) en esputo es positivo (3+).",
             correct_answer=2,
-            explanation="Una baciloscopía positiva (3+) en el contexto clínico descrito confirma prácticamente el diagnóstico de tuberculosis pulmonar activa. Los síntomas constitucionales más el contacto epidemiológico ya hacían sospechar TB, y la baciloscopía positiva apoya fuertemente esta hipótesis."
+            explanation="Una baciloscopía positiva (3+) en el contexto clínico descrito confirma prácticamente el diagnóstico de tuberculosis pulmonar activa."
         ),
         SCTItem(
             id=2,
@@ -264,130 +238,90 @@ async def get_example_sct():
             hypothesis="Realizar cultivo de micobacterias",
             new_info="La radiografía de tórax muestra infiltrado en lóbulo superior derecho sin cavitaciones.",
             correct_answer=1,
-            explanation="Aunque no hay cavitaciones (que serían más específicas), el infiltrado en lóbulo superior junto con los síntomas y factores de riesgo (diabetes) hacen más probable la TB. El cultivo de micobacterias es apropiado para confirmar el diagnóstico y realizar pruebas de sensibilidad, por lo que esta nueva información hace más probable que deba realizarse."
+            explanation="Aunque no hay cavitaciones, el infiltrado en lóbulo superior junto con los síntomas y factores de riesgo hacen más probable la TB. El cultivo de micobacterias es apropiado para confirmar el diagnóstico."
         )
     ]
-    
     return SCTResponse(
-        items=example_items,
-        total=len(example_items),
-        difficulty="pregrado",
-        focus="tuberculosis pulmonar - ejemplo estático"
+        items=example_items, total=len(example_items),
+        difficulty="pregrado", focus="tuberculosis pulmonar - ejemplo estático"
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Gestión del banco de actividades (PERM_MANAGE_SCT)
+# ──────────────────────────────────────────────────────────────────────────────
 
 @router.post("/save", response_model=SCTTestOut)
 async def save_sct_test(
     request: SCTSaveRequest,
     db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(PERM_MANAGE_SCT)),
 ):
     """
-    Guarda un test SCT generado en la base de datos.
-    
-    - **name**: Nombre identificador del test
-    - **difficulty**: Nivel de dificultad
-    - **focus**: Enfoque médico del test
-    - **num_items**: Cantidad de ítems
-    - **items**: Lista de ítems SCT
+    Guarda un test SCT en el banco de actividades.
+    Requiere rol docente o administrador (PERM_MANAGE_SCT).
     """
+    if request.status not in VALID_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Estado inválido. Use: {VALID_STATUSES}")
     try:
-        # Convertir items a dict para JSON
         items_dict = [item.dict() for item in request.items]
-        
-        # Crear registro en BD
         sct_test = SCTTest(
             name=request.name,
             difficulty=request.difficulty,
             focus=request.focus,
             num_items=request.num_items,
             items_json=items_dict,
-            created_at=datetime.utcnow()
+            status=request.status,
+            created_by=current_user.id,
+            created_at=datetime.utcnow(),
         )
-        
         db.add(sct_test)
         db.commit()
         db.refresh(sct_test)
-        
-        return SCTTestOut(
-            id=sct_test.id,
-            name=sct_test.name,
-            difficulty=sct_test.difficulty,
-            focus=sct_test.focus,
-            num_items=sct_test.num_items,
-            created_at=sct_test.created_at.isoformat()
-        )
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al guardar test SCT: {str(e)}"
-        )
-
-@router.get("/list", response_model=List[SCTTestOut])
-async def list_sct_tests(
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
-):
-    """
-    Lista todos los tests SCT guardados.
-    """
-    try:
-        tests = db.query(SCTTest).filter(SCTTest.is_active == True).order_by(SCTTest.created_at.desc()).all()
-        
-        return [
-            SCTTestOut(
-                id=test.id,
-                name=test.name,
-                difficulty=test.difficulty,
-                focus=test.focus,
-                num_items=test.num_items,
-                created_at=test.created_at.isoformat()
-            )
-            for test in tests
-        ]
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al listar tests SCT: {str(e)}"
-        )
-
-@router.delete("/{test_id}")
-async def delete_sct_test(
-    test_id: int,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(require_roles("docente", "administrador")),
-):
-    """
-    Elimina (soft-delete) un test SCT por ID.
-    """
-    try:
-        test = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True).first()
-        if not test:
-            raise HTTPException(status_code=404, detail="Test SCT no encontrado")
-        
-        test.is_active = False
-        db.commit()
-        return {"message": f"Test SCT '{test.name}' eliminado exitosamente", "id": test_id}
+        return _test_to_out(sct_test)
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al eliminar test SCT: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al guardar test SCT: {e}")
 
-@router.get("/my-attempts", response_model=List[SCTAttemptOut])
-async def list_my_attempts(
+
+@router.get("/list", response_model=List[SCTTestOut])
+async def list_sct_tests(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Lista tests SCT del banco de actividades.
+    - Estudiantes: solo tests publicados (status='published').
+    - Docentes / Administradores: todos los tests activos (draft, published, archived).
+    """
+    query = db.query(SCTTest).filter(SCTTest.is_active == True)
+    if not user_has_permission(current_user, PERM_MANAGE_SCT):
+        query = query.filter(SCTTest.status == "published")
+    tests = query.order_by(SCTTest.created_at.desc()).all()
+    return [_test_to_out(t) for t in tests]
+
+
+@router.get("/admin/attempts", response_model=List[SCTAttemptAdminOut])
+async def list_all_attempts(
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(require_permission(PERM_REVIEW_STUDENTS)),
+):
+    """
+    Lista todos los intentos de todos los estudiantes.
+    Solo docentes y administradores.
+    """
     attempts = (
         db.query(SCTAttempt)
-        .filter(SCTAttempt.user_id == current_user.id)
+        .options(joinedload(SCTAttempt.test), joinedload(SCTAttempt.user))
         .order_by(SCTAttempt.completed_at.desc())
+        .limit(300)
         .all()
     )
-    return [
-        SCTAttemptOut(
+    result = []
+    for a in attempts:
+        result.append(SCTAttemptAdminOut(
             id=a.id,
             test_id=a.test_id,
             user_id=a.user_id,
@@ -395,6 +329,40 @@ async def list_my_attempts(
             correct_count=a.correct_count,
             total_items=a.total_items,
             completed_at=a.completed_at.isoformat(),
+            test_name=a.test.name if a.test else "",
+            test_focus=a.test.focus if a.test else "",
+            test_difficulty=a.test.difficulty if a.test else "",
+            user_email=a.user.email if a.user else "",
+            user_name=a.user.name if a.user else "",
+        ))
+    return result
+
+
+@router.get("/my-attempts", response_model=List[SCTAttemptWithTest])
+async def list_my_attempts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Historial de intentos del usuario autenticado, enriquecido con datos del test."""
+    attempts = (
+        db.query(SCTAttempt)
+        .options(joinedload(SCTAttempt.test))
+        .filter(SCTAttempt.user_id == current_user.id)
+        .order_by(SCTAttempt.completed_at.desc())
+        .all()
+    )
+    return [
+        SCTAttemptWithTest(
+            id=a.id,
+            test_id=a.test_id,
+            user_id=a.user_id,
+            score=a.score,
+            correct_count=a.correct_count,
+            total_items=a.total_items,
+            completed_at=a.completed_at.isoformat(),
+            test_name=a.test.name if a.test else "",
+            test_focus=a.test.focus if a.test else "",
+            test_difficulty=a.test.difficulty if a.test else "",
         )
         for a in attempts
     ]
@@ -406,10 +374,11 @@ async def get_attempt(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Detalle de un intento. El propietario o un docente/admin pueden verlo."""
     attempt = db.query(SCTAttempt).filter(SCTAttempt.id == attempt_id).first()
     if not attempt:
         raise HTTPException(status_code=404, detail="Intento no encontrado")
-    if attempt.user_id != current_user.id and current_user.role not in {"administrador", "docente"}:
+    if attempt.user_id != current_user.id and not user_has_permission(current_user, PERM_REVIEW_STUDENTS):
         raise HTTPException(status_code=403, detail="Sin acceso a este intento")
     test = db.query(SCTTest).filter(SCTTest.id == attempt.test_id).first()
     return SCTAttemptDetail(
@@ -427,6 +396,10 @@ async def get_attempt(
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Resolución por estudiante
+# ──────────────────────────────────────────────────────────────────────────────
+
 @router.post("/{test_id}/attempt", response_model=SCTAttemptOut)
 async def submit_sct_attempt(
     test_id: int,
@@ -434,9 +407,17 @@ async def submit_sct_attempt(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    test = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True).first()
+    """
+    Registra un intento de resolución.
+    El test debe estar publicado para que estudiantes puedan intentarlo.
+    Docentes y administradores pueden intentar cualquier test activo.
+    """
+    query = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True)
+    if not user_has_permission(current_user, PERM_MANAGE_SCT):
+        query = query.filter(SCTTest.status == "published")
+    test = query.first()
     if not test:
-        raise HTTPException(status_code=404, detail="Test SCT no encontrado")
+        raise HTTPException(status_code=404, detail="Test SCT no encontrado o no publicado")
 
     correct_count, total, score = calculate_sct_attempt_score(test.items_json, request.answers)
 
@@ -463,7 +444,7 @@ async def submit_sct_attempt(
         db.refresh(attempt)
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al guardar intento: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al guardar intento: {e}")
 
     return SCTAttemptOut(
         id=attempt.id,
@@ -476,36 +457,81 @@ async def submit_sct_attempt(
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Edición y acceso individual (PERM_MANAGE_SCT)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.patch("/{test_id}", response_model=SCTTestOut)
+async def update_sct_test(
+    test_id: int,
+    request: SCTTestUpdate,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(require_permission(PERM_MANAGE_SCT)),
+):
+    """
+    Actualiza nombre, estado o foco de un test SCT.
+    Permite publicar (published), guardar como borrador (draft) o archivar (archived).
+    """
+    test = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test SCT no encontrado")
+    if request.name is not None:
+        test.name = request.name.strip()
+    if request.status is not None:
+        if request.status not in VALID_STATUSES:
+            raise HTTPException(status_code=422, detail=f"Estado inválido. Use: {VALID_STATUSES}")
+        test.status = request.status
+    if request.focus is not None:
+        test.focus = request.focus.strip()
+    try:
+        db.commit()
+        db.refresh(test)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al actualizar test: {e}")
+    return _test_to_out(test)
+
+
+@router.delete("/{test_id}")
+async def delete_sct_test(
+    test_id: int,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(require_permission(PERM_MANAGE_SCT)),
+):
+    """Soft-delete de un test SCT. Requiere PERM_MANAGE_SCT."""
+    test = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test SCT no encontrado")
+    test.is_active = False
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al eliminar test: {e}")
+    return {"message": f"Test SCT '{test.name}' eliminado", "id": test_id}
+
+
 @router.get("/{test_id}", response_model=SCTTestDetail)
 async def get_sct_test(
     test_id: int,
     db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Obtiene un test SCT específico por ID.
-    """
-    try:
-        test = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True).first()
-
-        if not test:
-            raise HTTPException(status_code=404, detail="Test SCT no encontrado")
-
-        items = [SCTItem(**item) for item in test.items_json]
-
-        return SCTTestDetail(
-            id=test.id,
-            name=test.name,
-            difficulty=test.difficulty,
-            focus=test.focus,
-            num_items=test.num_items,
-            items=items,
-            created_at=test.created_at.isoformat()
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al obtener test SCT: {str(e)}"
-        )
+    """Obtiene un test SCT por ID. Estudiantes solo pueden ver tests publicados."""
+    query = db.query(SCTTest).filter(SCTTest.id == test_id, SCTTest.is_active == True)
+    if not user_has_permission(current_user, PERM_MANAGE_SCT):
+        query = query.filter(SCTTest.status == "published")
+    test = query.first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test SCT no encontrado o no publicado")
+    items = [SCTItem(**item) for item in test.items_json]
+    return SCTTestDetail(
+        id=test.id,
+        name=test.name,
+        difficulty=test.difficulty,
+        focus=test.focus,
+        num_items=test.num_items,
+        items=items,
+        created_at=test.created_at.isoformat(),
+        status=test.status,
+    )

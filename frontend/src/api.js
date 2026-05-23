@@ -1,6 +1,4 @@
-import { authFetch } from "./authClient";
-
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
+import { authErrorMessage, authFetch } from "./authClient";
 
 export async function sendChatMessage(text) {
   const res = await authFetch("/api/chat", {
@@ -10,7 +8,7 @@ export async function sendChatMessage(text) {
   });
 
   if (!res.ok) {
-    throw new Error(`Error API: ${res.status}`);
+    throw new Error(authErrorMessage(res.status, `Error API: ${res.status}`));
   }
 
   return res.json(); // { messages: [...] } desde FastAPI → Ollama
@@ -19,7 +17,7 @@ export async function sendChatMessage(text) {
 async function parseJsonResponse(res, fallback) {
   const payload = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new Error(payload?.detail || fallback || `Error API: ${res.status}`);
+    throw new Error(payload?.detail || authErrorMessage(res.status, fallback || `Error API: ${res.status}`));
   }
   return payload;
 }
@@ -177,10 +175,10 @@ export async function generateSCT(numItems = 5, difficulty = "pregrado", focus =
 }
 
 export async function getExampleSCT() {
-  const res = await fetch(`${API_BASE}/api/sct/example`);
+  const res = await authFetch("/api/sct/example");
   
   if (!res.ok) {
-    throw new Error(`Error API SCT Example: ${res.status}`);
+    throw new Error(authErrorMessage(res.status, `Error API SCT Example: ${res.status}`));
   }
 
   return res.json();
@@ -246,4 +244,23 @@ export async function submitSCTAttempt(testId, answers, startedAt = null) {
   });
   if (!res.ok) throw new Error(`Error SCT Attempt: ${res.status}`);
   return res.json();
+}
+
+export async function listMyAttempts() {
+  const res = await authFetch("/api/sct/my-attempts");
+  return parseJsonResponse(res, "No se pudo cargar el historial de intentos");
+}
+
+export async function listAllAttempts() {
+  const res = await authFetch("/api/sct/admin/attempts");
+  return parseJsonResponse(res, "No se pudo cargar los intentos de estudiantes");
+}
+
+export async function updateSCTTest(testId, updates) {
+  const res = await authFetch(`/api/sct/${testId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar el test");
 }
