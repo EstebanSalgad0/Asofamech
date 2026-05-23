@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as fabric from 'fabric';
+import { authFetch } from '../authClient';
 
 export function MedicalImageViewer({ imageData }) {
   const canvasRef = useRef(null);
@@ -13,7 +14,7 @@ export function MedicalImageViewer({ imageData }) {
   const [imageLoaded, setImageLoaded] = useState(false);
 
   // Función para cargar imagen
-  const handleImageLoad = (imageUrl, canvasInstance) => {
+  const handleImageLoad = async (imageUrl, canvasInstance) => {
     if (!canvasInstance) {
       console.log("Canvas no disponible para cargar imagen");
       return;
@@ -22,11 +23,26 @@ export function MedicalImageViewer({ imageData }) {
     setImageLoaded(false);
     console.log("Iniciando carga de imagen:", imageUrl);
     
+    let sourceUrl = imageUrl;
+    let objectUrl = null;
+    if (!imageUrl.startsWith('data:') && !imageUrl.startsWith('blob:')) {
+      try {
+        const response = await authFetch(imageUrl);
+        if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
+        objectUrl = URL.createObjectURL(await response.blob());
+        sourceUrl = objectUrl;
+      } catch (err) {
+        console.error("Error descargando imagen autenticada:", err);
+        alert("No tienes permiso para cargar esta imagen o la sesion expiro.");
+        return;
+      }
+    }
+    
     // Usar Image estándar primero para verificar que la imagen carga
     const imgElement = new Image();
     
     // Solo usar crossOrigin para URLs remotas, no para data URLs o archivos locales
-    if (!imageUrl.startsWith('data:') && !imageUrl.startsWith('blob:')) {
+    if (!sourceUrl.startsWith('data:') && !sourceUrl.startsWith('blob:')) {
       imgElement.crossOrigin = 'anonymous';
     }
     
@@ -87,6 +103,7 @@ export function MedicalImageViewer({ imageData }) {
       setAnnotations([]);
       setZoom(1);
       setImageLoaded(true);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
     
     imgElement.onerror = (err) => {
@@ -94,7 +111,7 @@ export function MedicalImageViewer({ imageData }) {
       alert("Error al cargar la imagen. Verifica que el archivo sea válido.");
     };
     
-    imgElement.src = imageUrl;
+    imgElement.src = sourceUrl;
   };
 
   const handleMouseDown = (options) => {

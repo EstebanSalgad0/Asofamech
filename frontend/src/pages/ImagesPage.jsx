@@ -4,7 +4,14 @@ import { OpenSeadragonViewer } from "../components/OpenSeadragonViewer";
 import { MedicalImageViewer } from "../components/MedicalImageViewer";
 import { startSession, flushSession, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
-import { API_BASE, authFetch, clearAuthSession } from "../authClient";
+import {
+  API_BASE,
+  authErrorMessage,
+  authFetch,
+  canManageEducationalContent,
+  clearAuthSession,
+  getStoredRole,
+} from "../authClient";
 
 export function ImagesPage() {
   const navigate = useNavigate();
@@ -24,8 +31,7 @@ export function ImagesPage() {
       return;
     } else {
       setUser(JSON.parse(userData));
-      const savedRole = localStorage.getItem("role");
-      if (savedRole) setRole(savedRole);
+      setRole(getStoredRole());
       startSession();
       loadImageLibrary();
     }
@@ -61,6 +67,11 @@ export function ImagesPage() {
   };
 
   const handleFileUpload = async (e) => {
+    if (!canManageEducationalContent(role)) {
+      alert("No tienes permisos para cargar imagenes.");
+      e.target.value = "";
+      return;
+    }
     const file = e.target.files[0];
     if (!file) return;
     const formData = new FormData();
@@ -76,7 +87,7 @@ export function ImagesPage() {
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.detail || `Error HTTP ${response.status}`);
+        throw new Error(payload?.detail || authErrorMessage(response.status, `Error HTTP ${response.status}`));
       }
       const uploaded = await response.json();
       await loadImageLibrary();
@@ -103,11 +114,11 @@ export function ImagesPage() {
   };
 
   const handleRoleChange = (val) => {
-    setRole(val);
-    localStorage.setItem("role", val);
+    setRole(getStoredRole());
   };
 
   if (!user) return null;
+  const canUploadImages = canManageEducationalContent(role);
 
   return (
     <>
@@ -144,20 +155,22 @@ export function ImagesPage() {
             </button>
 
             <div className="images-v2-sidebar-content">
-              <div className="images-v2-sidebar-section">
-                <div className="images-v2-sidebar-title">Cargar imagen</div>
-                <div className="images-v2-upload-zone">
-                  <span className="images-v2-upload-icon">📤</span>
-                  <div className="images-v2-upload-text">Arrastra o selecciona</div>
-                  <div className="images-v2-upload-hint">SVS · JPG · PNG · TIFF</div>
-                  <input
-                    type="file"
-                    accept="image/*,.svs"
-                    onChange={handleFileUpload}
-                    className="images-v2-upload-input"
-                  />
+              {canUploadImages && (
+                <div className="images-v2-sidebar-section">
+                  <div className="images-v2-sidebar-title">Cargar imagen</div>
+                  <div className="images-v2-upload-zone">
+                    <span className="images-v2-upload-icon">📤</span>
+                    <div className="images-v2-upload-text">Arrastra o selecciona</div>
+                    <div className="images-v2-upload-hint">SVS · JPG · PNG · TIFF</div>
+                    <input
+                      type="file"
+                      accept="image/*,.svs"
+                      onChange={handleFileUpload}
+                      className="images-v2-upload-input"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="images-v2-sidebar-section" style={{ borderBottom: 'none' }}>
                 <div className="images-v2-sidebar-title">Biblioteca</div>
