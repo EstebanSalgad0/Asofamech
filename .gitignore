@@ -68,3 +68,9 @@ backend/pytest-run-*/
 backend/.pytest_cache/
 backend/.pytest_tmp/
 backend/mkdir_700_probe/
+
+# Playwright E2E
+frontend/playwright-report/
+frontend/test-results/
+frontend/e2e/.auth/
+frontend/.env.test
