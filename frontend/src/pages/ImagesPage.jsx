@@ -12,6 +12,45 @@ import {
   clearAuthSession,
   getStoredRole,
 } from "../authClient";
+import { listMyRoiSessions } from "../api";
+
+const CLASE_COLORS = {
+  metastasico: "#ef4444",
+  no_metastasico: "#22c55e",
+  no_metastasico_probable: "#16a34a",
+  incierto: "#f59e0b",
+  roi_no_evaluable: "#94a3b8",
+};
+
+const CLASE_LABELS = {
+  metastasico: "Metastásico",
+  no_metastasico: "No metastásico",
+  no_metastasico_probable: "Prob. no metastásico",
+  incierto: "Incierto",
+  roi_no_evaluable: "ROI no evaluable",
+};
+
+const STATUS_LABELS = {
+  completed: "Completado",
+  completado: "Completado",
+  pending: "Pendiente",
+  pendiente: "Pendiente",
+  error: "Error",
+  resultado_incierto: "Resultado incierto",
+  RESULTADO_INCIERTO: "Resultado incierto",
+  roi_no_evaluable: "ROI no evaluable",
+  ROI_NO_EVALUABLE: "ROI no evaluable",
+  roi_evaluable: "ROI evaluable",
+  ROI_EVALUABLE: "ROI evaluable",
+};
+
+function formatFecha(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("es-CL", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
 
 export function ImagesPage() {
   const navigate = useNavigate();
@@ -21,6 +60,11 @@ export function ImagesPage() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [roiHistory, setRoiHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [detailSession, setDetailSession] = useState(null);
+  const [initialSession, setInitialSession] = useState(null);
+  const [deletingSessionId, setDeletingSessionId] = useState(null);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -43,6 +87,35 @@ export function ImagesPage() {
     };
   }, [navigate]);
 
+  const loadRoiHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const data = await listMyRoiSessions(20);
+      setRoiHistory(data?.items || []);
+    } catch {
+      // no critico
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRoiHistory();
+  }, []);
+
+  const deleteRoiSession = async (sessionId) => {
+    setDeletingSessionId(sessionId);
+    try {
+      await authFetch(`/api/histopathology/sessions/${sessionId}`, { method: "DELETE" });
+      setRoiHistory((prev) => prev.filter((s) => s.id !== sessionId));
+      if (detailSession?.id === sessionId) setDetailSession(null);
+    } catch {
+      // falla silenciosa
+    } finally {
+      setDeletingSessionId(null);
+    }
+  };
+
   const loadImageLibrary = async () => {
     try {
       setLoading(true);
@@ -58,9 +131,10 @@ export function ImagesPage() {
     }
   };
 
-  const handleImageSelect = (image) => {
+  const handleImageSelect = (image, session = null) => {
     pushActivity("images", `Visualización: ${image.title}`);
-      setSelectedImage({
+    setInitialSession(session);
+    setSelectedImage({
       url: `${API_BASE}/api/medical-images/view/${image.id}`,
       ...image
     });
@@ -215,20 +289,148 @@ export function ImagesPage() {
           <div className="images-v2-viewer">
             {selectedImage ? (
               selectedImage.has_dzi
-                ? <OpenSeadragonViewer imageData={selectedImage} />
+                ? <OpenSeadragonViewer imageData={selectedImage} initialSession={initialSession} />
                 : <MedicalImageViewer imageData={selectedImage} />
             ) : (
-              <div className="images-v2-empty-viewer">
-                <span className="images-v2-empty-icon">🔬</span>
-                <div className="images-v2-empty-title">Ninguna imagen seleccionada</div>
-                <p className="images-v2-empty-text">
-                  Selecciona una imagen de la biblioteca o carga una desde tu dispositivo
-                </p>
+              <div className="images-v2-empty-viewer roi-hist-wrapper">
+                <div className="roi-hist-empty-top">
+                  <span className="images-v2-empty-icon">🔬</span>
+                  <div className="images-v2-empty-title">Ninguna imagen seleccionada</div>
+                  <p className="images-v2-empty-text">
+                    Selecciona una imagen de la biblioteca o carga una desde tu dispositivo
+                  </p>
+                </div>
+
+                {/* Cross-image session history */}
+                <div className="roi-hist-panel">
+                  <div className="roi-hist-header">
+                    <span className="roi-hist-title">Mis análisis ROI</span>
+                    <span className="roi-hist-count">{roiHistory.length} sesión{roiHistory.length !== 1 ? "es" : ""}</span>
+                  </div>
+
+                  {historyLoading && (
+                    <div className="roi-hist-loading">Cargando historial…</div>
+                  )}
+
+                  {!historyLoading && roiHistory.length === 0 && (
+                    <div className="roi-hist-empty">Sin análisis registrados. Selecciona una imagen y realiza tu primer análisis ROI.</div>
+                  )}
+
+                  {!historyLoading && roiHistory.length > 0 && (
+                    <table className="roi-hist-table">
+                      <thead className="roi-hist-thead">
+                        <tr>
+                          <th>Resultado</th>
+                          <th>Imagen</th>
+                          <th>Fecha</th>
+                          <th>Confianza</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {roiHistory.map((s) => {
+                          const color = CLASE_COLORS[s.clase] || "#94a3b8";
+                          const label = CLASE_LABELS[s.clase] || s.clase || "—";
+                          const isDeleting = deletingSessionId === s.id;
+                          return (
+                            <tr key={s.id} className={`roi-hist-row${isDeleting ? " roi-hist-row-deleting" : ""}`}>
+                              <td className="roi-hist-td">
+                                <div className="roi-hist-td-result">
+                                  <span className="roi-hist-dot" style={{ background: color }} />
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.75)" }}>{label}</span>
+                                </div>
+                              </td>
+                              <td className="roi-hist-td roi-hist-td-name" title={s.image_title || s.image_filename}>
+                                {s.image_title || s.image_filename || `Imagen #${s.image_id}`}
+                              </td>
+                              <td className="roi-hist-td roi-hist-td-date">{formatFecha(s.analyzed_at)}</td>
+                              <td className="roi-hist-td roi-hist-td-conf">
+                                {s.confidence != null ? `${(s.confidence * 100).toFixed(1)}%` : "—"}
+                              </td>
+                              <td className="roi-hist-td roi-hist-td-action">
+                                <button className="roi-hist-detail-btn" onClick={() => setDetailSession(s)} disabled={isDeleting}>
+                                  Ver detalle
+                                </button>
+                                <button
+                                  className="roi-hist-delete-btn"
+                                  onClick={() => deleteRoiSession(s.id)}
+                                  disabled={isDeleting}
+                                  title="Eliminar este análisis"
+                                >
+                                  {isDeleting ? "…" : "✕"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Modal de detalle — nivel raíz para evitar clipping de contenedores flex */}
+      {detailSession && (
+        <div className="roi-hist-modal-overlay" onClick={() => setDetailSession(null)}>
+          <div className="roi-hist-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="roi-hist-modal-header">
+              <div>
+                <div className="roi-hist-modal-title">Detalle de análisis</div>
+                <div className="roi-hist-modal-subtitle">{detailSession.image_title || detailSession.image_filename || `Imagen #${detailSession.image_id}`}</div>
+              </div>
+              <button className="roi-hist-modal-close" onClick={() => setDetailSession(null)}>✕</button>
+            </div>
+
+            {/* Result hero */}
+            <div className="roi-hist-modal-hero" style={{ background: CLASE_COLORS[detailSession.clase] || "#94a3b8" }}>
+              <div className="roi-hist-modal-hero-label">Resultado</div>
+              <div className="roi-hist-modal-hero-clase">{CLASE_LABELS[detailSession.clase] || detailSession.clase || "—"}</div>
+              <div className="roi-hist-modal-hero-conf">
+                Confianza: {detailSession.confidence != null ? `${(detailSession.confidence * 100).toFixed(1)}%` : "—"}
+              </div>
+            </div>
+
+            <div className="roi-hist-modal-body">
+              <div className="roi-hist-modal-row">
+                <span className="roi-hist-modal-label">Fecha</span>
+                <span>{formatFecha(detailSession.analyzed_at)}</span>
+              </div>
+              <div className="roi-hist-modal-row">
+                <span className="roi-hist-modal-label">Estado del análisis</span>
+                <span className={`roi-hist-status roi-hist-status-${String(detailSession.status).toLowerCase()}`}>
+                  {STATUS_LABELS[detailSession.status] || STATUS_LABELS[String(detailSession.status).toLowerCase()] || detailSession.status || "—"}
+                </span>
+              </div>
+              {detailSession.roi_2 && (
+                <div className="roi-hist-modal-row">
+                  <span className="roi-hist-modal-label">Tamaño ROI clasificado</span>
+                  <span>{detailSession.roi_2.width} × {detailSession.roi_2.height} px</span>
+                </div>
+              )}
+              {detailSession.warning && (
+                <div className="roi-hist-modal-warning">{detailSession.warning}</div>
+              )}
+              <button
+                className="roi-hist-modal-goto"
+                onClick={() => {
+                  const img = imageLibrary.find((i) => i.id === detailSession.image_id);
+                  if (img) {
+                    handleImageSelect(img, detailSession);
+                    setDetailSession(null);
+                  }
+                }}
+              >
+                Restaurar este análisis en el visor →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
