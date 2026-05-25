@@ -222,3 +222,111 @@ export async function updateSCTTest(testId, updates) {
   });
   return parseJsonResponse(res, "No se pudo actualizar el test");
 }
+
+export async function listMyRoiSessions(limit = 20) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const res = await authFetch(`/api/history/roi-sessions?${params.toString()}`);
+  return parseJsonResponse(res, "No se pudo cargar el historial de sesiones ROI");
+}
+
+export async function getRoiSession(sessionId) {
+  const res = await authFetch(`/api/histopathology/sessions/${sessionId}`);
+  return parseJsonResponse(res, "No se pudo cargar la sesión ROI");
+}
+
+export async function listCases(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.topic) params.set("topic", filters.topic);
+  if (filters.difficulty) params.set("difficulty", filters.difficulty);
+  if (filters.status) params.set("status", filters.status);
+  const query = params.toString();
+  const res = await authFetch(`/api/cases${query ? `?${query}` : ""}`);
+  return parseJsonResponse(res, "No se pudieron cargar los casos clínicos");
+}
+
+export async function searchCases(q, filters = {}) {
+  const params = new URLSearchParams({ q: q || "" });
+  if (filters.topic) params.set("topic", filters.topic);
+  if (filters.difficulty) params.set("difficulty", filters.difficulty);
+  const res = await authFetch(`/api/cases/search?${params.toString()}`);
+  return parseJsonResponse(res, "No se pudo buscar casos clínicos");
+}
+
+export async function getCase(caseId) {
+  const res = await authFetch(`/api/cases/${caseId}`);
+  return parseJsonResponse(res, "No se pudo cargar el caso clínico");
+}
+
+export async function createCase(payload) {
+  const res = await authFetch("/api/cases", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo crear el caso clínico");
+}
+
+export async function updateCase(caseId, payload) {
+  const res = await authFetch(`/api/cases/${caseId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar el caso clínico");
+}
+
+export async function updateCaseStatus(caseId, status) {
+  const res = await authFetch(`/api/cases/${caseId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return parseJsonResponse(res, "No se pudo cambiar el estado del caso");
+}
+
+export async function deleteCase(caseId) {
+  const res = await authFetch(`/api/cases/${caseId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.detail || `Error al eliminar el caso (${res.status})`);
+  }
+}
+
+export async function submitFeedback(payload) {
+  const res = await authFetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo enviar la evaluación");
+}
+
+export async function getMyFeedback() {
+  const res = await authFetch("/api/feedback/my");
+  return parseJsonResponse(res, "No se pudo cargar tu evaluación");
+}
+
+export async function getFeedbackSummary() {
+  const res = await authFetch("/api/feedback/summary");
+  return parseJsonResponse(res, "No se pudo cargar el resumen de evaluaciones");
+}
+
+export async function getFeedbackResponses(role = "") {
+  const params = role ? `?role=${encodeURIComponent(role)}` : "";
+  const res = await authFetch(`/api/feedback/responses${params}`);
+  return parseJsonResponse(res, "No se pudieron cargar las respuestas");
+}
+
+export async function downloadFeedbackCsv() {
+  const res = await authFetch("/api/feedback/export.csv");
+  if (!res.ok) throw new Error(`Error al exportar CSV (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "evaluaciones_usabilidad.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

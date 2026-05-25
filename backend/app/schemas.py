@@ -6,6 +6,17 @@ class CaseOut(BaseModel):
     id: int
     title: str
     description: str
+    body: str
+    clinical_context: Optional[str] = None
+    learning_objectives: Optional[str] = None
+    difficulty: Optional[str] = None
+    topic: Optional[str] = None
+    image_id: Optional[int] = None
+    sct_test_id: Optional[int] = None
+    created_by: Optional[int] = None
+    status: str = "draft"
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
     class Config:
         orm_mode = True
@@ -14,6 +25,27 @@ class CaseCreate(BaseModel):
     title: str
     description: str
     body: str
+    clinical_context: Optional[str] = None
+    learning_objectives: Optional[str] = None
+    difficulty: Optional[str] = None
+    topic: Optional[str] = None
+    image_id: Optional[int] = None
+    sct_test_id: Optional[int] = None
+    status: str = "draft"
+
+class CaseUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    body: Optional[str] = None
+    clinical_context: Optional[str] = None
+    learning_objectives: Optional[str] = None
+    difficulty: Optional[str] = None
+    topic: Optional[str] = None
+    image_id: Optional[int] = None
+    sct_test_id: Optional[int] = None
+
+class CaseStatusUpdate(BaseModel):
+    status: str
 
 # ========== SCT Schemas ==========
 
@@ -129,3 +161,60 @@ class SCTAttemptAdminOut(SCTAttemptWithTest):
     """Para docente/admin: incluye identidad del estudiante."""
     user_email: str = ""
     user_name: str = ""
+
+
+# ========== Usability Feedback Schemas ==========
+
+class FeedbackCreate(BaseModel):
+    nav_clarity: int          # 1-5
+    viewer_ease: int          # 1-5
+    roi_ease: int             # 1-5
+    ai_clarity: int           # 1-5
+    chatbot_utility: int      # 1-5
+    sct_utility: int          # 1-5
+    observations: Optional[str] = None
+
+class FeedbackOut(BaseModel):
+    id: int
+    role_at_submission: str
+    nav_clarity: int
+    viewer_ease: int
+    roi_ease: int
+    ai_clarity: int
+    chatbot_utility: int
+    sct_utility: int
+    observations: Optional[str] = None
+    submitted_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+class DimensionAverage(BaseModel):
+    nav_clarity: float
+    viewer_ease: float
+    roi_ease: float
+    ai_clarity: float
+    chatbot_utility: float
+    sct_utility: float
+
+class RoleBreakdown(BaseModel):
+    count: int
+    averages: DimensionAverage
+
+class FeedbackSummary(BaseModel):
+    total_responses: int
+    averages: DimensionAverage
+    by_role: dict
+    recent_observations: List[str]
+
+class FeedbackResponseItem(BaseModel):
+    role: str
+    nav_clarity: int
+    viewer_ease: int
+    roi_ease: int
+    ai_clarity: int
+    chatbot_utility: int
+    sct_utility: int
+    observations: Optional[str] = None
+    submitted_at: Optional[str] = None

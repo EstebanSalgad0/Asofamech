@@ -41,9 +41,23 @@ class Case(Base):
     __tablename__ = "cases"
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False)
-    description = Column(Text, nullable=False)   # resumen del caso
-    body = Column(Text, nullable=False)          # caso clínico completo
+    description = Column(Text, nullable=False)
+    body = Column(Text, nullable=False)
+    clinical_context = Column(Text, nullable=True)
+    learning_objectives = Column(Text, nullable=True)
+    difficulty = Column(String(50), nullable=True)    # pregrado, internado, residente
+    topic = Column(String(200), nullable=True)
+    image_id = Column(Integer, ForeignKey("medical_images.id"), nullable=True)
+    sct_test_id = Column(Integer, ForeignKey("sct_tests.id"), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status = Column(String(20), nullable=False, default="draft")  # draft | published | archived
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    creator = relationship("User", foreign_keys=[created_by])
+    image = relationship("MedicalImage", foreign_keys=[image_id])
+    sct_test = relationship("SCTTest", foreign_keys=[sct_test_id])
 
 class Document(Base):
     __tablename__ = "documents"
@@ -181,6 +195,25 @@ class HistopathologySession(Base):
     user = relationship("User")
     image = relationship("MedicalImage")
     correction = relationship("HistopathologyCorrection", back_populates="session", uselist=False)
+
+
+class UsabilityFeedback(Base):
+    """Evaluación de usabilidad enviada por un usuario autenticado. Un registro por usuario."""
+    __tablename__ = "usability_feedback"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    role_at_submission = Column(String(50), nullable=False)
+    nav_clarity = Column(Integer, nullable=False)       # 1-5 claridad de navegación
+    viewer_ease = Column(Integer, nullable=False)       # 1-5 facilidad del visor
+    roi_ease = Column(Integer, nullable=False)          # 1-5 facilidad para seleccionar ROI
+    ai_clarity = Column(Integer, nullable=False)        # 1-5 claridad de resultados IA
+    chatbot_utility = Column(Integer, nullable=False)   # 1-5 utilidad del chatbot
+    sct_utility = Column(Integer, nullable=False)       # 1-5 utilidad del SCT
+    observations = Column(Text, nullable=True)
+    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
 
 
 class HistopathologyCorrection(Base):

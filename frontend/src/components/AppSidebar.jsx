@@ -7,6 +7,8 @@ const navItems = [
   { id: "chat", label: "Asistente IA", path: "/dashboard/chat", icon: "chat", group: "Navegacion" },
   { id: "sct", label: "Test SCT", path: "/dashboard/sct", icon: "clipboard", group: "Navegacion" },
   { id: "images", label: "Imagenes IA", path: "/dashboard/images", icon: "image", group: "Navegacion" },
+  { id: "cases", label: "Casos Clinicos", path: "/dashboard/cases", icon: "cases", group: "Navegacion" },
+  { id: "feedback", label: "Evaluacion", path: "/dashboard/feedback", icon: "feedback", group: "Navegacion" },
   { id: "config", label: "Configuracion", path: "/dashboard/config", icon: "settings", group: "Admin", privileged: true },
 ];
 
@@ -46,6 +48,23 @@ function Icon({ name }) {
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" strokeWidth="1.8" />
         <path d="M19 13.5v-3l-2.1-.4a7.5 7.5 0 0 0-.8-1.8l1.2-1.8-2.1-2.1-1.8 1.2a7.5 7.5 0 0 0-1.9-.8L11.1 2H8.2l-.4 2.1c-.7.2-1.3.5-1.9.8L4.2 3.8 2.1 5.9l1.2 1.8c-.4.6-.7 1.2-.9 1.9L.4 10v3l2.1.4c.2.7.5 1.3.9 1.9l-1.2 1.8 2.1 2.1 1.8-1.2c.6.4 1.2.7 1.9.9l.4 2.1h2.9l.4-2.1c.7-.2 1.3-.5 1.9-.9l1.8 1.2 2.1-2.1-1.2-1.8c.4-.6.7-1.2.8-1.9l2-.4Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (name === "cases") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === "feedback") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M8 14s1.5 2 4 2 4-2 4-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M9 9h.01M15 9h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </svg>
     );
   }
