@@ -2,8 +2,8 @@ import { authHeaders, getStoredRole } from "./authClient";
 
 const CLIENT_ID_KEY = "asofamech_histopathology_client_id";
 
-export const PRIVILEGED_HEATMAP_MAX_TILES = 256;
-export const STUDENT_HEATMAP_MAX_TILES = 16;
+export const PRIVILEGED_HEATMAP_MAX_TILES = 128;
+export const STUDENT_HEATMAP_MAX_TILES = 128;
 
 export function normalizeRole(role) {
   const value = (role || "").trim().toLowerCase();
