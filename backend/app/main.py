@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from .routers import admin, auth, chat, cases, dashboard, history, rag, sct, medical_images, histopathology
+from .routers import admin, auth, chat, cases, dashboard, feedback, history, rag, sct, medical_images, histopathology
 
 app = FastAPI(title="Backend ASOFAMECH Educativo")
 
@@ -54,6 +54,7 @@ app.include_router(sct.router)
 app.include_router(auth.router)
 app.include_router(medical_images.router)
 app.include_router(histopathology.router)
+app.include_router(feedback.router)
 
 # Las imágenes médicas y tiles DZI se sirven exclusivamente a través de los
 # endpoints autenticados de /api/medical-images/. No se expone el directorio

@@ -33,6 +33,7 @@ PERM_MANAGE_AI_CONFIG = "manage_ai_config"
 PERM_MANAGE_RAG = "manage_rag"
 PERM_MANAGE_IMAGES = "manage_images"
 PERM_DELETE_SENSITIVE_RESOURCES = "delete_sensitive_resources"
+PERM_VIEW_FEEDBACK = "view_feedback"
 
 ROLE_PERMISSIONS = {
     ROLE_STUDENT: {
@@ -54,6 +55,7 @@ ROLE_PERMISSIONS = {
         PERM_MANAGE_EDUCATIONAL_CONTENT,
         PERM_MANAGE_RAG,
         PERM_MANAGE_IMAGES,
+        PERM_VIEW_FEEDBACK,
     },
     ROLE_ADMIN: {
         PERM_USE_PLATFORM,
@@ -70,6 +72,7 @@ ROLE_PERMISSIONS = {
         PERM_MANAGE_RAG,
         PERM_MANAGE_IMAGES,
         PERM_DELETE_SENSITIVE_RESOURCES,
+        PERM_VIEW_FEEDBACK,
     },
 }
 
