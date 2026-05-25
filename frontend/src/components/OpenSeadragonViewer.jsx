@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import OpenSeadragon from 'openseadragon';
 import { heatmapMaxTilesForCurrentRole, histopathologyHeaders, isPrivilegedRole } from '../histopathologyAccess';
+import { authFetch } from '../authClient';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8001';
 
@@ -159,7 +160,7 @@ function describeApiError(payload, fallback) {
   return fallback;
 }
 
-export function OpenSeadragonViewer({ imageData }) {
+export function OpenSeadragonViewer({ imageData, initialSession = null }) {
   const viewerRef = useRef(null);
   const overlayRef = useRef(null);
   const osdRef = useRef(null);
@@ -320,59 +321,111 @@ export function OpenSeadragonViewer({ imageData }) {
     setRoi2(null);
     setLoading(true);
 
-    const viewer = OpenSeadragon({
-      element: viewerRef.current,
-      tileSources: `${API_BASE}/api/medical-images/dzi/${imageData.id}.dzi`,
-      loadTilesWithAjax: true,
-      ajaxHeaders: histopathologyHeaders(),
-      crossOriginPolicy: 'Anonymous',
-      showZoomControl: false,
-      showHomeControl: false,
-      showFullPageControl: false,
-      showRotationControl: false,
-      showNavigator: false,
-      imageLoaderLimit: 8,
-      maxImageCacheCount: 500,
-      timeout: 60000,
-      minZoomLevel: 0.1,
-      maxZoomLevel: 100,
-      defaultZoomLevel: 0,
-      visibilityRatio: 0.8,
-      constrainDuringPan: false,
-      zoomPerClick: 2,
-      zoomPerScroll: 1.2,
-      animationTime: 0.3,
-      blendTime: 0.1,
-      alwaysBlend: false,
-      immediateRender: false,
-      backgroundColor: '#101418',
-    });
+    let cancelled = false;
 
-    osdRef.current = viewer;
+    const initViewer = async () => {
+      // Pre-fetch the DZI descriptor through authFetch so the 401 interceptor
+      // handles expired sessions, instead of relying on OSD's internal AJAX.
+      let tileSource;
+      try {
+        const dziUrl = `${API_BASE}/api/medical-images/dzi/${imageData.id}.dzi`;
+        const res = await authFetch(dziUrl, { headers: histopathologyHeaders() });
+        if (!res.ok) {
+          if (!cancelled) {
+            setLoading(false);
+            setError(`No se pudo cargar la imagen (${res.status})`);
+          }
+          return;
+        }
+        const xml = await res.text();
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        const imgEl = doc.querySelector('Image');
+        const sizeEl = doc.querySelector('Size');
+        const fmt = imgEl?.getAttribute('Format') || 'jpeg';
+        const tileSize = parseInt(imgEl?.getAttribute('TileSize') || '256', 10);
+        const overlap = parseInt(imgEl?.getAttribute('Overlap') || '1', 10);
+        const width = parseInt(sizeEl?.getAttribute('Width') || '0', 10);
+        const height = parseInt(sizeEl?.getAttribute('Height') || '0', 10);
+        const tilesUrl = `${API_BASE}/api/medical-images/dzi/${imageData.id}_files/`;
+        tileSource = new OpenSeadragon.DziTileSource({
+          width,
+          height,
+          tileSize,
+          tileOverlap: overlap,
+          tilesUrl,
+          fileFormat: fmt,
+        });
+      } catch {
+        if (!cancelled) {
+          setLoading(false);
+          setError('Error de red al cargar la imagen');
+        }
+        return;
+      }
 
-    const refreshOverlay = () => setViewportVersion((value) => value + 1);
+      if (cancelled || !viewerRef.current) return;
 
-    viewer.addHandler('open', () => {
-      setLoading(false);
-      setError(null);
-      loadLatestHeatmap(imageData.id);
-      loadPreparedHeatmaps(imageData.id);
-      loadSessions(imageData.id);
-      refreshOverlay();
-    });
+      const viewer = OpenSeadragon({
+        element: viewerRef.current,
+        tileSources: tileSource,
+        loadTilesWithAjax: true,
+        ajaxHeaders: histopathologyHeaders(),
+        crossOriginPolicy: 'Anonymous',
+        showZoomControl: false,
+        showHomeControl: false,
+        showFullPageControl: false,
+        showRotationControl: false,
+        showNavigator: false,
+        imageLoaderLimit: 8,
+        maxImageCacheCount: 500,
+        timeout: 60000,
+        minZoomLevel: 0.1,
+        maxZoomLevel: 100,
+        defaultZoomLevel: 0,
+        visibilityRatio: 0.8,
+        constrainDuringPan: false,
+        zoomPerClick: 2,
+        zoomPerScroll: 1.2,
+        animationTime: 0.3,
+        blendTime: 0.1,
+        alwaysBlend: false,
+        immediateRender: false,
+        backgroundColor: '#101418',
+      });
 
-    viewer.addHandler('open-failed', (event) => {
-      setLoading(false);
-      setError(`No se pudo cargar la imagen: ${event.message}`);
-    });
+      osdRef.current = viewer;
 
-    viewer.addHandler('animation', refreshOverlay);
-    viewer.addHandler('resize', refreshOverlay);
-    viewer.addHandler('viewport-change', refreshOverlay);
+      const refreshOverlay = () => setViewportVersion((value) => value + 1);
+
+      viewer.addHandler('open', () => {
+        setLoading(false);
+        setError(null);
+        loadLatestHeatmap(imageData.id);
+        loadPreparedHeatmaps(imageData.id);
+        loadSessions(imageData.id);
+        refreshOverlay();
+        if (initialSession) {
+          restoreSession(initialSession);
+          setHistorialOpen(true);
+        }
+      });
+
+      viewer.addHandler('open-failed', (event) => {
+        setLoading(false);
+        setError(`No se pudo cargar la imagen: ${event.message}`);
+      });
+
+      viewer.addHandler('animation', refreshOverlay);
+      viewer.addHandler('resize', refreshOverlay);
+      viewer.addHandler('viewport-change', refreshOverlay);
+    };
+
+    initViewer();
 
     return () => {
-      viewer.destroy();
-      if (osdRef.current === viewer) {
+      cancelled = true;
+      if (osdRef.current) {
+        osdRef.current.destroy();
         osdRef.current = null;
       }
     };
@@ -678,7 +731,7 @@ export function OpenSeadragonViewer({ imageData }) {
     if (!imageId) return;
     setSessionsLoading(true);
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${API_BASE}/api/histopathology/sessions?image_id=${imageId}&limit=20`,
         { headers: histopathologyHeaders() }
       );
@@ -714,7 +767,7 @@ export function OpenSeadragonViewer({ imageData }) {
 
   const deleteSession = async (sessionId) => {
     try {
-      await fetch(`${API_BASE}/api/histopathology/sessions/${sessionId}`, {
+      await authFetch(`${API_BASE}/api/histopathology/sessions/${sessionId}`, {
         method: 'DELETE',
         headers: histopathologyHeaders(),
       });
@@ -758,7 +811,7 @@ export function OpenSeadragonViewer({ imageData }) {
     if (!draft?.label) return;
     updateCorrectionDraft(sessionId, { saving: true });
     try {
-      const res = await fetch(`${API_BASE}/api/histopathology/sessions/${sessionId}/correction`, {
+      const res = await authFetch(`${API_BASE}/api/histopathology/sessions/${sessionId}/correction`, {
         method: 'POST',
         headers: { ...histopathologyHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -783,7 +836,7 @@ export function OpenSeadragonViewer({ imageData }) {
 
   const removeCorrection = async (sessionId) => {
     try {
-      await fetch(`${API_BASE}/api/histopathology/sessions/${sessionId}/correction`, {
+      await authFetch(`${API_BASE}/api/histopathology/sessions/${sessionId}/correction`, {
         method: 'DELETE',
         headers: histopathologyHeaders(),
       });
