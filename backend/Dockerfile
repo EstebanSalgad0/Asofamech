@@ -29,6 +29,7 @@ COPY app ./app
 COPY histopathology_offline ./histopathology_offline
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
+COPY tests ./tests
 COPY start.sh ./start.sh
 RUN chmod +x start.sh
 
