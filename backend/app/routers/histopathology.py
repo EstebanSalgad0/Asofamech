@@ -419,6 +419,9 @@ def _model_metadata(inference_service) -> dict:
         "low_suspicion_tumor_max": _configured_low_suspicion_tumor_max(),
         "training_mode": inference_service.training_mode,
         "validation": inference_service.validation,
+        "created_at": inference_service.created_at,
+        "head_type": inference_service.head_type,
+        "model_version": inference_service.model_version,
     }
 
 
@@ -776,6 +779,8 @@ async def histopathology_status():
             "training_mode": inference_service.training_mode,
             "validation": inference_service.validation,
             "created_at": inference_service.created_at,
+            "head_type": inference_service.head_type,
+            "model_version": inference_service.model_version,
             "audit_log_path": str(get_audit_log_path()),
             "model_input": "CONCH preprocess target, typically 224x224",
             "warning": EDUCATIONAL_WARNING,
