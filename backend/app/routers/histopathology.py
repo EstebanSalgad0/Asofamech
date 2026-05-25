@@ -22,6 +22,7 @@ from ..histopathology.heatmap_jobs import (
     acquire_heatmap_worker,
     create_heatmap_job,
     get_heatmap_job,
+    list_heatmap_jobs,
     release_heatmap_worker,
     update_heatmap_job,
     utc_now as job_utc_now,
@@ -1254,6 +1255,24 @@ async def create_heatmap_scan_job(
     )
 
     return job
+
+
+@router.get("/heatmaps/jobs")
+async def list_heatmap_scan_jobs(
+    status: str | None = Query(None, description="Filtrar por estado: queued, running, completed, failed"),
+    user_id: int | None = Query(None, description="Filtrar por usuario (solo admin)"),
+    limit: int = Query(50, ge=1, le=200),
+    current_user=Depends(get_current_user),
+):
+    """Lista jobs de heatmap. Admins ven todos; otros usuarios solo los propios."""
+    is_admin = user_has_permission(current_user, PERM_MANAGE_EDUCATIONAL_CONTENT)
+    effective_user_id = None if is_admin else getattr(current_user, "id", None)
+    if user_id is not None and not is_admin:
+        raise HTTPException(status_code=403, detail="Solo administradores pueden filtrar por user_id")
+    if user_id is not None and is_admin:
+        effective_user_id = user_id
+    jobs = list_heatmap_jobs(user_id=effective_user_id, status=status, limit=limit)
+    return {"count": len(jobs), "items": jobs}
 
 
 @router.get("/heatmaps/jobs/{job_id}")
