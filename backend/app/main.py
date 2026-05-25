@@ -35,6 +35,15 @@ def on_startup():
             "[backend] ADVERTENCIA: ASOFAMECH_JWT_SECRET no configurado. "
             "Se usa el secreto de desarrollo — NO apto para producción."
         )
+
+    try:
+        from .histopathology.heatmap_jobs import recover_stale_heatmap_jobs
+        recovered = recover_stale_heatmap_jobs()
+        if recovered:
+            print(f"[backend] Heatmap jobs recuperados al inicio: {recovered} job(s) marcados como fallidos.")
+    except Exception as exc:
+        print(f"[backend] ADVERTENCIA: No se pudo recuperar jobs de heatmap atascados: {exc}")
+
     print("[backend] Servicio FastAPI iniciado correctamente.")
 
 

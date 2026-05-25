@@ -148,3 +148,52 @@ def get_heatmap_job(job_id: str) -> Optional[Dict[str, Any]]:
         return _job_to_dict(job) if job else None
     finally:
         db.close()
+
+
+def recover_stale_heatmap_jobs() -> int:
+    """Mark jobs left in queued/running state (from a previous server run) as failed.
+
+    Called once at startup. Returns the number of jobs recovered.
+    """
+    from ..db import SessionLocal
+    from ..models import HeatmapJob
+
+    db = SessionLocal()
+    try:
+        stale = (
+            db.query(HeatmapJob)
+            .filter(HeatmapJob.status.in_(["queued", "running"]))
+            .all()
+        )
+        now = _utc_now()
+        for job in stale:
+            job.status = "failed"
+            job.failed_at = now
+            job.error = "El servidor se reinició mientras el job estaba en proceso."
+        db.commit()
+        return len(stale)
+    finally:
+        db.close()
+
+
+def list_heatmap_jobs(
+    *,
+    user_id: Optional[int] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+) -> list[Dict[str, Any]]:
+    """Return jobs filtered by optional user_id and/or status, newest first."""
+    from ..db import SessionLocal
+    from ..models import HeatmapJob
+
+    db = SessionLocal()
+    try:
+        query = db.query(HeatmapJob)
+        if user_id is not None:
+            query = query.filter(HeatmapJob.user_id == user_id)
+        if status is not None:
+            query = query.filter(HeatmapJob.status == status)
+        jobs = query.order_by(HeatmapJob.created_at.desc()).limit(limit).all()
+        return [_job_to_dict(j) for j in jobs]
+    finally:
+        db.close()
