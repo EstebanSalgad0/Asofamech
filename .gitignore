@@ -62,3 +62,9 @@ backend/data/*
 backend/sample_pcam_patches/
 backend/sample_sln_breast/
 backend/sample_wsi/
+
+# Pytest runtime artifacts (directorios temporales creados durante tests)
+backend/pytest-run-*/
+backend/.pytest_cache/
+backend/.pytest_tmp/
+backend/mkdir_700_probe/
