@@ -86,6 +86,7 @@ class HistopathologyInferenceService:
         self.validation = checkpoint.get("validation")
         self.created_at = checkpoint.get("created_at")
         self.head_type = checkpoint.get("head_type", "linear")
+        self.model_version = Path(classifier_path).stem
         if self.num_classes == 2:
             self.head = BinaryClassifierHead(feature_dim).to(self.device)
         elif self.num_classes == 3:
