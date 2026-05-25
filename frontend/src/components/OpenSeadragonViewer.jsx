@@ -164,6 +164,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
   const viewerRef = useRef(null);
   const overlayRef = useRef(null);
   const osdRef = useRef(null);
+  const mountedRef = useRef(true);
 
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -431,6 +432,11 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
     };
   }, [imageData]);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const viewerRectToImageRect = (rect) => {
     const viewer = osdRef.current;
     if (!viewer) return null;
@@ -681,15 +687,24 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
     }
   };
 
+  const MAX_POLL_ATTEMPTS = 300; // 300 × 1.2 s = 6 minutos máximo
+
   const pollHeatmapJob = async (jobId) => {
     let keepPolling = true;
+    let attempts = 0;
 
-    while (keepPolling) {
+    while (keepPolling && attempts < MAX_POLL_ATTEMPTS) {
+      attempts++;
       await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      if (!mountedRef.current) return;
+
       const response = await fetch(`${API_BASE}/api/histopathology/heatmaps/jobs/${jobId}`, {
         headers: histopathologyHeaders(),
       });
       const payload = await response.json().catch(() => null);
+
+      if (!mountedRef.current) return;
 
       if (!response.ok) {
         throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
@@ -707,8 +722,13 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
 
       if (payload.status === 'failed') {
         setScanningHeatmap(false);
-        throw new Error(payload.error || 'El job de heatmap fallo.');
+        throw new Error(payload.error || 'El job de heatmap falló.');
       }
+    }
+
+    if (attempts >= MAX_POLL_ATTEMPTS && keepPolling && mountedRef.current) {
+      setScanningHeatmap(false);
+      throw new Error('El heatmap tardó demasiado en procesarse. Intenta con una región o número de tiles menor.');
     }
   };
 

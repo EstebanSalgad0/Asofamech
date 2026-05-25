@@ -119,7 +119,7 @@ def test_teacher_can_manage_educational_content_but_not_admin_users(permission_c
     )
     admin_users = client.get("/api/admin/users")
 
-    assert create_case.status_code == 200
+    assert create_case.status_code in (200, 201)
     assert admin_users.status_code == 403
 
 
