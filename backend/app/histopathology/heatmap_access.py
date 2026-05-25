@@ -65,10 +65,49 @@ def heatmap_rate_limit_key(*, user_id: int | None, role: str, client_id: str | N
     return f"{normalize_role(role)}:{user_id or 'anon'}:{client}"
 
 
-def check_heatmap_rate_limit(key: str, role: str, now: float | None = None) -> Tuple[bool, int, int, int]:
+def _count_recent_jobs_for_user(user_id: int, cutoff_timestamp: float) -> Tuple[int, float | None]:
+    from datetime import datetime, timezone
+    from ..db import SessionLocal
+    from ..models import HeatmapJob
+
+    cutoff_dt = datetime.fromtimestamp(cutoff_timestamp, tz=timezone.utc).replace(tzinfo=None)
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(HeatmapJob.created_at)
+            .filter(HeatmapJob.user_id == user_id, HeatmapJob.created_at >= cutoff_dt)
+            .order_by(HeatmapJob.created_at.asc())
+            .all()
+        )
+        if rows:
+            oldest_dt = rows[0].created_at
+            if oldest_dt.tzinfo is None:
+                oldest_dt = oldest_dt.replace(tzinfo=timezone.utc)
+            oldest = oldest_dt.timestamp()
+        else:
+            oldest = None
+        return len(rows), oldest
+    finally:
+        db.close()
+
+
+def check_heatmap_rate_limit(
+    key: str, role: str, now: float | None = None, user_id: int | None = None
+) -> Tuple[bool, int, int, int]:
     current = time.time() if now is None else now
     max_requests, window_seconds = rate_limit_for_role(role)
     cutoff = current - window_seconds
+
+    if user_id is not None:
+        try:
+            count, oldest = _count_recent_jobs_for_user(user_id, cutoff)
+        except Exception:
+            pass  # DB unavailable; fall through to in-memory
+        else:
+            if count >= max_requests:
+                retry_after = max(1, int(window_seconds - (current - oldest))) if oldest else window_seconds
+                return False, retry_after, max_requests, window_seconds
+            return True, 0, max_requests, window_seconds
 
     with _RATE_LOCK:
         recent = [stamp for stamp in _RATE_BUCKETS.get(key, []) if stamp > cutoff]

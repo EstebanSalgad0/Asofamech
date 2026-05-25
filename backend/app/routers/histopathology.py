@@ -1191,14 +1191,16 @@ async def create_heatmap_scan_job(
         )
 
     client_id = http_request.headers.get("x-asofamech-client-id")
+    current_user_id = getattr(current_user, "id", None)
     rate_key = heatmap_rate_limit_key(
-        user_id=getattr(current_user, "id", None),
+        user_id=current_user_id,
         role=effective_role,
         client_id=client_id,
     )
     allowed, retry_after, limit, window_seconds = check_heatmap_rate_limit(
         rate_key,
         effective_role,
+        user_id=current_user_id,
     )
     if not allowed:
         raise HTTPException(
