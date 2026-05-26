@@ -123,7 +123,7 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
   if (!user) return null;
 
   return (
-    <aside className="app-sidebar">
+    <aside className="app-sidebar" data-testid="app-sidebar">
       <div className="app-sidebar-top">
         <div className="app-sidebar-logo">
           <div className="app-sidebar-logo-mark">A</div>
@@ -134,18 +134,19 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
         </div>
       </div>
 
-      <form className="app-sidebar-search" onSubmit={handleSearchSubmit}>
+      <form className="app-sidebar-search" onSubmit={handleSearchSubmit} data-testid="sidebar-search">
         <SearchIcon />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar..."
           aria-label="Buscar modulo"
+          data-testid="sidebar-search-input"
         />
         <kbd>⌘K</kbd>
       </form>
 
-      <nav className="app-sidebar-nav">
+      <nav className="app-sidebar-nav" aria-label="Navegacion principal" data-testid="app-sidebar-nav">
         {Object.entries(navGroups).map(([group, items]) => (
           <div className="app-nav-group" key={group}>
             <div className="app-nav-heading">{group}</div>
@@ -154,6 +155,8 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
                 key={item.id}
                 to={item.path}
                 className={`app-nav-item ${activeRoute === item.id ? "active" : ""}`}
+                aria-current={activeRoute === item.id ? "page" : undefined}
+                data-testid={`nav-${item.id}`}
               >
                 <Icon name={item.icon} />
                 <span>{item.label}</span>
@@ -189,7 +192,7 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
           </div>
         </div>
 
-        <div className="app-user-card">
+        <div className="app-user-card" data-testid="app-user-card">
           <div className="app-user-avatar">{initials}</div>
           <div>
             <div className="app-user-name">{user.name}</div>

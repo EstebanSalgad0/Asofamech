@@ -82,7 +82,7 @@ export function AuthPage() {
               Accede con una cuenta real para proteger las acciones docentes y administrativas.
             </p>
 
-            <form onSubmit={handleSubmit} className="auth-form">
+            <form onSubmit={handleSubmit} className="auth-form" data-testid="auth-form">
               <div className="form-group">
                 <label htmlFor="name" className="form-label">
                   Nombre completo {!isRegister && <span style={{ opacity: 0.6, fontSize: "0.85em" }}>(opcional)</span>}
@@ -95,6 +95,7 @@ export function AuthPage() {
                   placeholder={isRegister ? "Nombre y apellido" : "Tu nombre"}
                   className="form-input"
                   required={isRegister}
+                  data-testid="auth-name"
                 />
               </div>
 
@@ -108,6 +109,7 @@ export function AuthPage() {
                   placeholder="tu@correo.com"
                   className="form-input"
                   required
+                  data-testid="auth-email"
                 />
               </div>
 
@@ -131,6 +133,7 @@ export function AuthPage() {
                     className="form-input"
                     minLength={8}
                     required
+                    data-testid="auth-password"
                   />
                   <button
                     type="button"
@@ -143,10 +146,10 @@ export function AuthPage() {
                 </div>
               </div>
 
-              {error && <div className="auth-error">{error}</div>}
-              {success && <div className="auth-info-note">{success}</div>}
+              {error && <div className="auth-error" role="alert" data-testid="auth-error">{error}</div>}
+              {success && <div className="auth-info-note" data-testid="auth-success">{success}</div>}
 
-              <button type="submit" className="btn-auth-submit" disabled={loading}>
+              <button type="submit" className="btn-auth-submit" disabled={loading} data-testid="auth-submit">
                 {loading ? "Validando..." : isRegister ? "Registrarse" : "Iniciar sesión"}
               </button>
             </form>

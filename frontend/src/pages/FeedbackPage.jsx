@@ -32,6 +32,8 @@ function RatingRow({ label, hint, dimKey, value, onChange }) {
             className={`fb-scale-btn${value === n ? " selected" : ""}`}
             onClick={() => onChange(dimKey, n)}
             title={SCALE_LABELS[n]}
+            aria-label={`${label}: ${n}`}
+            data-testid={`feedback-rating-${dimKey}-${n}`}
           >
             {n}
           </button>
@@ -157,7 +159,7 @@ export function FeedbackPage() {
       <AppSidebar user={user} role={role} activeRoute="feedback" onLogout={handleLogout} />
 
       <main className="dashboard-main">
-        <div className="fb-page">
+        <div className="fb-page" data-testid="feedback-page">
 
           <div className="fb-header">
             <div>
@@ -185,7 +187,7 @@ export function FeedbackPage() {
               {loadingMy && <p className="fb-loading">Cargando...</p>}
 
               {!loadingMy && submitted && (
-                <div className="fb-thankyou">
+                <div className="fb-thankyou" data-testid="feedback-confirmation">
                   <div className="fb-thankyou-icon">✓</div>
                   <h2>¡Gracias por tu evaluación!</h2>
                   <p>Tu retroalimentación ha sido registrada correctamente.</p>
@@ -196,7 +198,7 @@ export function FeedbackPage() {
               )}
 
               {!loadingMy && !submitted && (
-                <form className="fb-form" onSubmit={handleSubmit}>
+                <form className="fb-form" onSubmit={handleSubmit} data-testid="feedback-form">
                   {existingFeedback && (
                     <div className="fb-notice">
                       Ya enviaste una evaluación. Puedes modificarla y guardar de nuevo.
@@ -237,6 +239,7 @@ export function FeedbackPage() {
                       placeholder="¿Hay algo específico que quieras destacar o mejorar?"
                       rows={4}
                       maxLength={1000}
+                      data-testid="feedback-observations"
                     />
                     <span className="fb-char-count">{observations.length}/1000</span>
                   </div>
@@ -244,7 +247,7 @@ export function FeedbackPage() {
                   {saveError && <p className="fb-error">{saveError}</p>}
 
                   <div className="fb-form-actions">
-                    <button type="submit" className="fb-btn-submit" disabled={saving}>
+                    <button type="submit" className="fb-btn-submit" disabled={saving} data-testid="feedback-submit">
                       {saving ? "Guardando..." : existingFeedback ? "Actualizar evaluación" : "Enviar evaluación"}
                     </button>
                   </div>

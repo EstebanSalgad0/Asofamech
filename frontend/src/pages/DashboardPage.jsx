@@ -332,7 +332,7 @@ export function DashboardPage() {
     <>
       <AppSidebar user={user} role={role} activeRoute="dashboard" onRoleChange={handleRoleChange} onLogout={handleLogout} />
 
-      <main className="home-v3-shell">
+      <main className="home-v3-shell" data-testid="dashboard-page">
         <header className="home-v3-hero">
           <div>
             <div className="home-v3-pill">
@@ -383,7 +383,7 @@ export function DashboardPage() {
           </div>
           <div className="home-v3-modules-grid">
             {moduleCards.map((card) => (
-              <button key={card.id} type="button" className={`home-v3-module-card ${card.className}`} onClick={() => navigate(card.route)}>
+              <button key={card.id} type="button" className={`home-v3-module-card ${card.className}`} onClick={() => navigate(card.route)} data-testid={`dashboard-module-${card.id}`}>
                 <span className="home-v3-module-eyebrow">{card.eyebrow}</span>
                 <span className="home-v3-module-glyph"><ActivityGlyph type={card.glyph} /></span>
                 <span className="home-v3-module-title">{card.title}</span>
@@ -399,7 +399,7 @@ export function DashboardPage() {
         </section>
 
         {/* ── Lower grid ────────────────────────────────── */}
-        <section className="home-v3-section home-v3-history-section">
+        <section className="home-v3-section home-v3-history-section" data-testid="dashboard-history">
           <div className="home-v3-section-head">
             <div>
               <div className="home-v3-kicker">/ 02 - Historial</div>

@@ -493,7 +493,7 @@ export function SCTPage() {
     return (
       <>
         <AppSidebar user={user} role={role} activeRoute="sct" onRoleChange={handleRoleChange} onLogout={handleLogout} />
-        <div className="page-scroll">
+        <div className="page-scroll" data-testid="sct-test-page">
           <div className="sct-test-topbar">
             <button onClick={handleBackToConfig} className="sct-back-btn">← Volver</button>
             <div className="sct-test-info">
@@ -527,7 +527,7 @@ export function SCTPage() {
             </div>
 
             {currentTest.items.map((item, idx) => (
-              <div key={item.id} className="sct-item-card">
+              <div key={item.id} className="sct-item-card" data-testid={`sct-item-${item.id}`}>
                 <div className="sct-item-num">Caso {idx + 1}</div>
                 <div className="sct-item-section">
                   <div className="sct-item-section-lbl scenario">Escenario Clínico</div>
@@ -545,8 +545,8 @@ export function SCTPage() {
                   <div className="sct-answer-label">{item.question}</div>
                   <div className="sct-answer-row">
                     {SCALE_OPTS.map((s) => (
-                      <label key={s.v} className={`sct-answer-opt ${answers[item.id] === s.v ? "selected" : ""} ${s.cls}`}>
-                        <input type="radio" name={`item-${item.id}`} value={s.v} checked={answers[item.id] === s.v} onChange={() => handleAnswer(item.id, s.v)} />
+                      <label key={s.v} className={`sct-answer-opt ${answers[item.id] === s.v ? "selected" : ""} ${s.cls}`} data-testid={`sct-answer-${item.id}-${s.v}`}>
+                        <input type="radio" name={`item-${item.id}`} value={s.v} checked={answers[item.id] === s.v} onChange={() => handleAnswer(item.id, s.v)} aria-label={`Caso ${idx + 1} respuesta ${s.v}`} />
                         <div className="sct-answer-face">
                           <div className="sct-ans-val">{s.v > 0 ? `+${s.v}` : s.v}</div>
                           <div className="sct-ans-lbl">{s.label}</div>
@@ -559,7 +559,7 @@ export function SCTPage() {
             ))}
 
             <div className="sct-submit-section">
-              <button onClick={handleSubmitTest} className="sct-submit-btn">
+              <button onClick={handleSubmitTest} className="sct-submit-btn" data-testid="sct-submit">
                 ✓ Enviar para Evaluación
               </button>
               <div className="sct-submit-note">Asegúrate de responder todas las preguntas antes de enviar</div>
@@ -583,8 +583,8 @@ export function SCTPage() {
     return (
       <>
         <AppSidebar user={user} role={role} activeRoute="sct" onRoleChange={handleRoleChange} onLogout={handleLogout} />
-        <div className="page-scroll">
-          <div className="sct-results-hero">
+        <div className="page-scroll" data-testid="sct-results-page">
+          <div className="sct-results-hero" data-testid="sct-results">
             <div className="sct-score-ring">
               <svg width="140" height="140" viewBox="0 0 140 140">
                 <circle cx="70" cy="70" r="58" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="9"/>
@@ -615,7 +615,7 @@ export function SCTPage() {
           <div className="sct-results-body">
             <div className="sct-feedback-title">Retroalimentación Detallada</div>
             {testResults.results.map((r, i) => (
-              <div key={r.itemId} className={`sct-feedback-card ${r.isCorrect ? "correct" : "incorrect"}`}>
+              <div key={r.itemId} className={`sct-feedback-card ${r.isCorrect ? "correct" : "incorrect"}`} data-testid={`sct-feedback-card-${r.itemId}`}>
                 <div className="sct-feedback-top">
                   <span className="sct-feedback-num">Caso {i + 1}</span>
                   <span className={`sct-feedback-status ${r.isCorrect ? "correct" : "incorrect"}`}>
@@ -684,7 +684,7 @@ export function SCTPage() {
     <>
       <AppSidebar user={user} role={role} activeRoute="sct" onRoleChange={handleRoleChange} onLogout={handleLogout} />
 
-      <div className="page-scroll">
+      <div className="page-scroll" data-testid="sct-page">
         {/* ── Top header ── */}
         <div className="sct3-top-header">
           <div className="sct3-top-left">
@@ -1092,7 +1092,7 @@ export function SCTPage() {
                 const statusCls = { draft: "draft", published: "result", archived: "archived" }[status] || "draft";
                 const isUpdating = updatingStatusId === test.id;
                 return (
-                  <div key={test.id} className={`sct3-library-card${status === "archived" ? " sct3-card-archived" : ""}`}>
+                  <div key={test.id} className={`sct3-library-card${status === "archived" ? " sct3-card-archived" : ""}`} data-testid={`sct-library-card-${test.id}`}>
                     <div className="sct3-library-card-top">
                       <div className="sct3-library-card-title">
                         Test SCT · <em>{(test.focus || test.name || "").split(" ")[0].toLowerCase()}</em>
@@ -1107,7 +1107,7 @@ export function SCTPage() {
                     <div className="sct3-library-date">{formatDate(test.created_at)}</div>
                     <div className="sct3-library-card-footer">
                       {status !== "archived" && (
-                        <button className="sct3-open-btn" onClick={() => handleLoadTest(test.id)}>
+                        <button className="sct3-open-btn" onClick={() => handleLoadTest(test.id)} data-testid={`sct-open-${test.id}`}>
                           Abrir →
                         </button>
                       )}
@@ -1165,7 +1165,7 @@ export function SCTPage() {
               <div className="sct3-library-empty-desc">Completa un test publicado para ver tu historial aquí</div>
             </div>
           ) : (
-            <div className="sct3-attempts-table">
+            <div className="sct3-attempts-table" data-testid="sct-attempts-table">
               <div className="sct3-attempts-head">
                 <span>Test</span>
                 <span>Área</span>

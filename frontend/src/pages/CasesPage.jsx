@@ -225,7 +225,7 @@ export function CasesPage() {
       <AppSidebar user={user} role={role} activeRoute={activeRoute} onLogout={handleLogout} />
 
       <main className="dashboard-main">
-        <div className="cases-page">
+        <div className="cases-page" data-testid="cases-page">
 
           {/* Header */}
           <div className="cases-header">

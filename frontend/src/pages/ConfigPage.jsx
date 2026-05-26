@@ -1042,7 +1042,7 @@ export function ConfigPage() {
         onLogout={handleLogout}
       />
 
-      <div className="page-scroll">
+      <div className="page-scroll" data-testid="config-page">
         {/* Hero header */}
         <div className="cfg-hero">
           <div className="cfg-hero-tag">Admin · {user?.name || "Administrador"}</div>

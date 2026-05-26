@@ -471,7 +471,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
         onLogout={handleLogout}
       />
 
-      <div className="page-fixed">
+      <div className="page-fixed" data-testid="chatbot-page">
         <div className="mc-wrapper">
           {/* ── Page header ── */}
           <div className="mc-page-header">
@@ -497,7 +497,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                 </svg>
                 Filtrar por tema
               </button>
-              <button className="mc-new-conv-btn" onClick={handleNewConversation}>
+              <button className="mc-new-conv-btn" onClick={handleNewConversation} data-testid="chat-new-conversation">
                 + Nueva conversación
               </button>
             </div>
@@ -506,7 +506,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
           {/* ── Three-panel area ── */}
           <div className="mc-panels">
             {/* Left: conversations */}
-            <aside className="mc-conversations">
+            <aside className="mc-conversations" data-testid="chat-conversations">
               <div className="mc-conv-search-wrap">
                 <svg className="mc-conv-search-icon" viewBox="0 0 20 20" fill="none">
                   <path d="m17 17-3.5-3.5M14 8.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -548,7 +548,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
 
               <div className="mc-conv-section-header">Recientes</div>
 
-              <div className="mc-conv-list">
+              <div className="mc-conv-list" data-testid="chat-conversation-list">
                 {filteredConversations.length === 0 ? (
                   <div className="mc-conv-empty">
                     <span className="mc-conv-empty-icon">💬</span>
@@ -628,7 +628,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
               </div>
 
               {/* Messages */}
-              <div className="mc-messages">
+              <div className="mc-messages" data-testid="chat-messages">
                 {current &&
                   current.messages.map((msg, idx) => {
                     const showSep =
@@ -666,7 +666,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                             </div>
                           </div>
                         ) : (
-                          <div className={`mc-msg ${msg.sender}`}>
+                          <div className={`mc-msg ${msg.sender}`} data-testid={`chat-message-${msg.sender}`}>
                             {msg.sender === "bot" && (
                               <div className="mc-msg-av mc-av-bot">m</div>
                             )}
@@ -689,7 +689,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                               <div className="mc-bubble-time">{msg.time}</div>
                               {msg.sender === "bot" &&
                                 getRelevantRagSources(msg.ragSources).length > 0 && (
-                                  <div className="mc-cited-sources">
+                                  <div className="mc-cited-sources" data-testid="chat-cited-sources">
                                     <div className="mc-cited-label">FUENTES CITADAS DESDE RAG</div>
                                     {getRelevantRagSources(msg.ragSources).map((src, si) => (
                                       <div key={si} className="mc-cited-item">
@@ -751,6 +751,8 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                   <input
                     type="text"
                     className="mc-input"
+                    aria-label="Pregunta al asistente"
+                    data-testid="chat-input"
                     placeholder="Escribe tu pregunta médica..."
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
@@ -761,6 +763,8 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                     className="mc-send-btn"
                     onClick={handleSend}
                     disabled={!inputText.trim() || isLoading}
+                    aria-label="Enviar mensaje"
+                    data-testid="chat-send"
                   >
                     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
                       <path d="M3 10h14M10 3l7 7-7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -771,7 +775,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
             </main>
 
             {/* Right: RAG context + thread actions */}
-            <aside className="mc-rag-panel">
+            <aside className="mc-rag-panel" data-testid="chat-rag-panel">
               <div className="mc-rag-section">
                 <div className="mc-rag-header">Contexto RAG activo</div>
                 {activeRagSources.length === 0 ? (
@@ -779,7 +783,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                     Sin fuentes documentales activas en este hilo
                   </div>
                 ) : (
-                  <div className="mc-rag-sources">
+                  <div className="mc-rag-sources" data-testid="chat-rag-sources">
                     {activeRagSources.slice(0, 5).map((src, i) => {
                       const tags = getRagSourceTags(src);
                       const pct =
@@ -789,7 +793,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                       const tier =
                         pct >= 85 ? "high" : pct >= 70 ? "mid" : "low";
                       return (
-                        <div key={i} className="mc-rag-card">
+                        <div key={i} className="mc-rag-card" data-testid="chat-rag-card">
                           <div className="mc-rag-card-top">
                             <div className="mc-rag-card-name">
                               {src.title || `Fuente ${i + 1}`}

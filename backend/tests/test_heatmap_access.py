@@ -24,9 +24,10 @@ class HeatmapAccessTestCase(unittest.TestCase):
         self.assertFalse(heatmap_access.is_privileged_role("Estudiante"))
 
     def test_student_limits_are_lower_by_default(self):
-        self.assertEqual(heatmap_access.max_tiles_for_role("Estudiante"), 16)
-        self.assertEqual(heatmap_access.max_tile_size_for_role("Estudiante"), 1024)
-        self.assertGreaterEqual(heatmap_access.max_tiles_for_role("Administrador"), 64)
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(heatmap_access.max_tiles_for_role("Estudiante"), 16)
+            self.assertEqual(heatmap_access.max_tile_size_for_role("Estudiante"), 1024)
+            self.assertGreaterEqual(heatmap_access.max_tiles_for_role("Administrador"), 64)
 
     def test_limits_can_be_configured(self):
         with patch.dict(os.environ, {"HISTO_STUDENT_MAX_HEATMAP_TILES": "8"}):
