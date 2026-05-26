@@ -7,7 +7,7 @@ La idea central es:
 
 ```text
 Docker mueve el software.
-El backup mueve los datos pesados, modelos y volumenes.
+El backup mueve los datos pesados, checkpoints propios y volumenes permitidos.
 ```
 
 Las laminas histologicas grandes, por ejemplo archivos `.tif`, `.tiff` o `.svs`
@@ -29,7 +29,7 @@ asofamech_migration/
 |-- uploads/
 |-- volumes/
 |   |-- db_backup.tar.gz
-|   |-- hf_backup.tar.gz
+|   |-- hf_backup.tar.gz  (opcional, solo con -IncludeRestrictedModelCache)
 |   |-- ollama_backup.tar.gz
 |   `-- compose_images.tar
 |-- checksums.sha256
@@ -41,14 +41,21 @@ Contenido principal:
 | Elemento | Para que sirve |
 |---|---|
 | `db_backup.tar.gz` | Base de datos PostgreSQL con usuarios, imagenes registradas, historial, SCT, RAG, etc. |
-| `hf_backup.tar.gz` | Cache HuggingFace/CONCH usada por el modelo histopatologico. |
+| `hf_backup.tar.gz` | Opcional. Cache HuggingFace/CONCH; no se exporta por defecto por restricciones de acceso/licencia. |
 | `ollama_backup.tar.gz` | Modelos descargados de Ollama, por ejemplo `llama3:8b`. |
 | `compose_images.tar` | Imagenes Docker disponibles para evitar recompilar o descargar en destino. |
 | `histology_images/` | Laminas histologicas grandes copiadas desde `backend/data/camelyon17/images`. |
 | `uploads/` | Imagenes subidas desde la app y tiles DZI generados. |
-| `artifacts/` | Checkpoints, heatmaps, auditorias y archivos del modelo histopatologico. |
+| `artifacts/` | Checkpoints propios, heatmaps, auditorias y archivos del modulo histopatologico. |
 | `checksums.sha256` | Verificacion de integridad de los archivos transferidos. |
 | `manifest.json` | Inventario del backup. |
+
+Nota sobre CONCH:
+
+El backbone CONCH de MahmoodLab se obtiene desde HuggingFace y requiere aceptar
+sus terminos. Para pruebas cerradas en equipos controlados, el responsable puede
+usar su token para preparar el equipo destino con `prepare_histopathology_model.ps1`.
+El token no se entrega a estudiantes ni se guarda en el repositorio.
 
 ---
 
@@ -99,9 +106,10 @@ backend/uploads/
 backend/artifacts/
 ```
 
-7. Exporta volumenes de HuggingFace y Ollama.
-8. Guarda imagenes Docker disponibles en `compose_images.tar`.
-9. Genera `manifest.json` y `checksums.sha256`.
+7. Exporta el volumen de Ollama.
+8. No exporta HuggingFace/CONCH por defecto; se prepara en destino con token.
+9. Guarda imagenes Docker disponibles en `compose_images.tar`.
+10. Genera `manifest.json` y `checksums.sha256`.
 
 Si no se quieren exportar las imagenes Docker:
 
@@ -111,6 +119,15 @@ Si no se quieren exportar las imagenes Docker:
 
 Eso reduce el peso del backup, pero el equipo destino necesitara internet o
 tiempo para construir/descargar imagenes.
+
+Si existe autorizacion explicita para mover el cache de CONCH, se puede incluir:
+
+```powershell
+.\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -IncludeRestrictedModelCache
+```
+
+Para las pruebas con estudiantes, la recomendacion es no usar esa opcion y
+preparar CONCH en el equipo destino con tu token.
 
 ---
 
@@ -181,7 +198,7 @@ backend/data/camelyon17/images/
 ```
 
 6. Copia `artifacts/` y `uploads/`.
-7. Restaura volumenes de HuggingFace y Ollama.
+7. Restaura Ollama y HuggingFace/CONCH solo si ese cache venia incluido.
 8. Carga imagenes Docker desde `compose_images.tar`, si existe.
 9. Levanta:
 
@@ -209,7 +226,42 @@ una prueba controlada.
 
 ---
 
-## 7. Como se transfieren las imagenes histologicas grandes
+## 7. Preparar CONCH en el equipo destino
+
+Si el backup no incluye `volumes/hf_backup.tar.gz`, preparar el backbone
+preentrenado CONCH en el equipo destino con:
+
+```powershell
+.\prepare_histopathology_model.ps1
+```
+
+El script:
+
+1. Pide tu token HuggingFace con acceso a `MahmoodLab/conch`.
+2. Usa un contenedor temporal para descargar/cachear CONCH.
+3. Deja una ruta local estable dentro del volumen Docker:
+
+```text
+/root/.cache/huggingface/conch/pytorch_model.bin
+```
+
+4. Recrea el backend sin token.
+5. Verifica `GET /api/histopathology/status`.
+6. Elimina el token de la sesion PowerShell.
+7. Deja el equipo listo para que los estudiantes usen la plataforma.
+
+Tambien se puede pasar el token como parametro si estas solo en el equipo:
+
+```powershell
+.\prepare_histopathology_model.ps1 -Token "hf_xxx"
+```
+
+No guardar el token en `.env`, README, backups, capturas de pantalla ni chats.
+Los estudiantes solo deben acceder a la plataforma, no al token ni a los pesos.
+
+---
+
+## 8. Como se transfieren las imagenes histologicas grandes
 
 Las imagenes pesadas se tratan como datos externos.
 
@@ -252,7 +304,7 @@ Esto no sube el archivo otra vez. Solo registra metadata y prepara el visor DZI.
 
 ---
 
-## 8. Verificacion despues de restaurar
+## 9. Verificacion despues de restaurar
 
 Ejecutar:
 
@@ -287,6 +339,18 @@ Verificar frontend:
 http://localhost:3000
 ```
 
+Verificar modelo histopatologico:
+
+```powershell
+Invoke-RestMethod http://localhost:8001/api/histopathology/status
+```
+
+Esperado:
+
+```text
+model_ready = True
+```
+
 Ver logs si algo falla:
 
 ```powershell
@@ -298,7 +362,7 @@ docker compose logs -f db
 
 ---
 
-## 9. Problemas comunes
+## 10. Problemas comunes
 
 ### Docker no esta corriendo
 
@@ -369,9 +433,15 @@ Y revisar logs:
 docker compose logs -f backend
 ```
 
+Si el error menciona CONCH, HuggingFace o autenticacion:
+
+```powershell
+.\prepare_histopathology_model.ps1
+```
+
 ---
 
-## 10. Checklist para entregar a otro equipo
+## 11. Checklist para entregar a otro equipo
 
 Antes de enviar:
 
@@ -380,7 +450,8 @@ Antes de enviar:
 - [ ] Confirmar que existe `checksums.sha256`.
 - [ ] Confirmar que `volumes/db_backup.tar.gz` existe.
 - [ ] Confirmar que `volumes/ollama_backup.tar.gz` existe si se requiere LLaMA local.
-- [ ] Confirmar que `volumes/hf_backup.tar.gz` existe si se requiere histopatologia.
+- [ ] Confirmar que `backend/artifacts/histopathology/checkpoints/` contiene la cabeza clasificadora.
+- [ ] Preparar CONCH en destino con `prepare_histopathology_model.ps1` si no se incluyo `hf_backup.tar.gz`.
 - [ ] Confirmar que las laminas estan en `histology_images/camelyon17/images/`.
 - [ ] Confirmar que el disco externo usa NTFS o exFAT.
 - [ ] Probar restauracion en al menos un equipo limpio antes de las pruebas.
@@ -393,12 +464,13 @@ En el equipo destino:
 - [ ] Verificar login.
 - [ ] Verificar biblioteca de imagenes.
 - [ ] Abrir una lamina histologica.
+- [ ] Ejecutar `.\prepare_histopathology_model.ps1` si `model_ready` es `False`.
 - [ ] Probar un ROI o heatmap si corresponde.
 - [ ] Probar chatbot/SCT si corresponde.
 
 ---
 
-## 11. Resumen rapido
+## 12. Resumen rapido
 
 En el equipo origen:
 
@@ -412,6 +484,12 @@ En el equipo destino:
 
 ```powershell
 .\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
+```
+
+Preparar CONCH una vez, solo por el responsable:
+
+```powershell
+.\prepare_histopathology_model.ps1
 ```
 
 Abrir:

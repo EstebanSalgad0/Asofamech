@@ -203,8 +203,11 @@ Copy-DirectoryContents (Join-Path $backupRoot "artifacts") (Join-Path $projectDi
 Copy-DirectoryContents (Join-Path $backupRoot "uploads") (Join-Path $projectDir "backend\uploads") "uploads"
 
 Write-Step 6 8 "Restaurando volumenes de modelos"
-Restore-DockerVolume "${ProjectName}_huggingface_cache" "hf_backup.tar.gz" "HuggingFace cache / CONCH"
+$hfRestored = Restore-DockerVolume "${ProjectName}_huggingface_cache" "hf_backup.tar.gz" "HuggingFace cache / CONCH"
 Restore-DockerVolume "${ProjectName}_ollama_data" "ollama_backup.tar.gz" "Ollama"
+if (-not $hfRestored) {
+    Write-Warn "CONCH no viene incluido en este backup. Luego ejecuta .\prepare_histopathology_model.ps1 para descargarlo con tu token HuggingFace."
+}
 
 Write-Step 7 8 "Cargando imagenes Docker y levantando servicios"
 $composeImagesTar = Join-Path $volumesDir "compose_images.tar"
@@ -251,6 +254,9 @@ Write-Host "    docker compose logs -f backend     <- ver logs del backend"
 Write-Host "    docker compose logs -f frontend    <- ver logs del frontend"
 Write-Host "    docker compose ps                  <- estado de contenedores"
 Write-Host "    docker compose down                <- apagar todo al terminar"
+if (-not $hfRestored) {
+    Write-Host "    .\prepare_histopathology_model.ps1 <- preparar CONCH con token HuggingFace" -ForegroundColor Yellow
+}
 Write-Host ""
 
 Start-Sleep -Seconds 3

@@ -3,6 +3,7 @@
 # Uso:
 #   .\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
 #   .\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -SkipDockerImages
+#   .\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -IncludeRestrictedModelCache
 
 param(
     [Parameter(Mandatory = $true)]
@@ -10,7 +11,9 @@ param(
 
     [string]$ProjectName = "asofamech",
 
-    [switch]$SkipDockerImages
+    [switch]$SkipDockerImages,
+
+    [switch]$IncludeRestrictedModelCache
 )
 
 $ErrorActionPreference = "Stop"
@@ -162,7 +165,13 @@ $artifactsStats = Copy-DirectoryContents (Join-Path $scriptDir "backend\artifact
 $uploadsStats = Copy-DirectoryContents (Join-Path $scriptDir "backend\uploads") $uploadsDir "backend\uploads"
 
 Write-Step 4 6 "Exportando volumenes Docker necesarios"
-$hfExported = Export-DockerVolume "${ProjectName}_huggingface_cache" "hf_backup.tar.gz" "HuggingFace cache / CONCH"
+$hfExported = $false
+if ($IncludeRestrictedModelCache) {
+    Write-Warn "Se exportara el cache HuggingFace/CONCH. Usar solo si tienes autorizacion para mover ese cache."
+    $hfExported = Export-DockerVolume "${ProjectName}_huggingface_cache" "hf_backup.tar.gz" "HuggingFace cache / CONCH"
+} else {
+    Write-Warn "No se exporta HuggingFace/CONCH por defecto. En destino usa prepare_histopathology_model.ps1 con tu token."
+}
 $ollamaExported = Export-DockerVolume "${ProjectName}_ollama_data" "ollama_backup.tar.gz" "Ollama"
 
 Write-Step 5 6 "Guardando imagenes Docker disponibles"
@@ -197,7 +206,7 @@ if ($SkipDockerImages) {
 Write-Step 6 6 "Generando manifest y checksums"
 $volumeFiles = @(Get-ChildItem -LiteralPath $volumesDir -File -Force -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
 $manifest = [ordered]@{
-    backup_format_version = 2
+    backup_format_version = 3
     exported_at = (Get-Date).ToString("o")
     project_name = $ProjectName
     source_project_dir = $scriptDir
@@ -226,6 +235,12 @@ $manifest = [ordered]@{
         huggingface_cache = @{ exported = $hfExported; file = "hf_backup.tar.gz" }
         ollama = @{ exported = $ollamaExported; file = "ollama_backup.tar.gz" }
     }
+    restricted_model_policy = [ordered]@{
+        conch_cache_exported_by_default = $false
+        conch_cache_included = $hfExported
+        preparation_script = "prepare_histopathology_model.ps1"
+        note = "CONCH/MahmoodLab is gated and should be downloaded in the destination machine with an authorized HuggingFace token unless explicit redistribution permission exists."
+    }
     docker_images = $dockerImages
     volume_files = $volumeFiles
     checksums_file = "checksums.sha256"
@@ -250,7 +265,11 @@ Write-Host "  histology_images\camelyon17\images\  <- laminas WSI locales"
 Write-Host "  uploads\                             <- imagenes subidas y DZI"
 Write-Host "  artifacts\                           <- checkpoints, heatmaps y auditorias"
 Write-Host "  volumes\db_backup.tar.gz             <- base de datos"
-Write-Host "  volumes\hf_backup.tar.gz             <- cache HuggingFace / CONCH"
+if ($hfExported) {
+    Write-Host "  volumes\hf_backup.tar.gz             <- cache HuggingFace / CONCH"
+} else {
+    Write-Host "  prepare_histopathology_model.ps1      <- preparar CONCH en destino con token autorizado"
+}
 Write-Host "  volumes\ollama_backup.tar.gz         <- modelos Ollama"
 Write-Host "  manifest.json / checksums.sha256     <- inventario e integridad"
 if (-not $SkipDockerImages) {
