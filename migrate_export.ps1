@@ -1,154 +1,263 @@
 # migrate_export.ps1
-# Exporta todo lo necesario para migrar Asofamech a otro equipo.
-# Ejecutar desde la raiz del proyecto: .\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
+# Exporta lo necesario para migrar ASOFAMECH a otro equipo.
+# Uso:
+#   .\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
+#   .\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -SkipDockerImages
 
 param(
     [Parameter(Mandatory = $true)]
-    [string]$BackupPath
+    [string]$BackupPath,
+
+    [string]$ProjectName = "asofamech",
+
+    [switch]$SkipDockerImages
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectName = "asofamech"
-$scriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Write-Step($n, $total, $msg) {
     Write-Host "`n[$n/$total] $msg" -ForegroundColor Cyan
 }
 function Write-OK($msg)   { Write-Host "  OK  $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "  AVISO: $msg" -ForegroundColor Yellow }
+function Write-Fail($msg) { Write-Host "  ERROR: $msg" -ForegroundColor Red }
+
+function Format-Bytes($bytes) {
+    if ($null -eq $bytes) { return "0 B" }
+    if ($bytes -ge 1GB) { return "$([math]::Round($bytes / 1GB, 2)) GB" }
+    if ($bytes -ge 1MB) { return "$([math]::Round($bytes / 1MB, 1)) MB" }
+    if ($bytes -ge 1KB) { return "$([math]::Round($bytes / 1KB, 1)) KB" }
+    return "$bytes B"
+}
+
+function Get-DirectoryStats($Path) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return @{ files = 0; bytes = 0 }
+    }
+
+    $files = @(Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue)
+    $bytes = ($files | Measure-Object -Property Length -Sum).Sum
+    if ($null -eq $bytes) { $bytes = 0 }
+    return @{ files = $files.Count; bytes = [int64]$bytes }
+}
+
+function Copy-DirectoryContents($Source, $Destination, $Label) {
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+
+    if (-not (Test-Path -LiteralPath $Source)) {
+        Write-Warn "$Label no existe en origen: $Source"
+        return @{ files = 0; bytes = 0 }
+    }
+
+    $items = @(Get-ChildItem -LiteralPath $Source -Force -ErrorAction SilentlyContinue)
+    if ($items.Count -eq 0) {
+        Write-Warn "$Label esta vacio."
+        return @{ files = 0; bytes = 0 }
+    }
+
+    foreach ($item in $items) {
+        Copy-Item -LiteralPath $item.FullName -Destination $Destination -Recurse -Force
+    }
+
+    $stats = Get-DirectoryStats $Destination
+    Write-OK "$Label copiado: $($stats.files) archivo(s), $(Format-Bytes $stats.bytes)"
+    return $stats
+}
+
+function Export-DockerVolume($VolumeName, $OutputFileName, $Label) {
+    docker volume inspect $VolumeName *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "Volumen no encontrado: $VolumeName ($Label)."
+        return $false
+    }
+
+    docker run --rm `
+        -v "${VolumeName}:/data:ro" `
+        -v "${volumesDir}:/backup" `
+        alpine sh -c "tar czf /backup/$OutputFileName -C /data . && echo DONE"
+
+    Write-OK "$OutputFileName exportado ($Label)"
+    return $true
+}
+
+function Wait-PostgresReady {
+    for ($i = 1; $i -le 30; $i++) {
+        docker exec asofamech_db pg_isready -U app_user -d app_db *> $null
+        if ($LASTEXITCODE -eq 0) { return $true }
+        Start-Sleep -Seconds 2
+    }
+    return $false
+}
+
+function New-Checksums($Root, $OutputFile) {
+    $rootFull = (Resolve-Path -LiteralPath $Root).Path.TrimEnd("\")
+    $outputFull = [System.IO.Path]::GetFullPath($OutputFile)
+    $files = @(
+        Get-ChildItem -LiteralPath $rootFull -Recurse -File -Force |
+            Where-Object { [System.IO.Path]::GetFullPath($_.FullName) -ne $outputFull }
+    )
+
+    $lines = foreach ($file in $files) {
+        $relativePath = $file.FullName.Substring($rootFull.Length + 1).Replace("\", "/")
+        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        "$hash  $relativePath"
+    }
+
+    $lines | Set-Content -Path $OutputFile -Encoding ascii
+    return $files.Count
+}
+
+$backupRoot = (New-Item -ItemType Directory -Force -Path $BackupPath).FullName
+$volumesDir = Join-Path $backupRoot "volumes"
+$artifactsDir = Join-Path $backupRoot "artifacts"
+$uploadsDir = Join-Path $backupRoot "uploads"
+$histologyDir = Join-Path $backupRoot "histology_images"
+$histologyCamelyonDir = Join-Path $histologyDir "camelyon17\images"
+
+New-Item -ItemType Directory -Force -Path $volumesDir | Out-Null
+New-Item -ItemType Directory -Force -Path $artifactsDir | Out-Null
+New-Item -ItemType Directory -Force -Path $uploadsDir | Out-Null
+New-Item -ItemType Directory -Force -Path $histologyCamelyonDir | Out-Null
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host "  ASOFAMECH - Exportacion para migracion" -ForegroundColor Cyan
-Write-Host "  Destino: $BackupPath" -ForegroundColor Cyan
+Write-Host "  Destino: $backupRoot" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 
-# ── Crear estructura de destino ──────────────────────────────────────────────
-New-Item -ItemType Directory -Force -Path "$BackupPath\volumes"          | Out-Null
-New-Item -ItemType Directory -Force -Path "$BackupPath\artifacts"        | Out-Null
-New-Item -ItemType Directory -Force -Path "$BackupPath\uploads"          | Out-Null
-New-Item -ItemType Directory -Force -Path "$BackupPath\camelyon17_imgs"  | Out-Null
-
-# ── Levantar solo la DB para consultar imagenes importadas ───────────────────
-Write-Step 1 6 "Consultando imagenes CAMELYON17 registradas en la base de datos..."
-docker compose up -d db | Out-Null
-Start-Sleep -Seconds 6
-
-$query = "SELECT file_path FROM medical_images WHERE file_path LIKE '%camelyon17%' OR file_path LIKE '%data/%';"
-$rawPaths = docker exec asofamech_db psql -U app_user -d app_db -t -c $query 2>$null
-
-$camelyon17Files = @()
-if ($rawPaths) {
-    $camelyon17Files = $rawPaths -split "`n" |
-        ForEach-Object { $_.Trim() } |
-        Where-Object   { $_ -ne "" -and $_ -match "\.(tif|tiff|svs)$" }
-    Write-OK "Encontradas $($camelyon17Files.Count) imagenes importadas desde CAMELYON17."
-} else {
-    Write-Warn "No se pudieron consultar imagenes desde la DB. Continuando sin ellas."
+try {
+    docker info | Out-Null
+    Write-OK "Docker en ejecucion"
+} catch {
+    Write-Fail "Docker no esta corriendo. Abre Docker Desktop y vuelve a ejecutar."
+    exit 1
 }
 
+$existingBackupFiles = @(
+    Get-ChildItem -LiteralPath $backupRoot -Recurse -File -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notlike (Join-Path $backupRoot ".placeholder") }
+)
+if ($existingBackupFiles.Count -gt 0) {
+    Write-Warn "La carpeta de backup ya contiene archivos. Se sobrescribiran coincidencias, pero no se borraran sobrantes."
+}
+
+Write-Step 1 6 "Exportando base de datos PostgreSQL"
+Write-Warn "Se detendra el stack Docker para crear un respaldo consistente de los volumenes."
+docker compose up -d db | Out-Null
+if (Wait-PostgresReady) {
+    Write-OK "PostgreSQL listo para respaldo"
+} else {
+    Write-Warn "PostgreSQL no respondio a tiempo; se intentara exportar el volumen igualmente."
+}
 docker compose down | Out-Null
+$dbExported = Export-DockerVolume "${ProjectName}_db_data" "db_backup.tar.gz" "PostgreSQL"
 
-# ── Copiar TIF/TIFF importados desde data/camelyon17 ────────────────────────
-if ($camelyon17Files.Count -gt 0) {
-    Write-Step 2 6 "Copiando imagenes CAMELYON17 importadas (~varios GB)..."
-    Write-Warn "Esta es la parte mas pesada. Puede tardar bastante segun el tamano de los TIF."
+Write-Step 2 6 "Copiando laminas histologicas locales"
+$sourceCamelyonImages = Join-Path $scriptDir "backend\data\camelyon17\images"
+$histologyStats = Copy-DirectoryContents $sourceCamelyonImages $histologyCamelyonDir "backend\data\camelyon17\images"
 
-    foreach ($containerPath in $camelyon17Files) {
-        # El contenedor ve /app/data/... => el host tiene backend\data\...
-        $relativePath = $containerPath -replace "^/app/", "backend\"
-        $relativePath = $relativePath -replace "/", "\"
-        $hostPath = Join-Path $scriptDir $relativePath
+Write-Step 3 6 "Copiando artifacts y uploads"
+$artifactsStats = Copy-DirectoryContents (Join-Path $scriptDir "backend\artifacts") $artifactsDir "backend\artifacts"
+$uploadsStats = Copy-DirectoryContents (Join-Path $scriptDir "backend\uploads") $uploadsDir "backend\uploads"
 
-        if (Test-Path $hostPath) {
-            $fileName = Split-Path $hostPath -Leaf
-            $sizeMB   = [math]::Round((Get-Item $hostPath).Length / 1MB, 1)
-            Write-Host "  Copiando $fileName ($sizeMB MB)..." -ForegroundColor Yellow
-            Copy-Item -Path $hostPath -Destination "$BackupPath\camelyon17_imgs\" -Force
-            Write-OK "$fileName"
-        } else {
-            Write-Warn "Archivo no encontrado en host: $hostPath"
+Write-Step 4 6 "Exportando volumenes Docker necesarios"
+$hfExported = Export-DockerVolume "${ProjectName}_huggingface_cache" "hf_backup.tar.gz" "HuggingFace cache / CONCH"
+$ollamaExported = Export-DockerVolume "${ProjectName}_ollama_data" "ollama_backup.tar.gz" "Ollama"
+
+Write-Step 5 6 "Guardando imagenes Docker disponibles"
+$dockerImages = @()
+if ($SkipDockerImages) {
+    Write-Warn "Omitiendo exportacion de imagenes Docker por -SkipDockerImages."
+} else {
+    $candidateImages = @(
+        "${ProjectName}-backend",
+        "${ProjectName}-frontend",
+        "pgvector/pgvector:pg15",
+        "ollama/ollama:latest"
+    )
+    $availableImages = @()
+    foreach ($imageName in $candidateImages) {
+        docker image inspect $imageName *> $null
+        if ($LASTEXITCODE -eq 0) {
+            $availableImages += $imageName
         }
     }
-} else {
-    Write-Step 2 6 "Sin imagenes CAMELYON17 importadas, omitiendo..."
+
+    if ($availableImages.Count -gt 0) {
+        $composeImagesTar = Join-Path $volumesDir "compose_images.tar"
+        docker save -o $composeImagesTar $availableImages
+        $dockerImages += "compose_images.tar"
+        Write-OK "compose_images.tar guardado con $($availableImages.Count) imagen(es)"
+    } else {
+        Write-Warn "No se encontraron imagenes Docker conocidas. En destino se construiran/descargaran si es necesario."
+    }
 }
 
-# ── Exportar volumen: base de datos ─────────────────────────────────────────
-Write-Step 3 6 "Exportando base de datos (Postgres)..."
-docker run --rm `
-    -v "${ProjectName}_db_data:/data" `
-    -v "${BackupPath}\volumes:/backup" `
-    alpine sh -c "tar czf /backup/db_backup.tar.gz -C /data . && echo DONE"
-Write-OK "db_backup.tar.gz"
-
-# ── Exportar volumen: HuggingFace cache (modelo CONCH) ──────────────────────
-Write-Step 4 6 "Exportando modelo CONCH (HuggingFace cache)..."
-Write-Warn "Puede tardar 2-5 min (~1-2 GB)..."
-docker run --rm `
-    -v "${ProjectName}_huggingface_cache:/data" `
-    -v "${BackupPath}\volumes:/backup" `
-    alpine sh -c "tar czf /backup/hf_backup.tar.gz -C /data . && echo DONE"
-Write-OK "hf_backup.tar.gz"
-
-# ── Exportar volumen: Ollama (llama3:8b) ─────────────────────────────────────
-Write-Step 5 6 "Exportando modelos Ollama (llama3:8b)..."
-Write-Warn "Puede tardar 10-20 min (~5 GB)..."
-docker run --rm `
-    -v "${ProjectName}_ollama_data:/data" `
-    -v "${BackupPath}\volumes:/backup" `
-    alpine sh -c "tar czf /backup/ollama_backup.tar.gz -C /data . && echo DONE"
-Write-OK "ollama_backup.tar.gz"
-
-# ── Copiar artifacts y uploads ───────────────────────────────────────────────
-Write-Step 6 6 "Copiando artifacts y uploads..."
-
-Copy-Item -Path "$scriptDir\backend\artifacts\*" -Destination "$BackupPath\artifacts\" -Recurse -Force
-Write-OK "artifacts\ copiado"
-
-if (Test-Path "$scriptDir\backend\uploads") {
-    Copy-Item -Path "$scriptDir\backend\uploads\*" -Destination "$BackupPath\uploads\" -Recurse -Force -ErrorAction SilentlyContinue
-    Write-OK "uploads\ copiado"
+Write-Step 6 6 "Generando manifest y checksums"
+$volumeFiles = @(Get-ChildItem -LiteralPath $volumesDir -File -Force -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+$manifest = [ordered]@{
+    backup_format_version = 2
+    exported_at = (Get-Date).ToString("o")
+    project_name = $ProjectName
+    source_project_dir = $scriptDir
+    folders = [ordered]@{
+        histology_images = [ordered]@{
+            source = "backend/data/camelyon17/images"
+            destination = "histology_images/camelyon17/images"
+            files = $histologyStats.files
+            bytes = $histologyStats.bytes
+        }
+        artifacts = [ordered]@{
+            source = "backend/artifacts"
+            destination = "artifacts"
+            files = $artifactsStats.files
+            bytes = $artifactsStats.bytes
+        }
+        uploads = [ordered]@{
+            source = "backend/uploads"
+            destination = "uploads"
+            files = $uploadsStats.files
+            bytes = $uploadsStats.bytes
+        }
+    }
+    volumes = [ordered]@{
+        db = @{ exported = $dbExported; file = "db_backup.tar.gz" }
+        huggingface_cache = @{ exported = $hfExported; file = "hf_backup.tar.gz" }
+        ollama = @{ exported = $ollamaExported; file = "ollama_backup.tar.gz" }
+    }
+    docker_images = $dockerImages
+    volume_files = $volumeFiles
+    checksums_file = "checksums.sha256"
 }
 
-# ── Guardar imagen Docker del backend ────────────────────────────────────────
-Write-Host "`n[Extra] Guardando imagen Docker del backend..." -ForegroundColor Cyan
-Write-Warn "Opcional pero evita recompilar en destino (~8-10 GB, puede tardar 10-15 min)."
-$imageExists = (docker images -q "${ProjectName}-backend" 2>$null) -or (docker images -q "asofamech-backend" 2>$null)
-if ($imageExists) {
-    $imageName = docker images --format "{{.Repository}}" | Where-Object { $_ -match "backend" } | Select-Object -First 1
-    docker save $imageName -o "$BackupPath\volumes\backend_image.tar"
-    Write-OK "backend_image.tar"
-} else {
-    Write-Warn "Imagen backend no construida. Recuerda hacer 'docker compose build' antes si quieres incluirla."
-}
+$manifestPath = Join-Path $backupRoot "manifest.json"
+$manifest | ConvertTo-Json -Depth 8 | Set-Content -Path $manifestPath -Encoding utf8
 
-# ── Manifest ─────────────────────────────────────────────────────────────────
-@{
-    exported_at      = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-    project_name     = $ProjectName
-    camelyon17_files = $camelyon17Files
-    volumes          = @("db_backup.tar.gz", "hf_backup.tar.gz", "ollama_backup.tar.gz")
-} | ConvertTo-Json | Out-File -Encoding utf8 "$BackupPath\manifest.json"
+$checksumPath = Join-Path $backupRoot "checksums.sha256"
+$checksumCount = New-Checksums $backupRoot $checksumPath
+Write-OK "checksums.sha256 generado para $checksumCount archivo(s)"
 
-# ── Resumen ───────────────────────────────────────────────────────────────────
-$totalGB = [math]::Round(
-    (Get-ChildItem $BackupPath -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1GB, 2)
+$totalStats = Get-DirectoryStats $backupRoot
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Green
-Write-Host "  EXPORTACION COMPLETADA  ($totalGB GB total)" -ForegroundColor Green
+Write-Host "  EXPORTACION COMPLETADA ($(Format-Bytes $totalStats.bytes) total)" -ForegroundColor Green
 Write-Host "======================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Contenido exportado:" -ForegroundColor White
-Write-Host "  camelyon17_imgs\    <- TIF importados desde CAMELYON17 ($($camelyon17Files.Count) archivos)"
-Write-Host "  volumes\db_backup.tar.gz       <- base de datos"
-Write-Host "  volumes\hf_backup.tar.gz       <- modelo CONCH"
-Write-Host "  volumes\ollama_backup.tar.gz   <- llama3:8b"
-Write-Host "  artifacts\                     <- checkpoints del modelo"
-Write-Host "  uploads\                       <- imagenes subidas por usuarios"
+Write-Host "  histology_images\camelyon17\images\  <- laminas WSI locales"
+Write-Host "  uploads\                             <- imagenes subidas y DZI"
+Write-Host "  artifacts\                           <- checkpoints, heatmaps y auditorias"
+Write-Host "  volumes\db_backup.tar.gz             <- base de datos"
+Write-Host "  volumes\hf_backup.tar.gz             <- cache HuggingFace / CONCH"
+Write-Host "  volumes\ollama_backup.tar.gz         <- modelos Ollama"
+Write-Host "  manifest.json / checksums.sha256     <- inventario e integridad"
+if (-not $SkipDockerImages) {
+    Write-Host "  volumes\compose_images.tar           <- imagenes Docker disponibles, si existian"
+}
 Write-Host ""
 Write-Host "En el equipo destino:" -ForegroundColor Yellow
-Write-Host "  1. Clona el repositorio"
-Write-Host "  2. Ejecuta: .\start_presentation.ps1 -BackupPath '<ruta_backup>'"
+Write-Host "  1. Copia este backup junto al repositorio."
+Write-Host "  2. Ejecuta: .\start_presentation.ps1 -BackupPath '$backupRoot'"
 Write-Host ""

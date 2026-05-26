@@ -245,6 +245,7 @@ docker compose down -v
 | [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) | Guia completa para desarrolladores |
 | [docs/MANUAL_ESTUDIANTE.md](docs/MANUAL_ESTUDIANTE.md) | Manual de usuario estudiante |
 | [docs/MANUAL_DOCENTE_ADMIN.md](docs/MANUAL_DOCENTE_ADMIN.md) | Manual docente y administrador |
+| [docs/MIGRACION_EQUIPOS.md](docs/MIGRACION_EQUIPOS.md) | Manual de transferencia e instalacion en otros equipos |
 | [docs/GUIA_EVIDENCIAS_TESIS.md](docs/GUIA_EVIDENCIAS_TESIS.md) | Guia de capturas para tesis |
 | [docs/SCT_MODULE.md](docs/SCT_MODULE.md) | Documentacion del modulo SCT |
 | [docs/HISTOPATHOLOGY_AI.md](docs/HISTOPATHOLOGY_AI.md) | Entrenamiento del clasificador histopatologico |
