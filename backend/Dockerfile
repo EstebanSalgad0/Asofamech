@@ -31,7 +31,7 @@ COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY tests ./tests
 COPY start.sh ./start.sh
-RUN chmod +x start.sh
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 # start.sh corre "alembic upgrade head" y luego inicia uvicorn.
 # Los flags de uvicorn se pasan desde docker-compose (command:).

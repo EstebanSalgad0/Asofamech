@@ -917,21 +917,21 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
   const modeBg = activeTool === 'roi2' ? 'rgba(234,88,12,0.9)' : activeTool === 'roi1' ? 'rgba(2,132,199,0.9)' : 'rgba(30,41,59,0.9)';
 
   return (
-    <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }} data-testid="osd-viewer-root">
       <style>{`@keyframes osd-spin { to { transform: rotate(360deg) } }`}</style>
 
       {/* ── VIEWER COLUMN ── */}
       <div style={{ flex: 1, position: 'relative', background: '#101418', overflow: 'hidden', minWidth: 0 }}>
 
         {loading && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#101418', color: '#cbd5e1', zIndex: 10, gap: 12 }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#101418', color: '#cbd5e1', zIndex: 10, gap: 12 }} data-testid="osd-loading">
             <div style={{ width: 36, height: 36, border: '3px solid #334155', borderTop: '3px solid #38bdf8', borderRadius: '50%', animation: 'osd-spin 1s linear infinite' }} />
             <span>Cargando imagen DZI...</span>
           </div>
         )}
 
         {error && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#101418', color: '#fca5a5', zIndex: 10, padding: 20, textAlign: 'center', gap: 8 }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#101418', color: '#fca5a5', zIndex: 10, padding: 20, textAlign: 'center', gap: 8 }} role="alert" data-testid="osd-error">
             <strong>Error al cargar imagen</strong>
             <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{error}</p>
             <p style={{ fontSize: '0.8rem', color: '#64748b' }}>ID: {imageData.id}</p>
@@ -948,13 +948,13 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
               {imageData.title || imageData.filename}
             </span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', color: '#94a3b8', flexShrink: 0, userSelect: 'none' }}>
-              <input type="checkbox" checked={showHeatmapOverlay} onChange={(e) => setShowHeatmapOverlay(e.target.checked)} style={{ accentColor: '#38bdf8' }} />
+              <input type="checkbox" checked={showHeatmapOverlay} onChange={(e) => setShowHeatmapOverlay(e.target.checked)} style={{ accentColor: '#38bdf8' }} aria-label="Mostrar heatmap" data-testid="heatmap-toggle" />
               <span>Mostrar heatmap</span>
             </label>
           </div>
         )}
 
-        <div ref={viewerRef} style={{ width: '100%', height: '100%' }} />
+        <div ref={viewerRef} style={{ width: '100%', height: '100%' }} data-testid="osd-canvas" />
 
         {/* Drawing + ROI overlay */}
         {!loading && !error && (
@@ -964,6 +964,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
             onMouseMove={handlePointerMove}
             onMouseUp={handlePointerUp}
             onMouseLeave={handlePointerUp}
+            data-testid="osd-overlay"
             style={{
               position: 'absolute', inset: 0, zIndex: 12,
               cursor: activeTool === 'roi1' || activeTool === 'roi2' ? 'crosshair' : 'default',
@@ -976,6 +977,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
               const palette = heatmapColor(score, tile.status);
               return (
                 <div key={`${tile.index}-${tile.roi.x}-${tile.roi.y}`}
+                  data-testid="heatmap-tile"
                   title={`P metastasico ${formatPercent(score)} · ${formatClassName(tile.class)}`}
                   style={{ position: 'absolute', left: tile.viewerRect.left, top: tile.viewerRect.top, width: tile.viewerRect.width, height: tile.viewerRect.height, border: `2px solid ${palette.border}`, background: palette.fill, boxShadow: palette.shadow, pointerEvents: 'none' }}
                 />
@@ -985,7 +987,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
             {/* ROI 1 rect + label */}
             {roi1ViewerRect && (
               <>
-                <div style={{ position: 'absolute', left: roi1ViewerRect.left, top: roi1ViewerRect.top, width: roi1ViewerRect.width, height: roi1ViewerRect.height, border: `2px solid ${ROI_COLORS.roi1}`, background: 'rgba(56,189,248,0.08)', boxShadow: '0 0 0 1px rgba(15,23,42,0.5)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', left: roi1ViewerRect.left, top: roi1ViewerRect.top, width: roi1ViewerRect.width, height: roi1ViewerRect.height, border: `2px solid ${ROI_COLORS.roi1}`, background: 'rgba(56,189,248,0.08)', boxShadow: '0 0 0 1px rgba(15,23,42,0.5)', pointerEvents: 'none' }} data-testid="roi-1-overlay" />
                 {roi1ViewerRect.top >= 24 && (
                   <div style={{ position: 'absolute', left: roi1ViewerRect.left, top: roi1ViewerRect.top - 22, background: 'rgba(2,132,199,0.92)', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: '4px 4px 4px 0', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
                     ROI 1  {heatmap ? 'mapeo' : 'área'}
@@ -997,7 +999,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
             {/* ROI 2 rect + label */}
             {roi2ViewerRect && (
               <>
-                <div style={{ position: 'absolute', left: roi2ViewerRect.left, top: roi2ViewerRect.top, width: roi2ViewerRect.width, height: roi2ViewerRect.height, border: `2px solid ${ROI_COLORS.roi2}`, background: 'rgba(249,115,22,0.14)', boxShadow: '0 0 0 1px rgba(15,23,42,0.5)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', left: roi2ViewerRect.left, top: roi2ViewerRect.top, width: roi2ViewerRect.width, height: roi2ViewerRect.height, border: `2px solid ${ROI_COLORS.roi2}`, background: 'rgba(249,115,22,0.14)', boxShadow: '0 0 0 1px rgba(15,23,42,0.5)', pointerEvents: 'none' }} data-testid="roi-2-overlay" />
                 {roi2ViewerRect.top >= 24 && (
                   <div style={{ position: 'absolute', left: roi2ViewerRect.left, top: roi2ViewerRect.top - 22, background: 'rgba(234,88,12,0.92)', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: '4px 4px 4px 0', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
                     ROI 2{resultConfidence != null ? `  ${formatPercent(resultConfidence)}` : ''}
@@ -1047,7 +1049,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
               { id: 'roi1', label: 'ROI 1', sub: 'mapa' },
               { id: 'roi2', label: 'ROI 2', sub: 'clasificar' },
             ].map((tool) => (
-              <button key={tool.id} onClick={() => setActiveTool(tool.id)} style={{ border: activeTool === tool.id ? 'none' : '1px solid #e2e8f0', background: activeTool === tool.id ? (tool.id === 'roi2' ? '#ea580c' : tool.id === 'roi1' ? '#0284c7' : '#1e293b') : '#f8fafc', color: activeTool === tool.id ? '#fff' : '#64748b', borderRadius: 8, padding: '7px 4px', cursor: 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1.3, textAlign: 'center' }}>
+              <button key={tool.id} onClick={() => setActiveTool(tool.id)} aria-pressed={activeTool === tool.id} data-testid={`osd-mode-${tool.id}`} style={{ border: activeTool === tool.id ? 'none' : '1px solid #e2e8f0', background: activeTool === tool.id ? (tool.id === 'roi2' ? '#ea580c' : tool.id === 'roi1' ? '#0284c7' : '#1e293b') : '#f8fafc', color: activeTool === tool.id ? '#fff' : '#64748b', borderRadius: 8, padding: '7px 4px', cursor: 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1.3, textAlign: 'center' }}>
                 {tool.label}
                 {tool.sub && <div style={{ fontSize: 9, fontWeight: 400, opacity: 0.85 }}>{tool.sub}</div>}
               </button>
@@ -1056,7 +1058,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
         </div>
 
         {/* Model status */}
-        <div onClick={fetchModelStatus} style={{ padding: '9px 14px', borderBottom: '1px solid #e8edf2', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+        <div onClick={fetchModelStatus} style={{ padding: '9px 14px', borderBottom: '1px solid #e8edf2', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }} data-testid="model-status">
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: modelReady ? '#22c55e' : statusLoading ? '#f59e0b' : '#ef4444', flexShrink: 0, display: 'inline-block' }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
@@ -1101,7 +1103,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>Dibuja ROI 1 sobre el tejido</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{roi1 ? `${roi1.width}×${roi1.height} px` : 'Sin definir — dibuja sobre la imagen'}</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }} data-testid="roi1-status">{roi1 ? `${roi1.width}×${roi1.height} px` : 'Sin definir — dibuja sobre la imagen'}</div>
                 </div>
               </div>
 
@@ -1131,7 +1133,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                       </div>
                     </div>
                   )}
-                  <button disabled={!canScanHeatmap} onClick={scanRoi1Heatmap} style={{ marginTop: 10, width: '100%', border: 'none', background: canScanHeatmap ? '#0284c7' : '#e2e8f0', color: canScanHeatmap ? '#fff' : '#94a3b8', borderRadius: 8, padding: '9px 0', cursor: canScanHeatmap ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 12 }}>
+                  <button disabled={!canScanHeatmap} onClick={scanRoi1Heatmap} data-testid="generate-heatmap-button" style={{ marginTop: 10, width: '100%', border: 'none', background: canScanHeatmap ? '#0284c7' : '#e2e8f0', color: canScanHeatmap ? '#fff' : '#94a3b8', borderRadius: 8, padding: '9px 0', cursor: canScanHeatmap ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 12 }}>
                     {scanningHeatmap ? 'Generando mapa...' : 'Mapa de ROI 1'}
                   </button>
                 </div>
@@ -1161,7 +1163,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
 
               {/* Heatmap summary */}
               {heatmap && !scanningHeatmap && (
-                <div style={{ border: '1px solid #bfdbfe', borderRadius: 10, padding: 12, background: '#eff6ff' }}>
+                <div style={{ border: '1px solid #bfdbfe', borderRadius: 10, padding: 12, background: '#eff6ff' }} data-testid="heatmap-summary">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ fontWeight: 700, color: '#1e40af', fontSize: 12 }}>Mapa ROI 1</div>
                     <span style={{ fontSize: 10, color: '#6b7280' }}>{heatmapSource === 'prepared' ? 'preparado' : heatmapSource === 'saved' ? 'guardado' : 'sesión'}</span>
@@ -1260,8 +1262,8 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginBottom: 2 }}>Define ROI 2 (o impórtalo de ROI 1)</div>
                   {roi2
-                    ? <div style={{ fontSize: 11, color: '#6b7280' }}>{roi2.width}×{roi2.height} px</div>
-                    : <div style={{ fontSize: 11, color: '#94a3b8' }}>{roi1 ? 'Dibuja sobre la imagen' : 'Primero define ROI 1'}</div>
+                    ? <div style={{ fontSize: 11, color: '#6b7280' }} data-testid="roi2-status">{roi2.width}×{roi2.height} px</div>
+                    : <div style={{ fontSize: 11, color: '#94a3b8' }} data-testid="roi2-status">{roi1 ? 'Dibuja sobre la imagen' : 'Primero define ROI 1'}</div>
                   }
                   {roi1 && heatmap?.summary?.best_tile?.roi && !roi2 && (
                     <button onClick={useBestHeatmapTileAsRoi2} style={{ marginTop: 6, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#0284c7', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
@@ -1279,13 +1281,13 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginBottom: 6 }}>Clasificación CONCH</div>
                   {!prediction ? (
-                    <button disabled={!canAnalyze} onClick={analyzeRoi2} style={{ width: '100%', border: 'none', background: canAnalyze ? '#ea580c' : '#e2e8f0', color: canAnalyze ? '#fff' : '#94a3b8', borderRadius: 8, padding: '9px 0', cursor: canAnalyze ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 12 }}>
+                    <button disabled={!canAnalyze} onClick={analyzeRoi2} data-testid="analyze-roi-button" style={{ width: '100%', border: 'none', background: canAnalyze ? '#ea580c' : '#e2e8f0', color: canAnalyze ? '#fff' : '#94a3b8', borderRadius: 8, padding: '9px 0', cursor: canAnalyze ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 12 }}>
                       {analyzeLabel}
                     </button>
                   ) : (
                     <div>
                       {/* Result card */}
-                      <div style={{ background: '#1e293b', borderRadius: 12, padding: '13px 14px', marginBottom: 8 }}>
+                      <div style={{ background: '#1e293b', borderRadius: 12, padding: '13px 14px', marginBottom: 8 }} data-testid="ai-result-card">
                         <div style={{ marginBottom: 10 }}>
                           <span style={{ background: resultIsWarning ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.18)', color: resultIsWarning ? '#fbbf24' : '#f87171', borderRadius: 4, padding: '2px 8px', fontSize: 10, fontWeight: 800 }}>
                             ⊕ Resultado educativo
@@ -1356,12 +1358,12 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginBottom: 6 }}>Retroalimentación educativa</div>
                     {!feedbackText ? (
-                      <button onClick={handleGetFeedback} disabled={feedbackLoading} style={{ width: '100%', border: 'none', background: feedbackLoading ? '#e2e8f0' : '#0284c7', color: feedbackLoading ? '#94a3b8' : '#fff', borderRadius: 8, padding: '9px 0', cursor: feedbackLoading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 12 }}>
+                      <button onClick={handleGetFeedback} disabled={feedbackLoading} data-testid="ai-feedback-button" style={{ width: '100%', border: 'none', background: feedbackLoading ? '#e2e8f0' : '#0284c7', color: feedbackLoading ? '#94a3b8' : '#fff', borderRadius: 8, padding: '9px 0', cursor: feedbackLoading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 12 }}>
                         {feedbackLoading ? 'Generando retroalimentación...' : 'Obtener retroalimentación (IA)'}
                       </button>
                     ) : (
                       <div>
-                        <div style={{ border: '1px solid #bfdbfe', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
+                        <div style={{ border: '1px solid #bfdbfe', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }} data-testid="ai-feedback-panel">
                           <div style={{ background: '#eff6ff', padding: '7px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <span style={{ fontSize: 12 }}>✦</span>
@@ -1398,7 +1400,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
 
           {/* ── SESSIONS HISTORIAL (all modes) ── */}
           <div style={{ borderTop: '1px solid #e2e8f0' }}>
-            <button onClick={() => setHistorialOpen((v) => !v)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
+            <button onClick={() => setHistorialOpen((v) => !v)} data-testid="roi-history-toggle" style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#6b7280', fontWeight: 600 }}>
               <span>Historial ({sessionsLoading ? '…' : sessions.length})</span>
               <span style={{ fontSize: 10 }}>{historialOpen ? '▲' : '▼'}</span>
             </button>
@@ -1410,7 +1412,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                   const claseColor = { metastasico: '#ef4444', no_metastasico: '#22c55e', no_metastasico_probable: '#16a34a', incierto: '#f59e0b', roi_no_evaluable: '#94a3b8' }[s.clase] || '#94a3b8';
                   const fecha = s.analyzed_at ? new Date(s.analyzed_at).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
                   return (
-                    <div key={s.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
+                    <div key={s.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }} data-testid={`roi-history-session-${s.id}`}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <span style={{ background: claseColor, color: '#fff', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 800 }}>{formatClassName(s.clase)}</span>

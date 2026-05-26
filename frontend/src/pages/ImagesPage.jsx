@@ -204,7 +204,7 @@ export function ImagesPage() {
         onLogout={handleLogout}
       />
 
-      <div className="page-fixed-col">
+      <div className="page-fixed-col" data-testid="histopathology-page">
         {/* Header */}
         <div className="images-v2-header">
           <span className="images-v2-header-tag">Histopatología · IA</span>
@@ -250,7 +250,7 @@ export function ImagesPage() {
                 <div className="images-v2-sidebar-title">Biblioteca</div>
               </div>
 
-              <div className="images-v2-list">
+              <div className="images-v2-list" data-testid="image-library-list">
                 {loading ? (
                   <div style={{ padding: '20px', textAlign: 'center' }}>
                     <span className="images-v2-loading">Cargando…</span>
@@ -266,6 +266,10 @@ export function ImagesPage() {
                       key={img.id}
                       className={`images-v2-img-item ${selectedImage?.id === img.id ? "selected" : ""}`}
                       onClick={() => handleImageSelect(img)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Abrir imagen ${img.title}`}
+                      data-testid={`image-library-item-${img.id}`}
                     >
                       <div className="images-v2-img-thumb">🔬</div>
                       <div className="images-v2-img-info">
@@ -292,7 +296,7 @@ export function ImagesPage() {
                 ? <OpenSeadragonViewer imageData={selectedImage} initialSession={initialSession} />
                 : <MedicalImageViewer imageData={selectedImage} />
             ) : (
-              <div className="images-v2-empty-viewer roi-hist-wrapper">
+              <div className="images-v2-empty-viewer roi-hist-wrapper" data-testid="histopathology-empty-viewer">
                 <div className="roi-hist-empty-top">
                   <span className="images-v2-empty-icon">🔬</span>
                   <div className="images-v2-empty-title">Ninguna imagen seleccionada</div>
@@ -302,7 +306,7 @@ export function ImagesPage() {
                 </div>
 
                 {/* Cross-image session history */}
-                <div className="roi-hist-panel">
+                <div className="roi-hist-panel" data-testid="roi-history-panel">
                   <div className="roi-hist-header">
                     <span className="roi-hist-title">Mis análisis ROI</span>
                     <span className="roi-hist-count">{roiHistory.length} sesión{roiHistory.length !== 1 ? "es" : ""}</span>
@@ -333,7 +337,7 @@ export function ImagesPage() {
                           const label = CLASE_LABELS[s.clase] || s.clase || "—";
                           const isDeleting = deletingSessionId === s.id;
                           return (
-                            <tr key={s.id} className={`roi-hist-row${isDeleting ? " roi-hist-row-deleting" : ""}`}>
+                            <tr key={s.id} className={`roi-hist-row${isDeleting ? " roi-hist-row-deleting" : ""}`} data-testid={`roi-history-row-${s.id}`}>
                               <td className="roi-hist-td">
                                 <div className="roi-hist-td-result">
                                   <span className="roi-hist-dot" style={{ background: color }} />
