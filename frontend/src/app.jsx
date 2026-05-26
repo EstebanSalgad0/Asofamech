@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { LandingPage } from "./pages/LandingPage";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -9,11 +9,18 @@ import { ImagesPage } from "./pages/ImagesPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { CasesPage } from "./pages/CasesPage";
 import { FeedbackPage } from "./pages/FeedbackPage";
-import { ReviewPage } from "./pages/ReviewPage";
+import { ThemeToggle } from "./components/ThemeToggle";
+
+function PublicThemeToggle() {
+  const location = useLocation();
+  if (location.pathname.startsWith("/dashboard")) return null;
+  return <ThemeToggle variant="floating" />;
+}
 
 export default function App() {
   return (
     <BrowserRouter>
+      <PublicThemeToggle />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
@@ -24,7 +31,6 @@ export default function App() {
         <Route path="/dashboard/cases" element={<CasesPage />} />
         <Route path="/dashboard/feedback" element={<FeedbackPage />} />
         <Route path="/dashboard/config" element={<ConfigPage />} />
-        <Route path="/dashboard/review" element={<ReviewPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getStreakDisplay } from "../tracker";
+import { ThemeToggle, ThemeToggleHeader } from "./ThemeToggle";
 
 const navItems = [
   { id: "dashboard", label: "Inicio", path: "/dashboard", icon: "home", group: "Navegacion" },
@@ -9,7 +10,6 @@ const navItems = [
   { id: "images", label: "Imagenes IA", path: "/dashboard/images", icon: "image", group: "Navegacion" },
   { id: "cases", label: "Casos Clinicos", path: "/dashboard/cases", icon: "cases", group: "Navegacion" },
   { id: "feedback", label: "Evaluacion", path: "/dashboard/feedback", icon: "feedback", group: "Navegacion" },
-  { id: "review", label: "Revision", path: "/dashboard/review", icon: "review", group: "Admin", privileged: true },
   { id: "config", label: "Configuracion", path: "/dashboard/config", icon: "settings", group: "Admin", privileged: true },
 ];
 
@@ -57,14 +57,6 @@ function Icon({ name }) {
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (name === "review") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
       </svg>
     );
   }
@@ -127,10 +119,11 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
       <div className="app-sidebar-top">
         <div className="app-sidebar-logo">
           <div className="app-sidebar-logo-mark">A</div>
-          <div>
+          <div className="app-sidebar-logo-info">
             <span className="app-sidebar-logo-text">ASOFAMECH</span>
             <span className="app-sidebar-version">v2.6 - 2026</span>
           </div>
+          <ThemeToggleHeader />
         </div>
       </div>
 
