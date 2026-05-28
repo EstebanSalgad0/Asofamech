@@ -1,8 +1,8 @@
 # start_presentation.ps1
 # Restaura un backup de ASOFAMECH y levanta el sistema con Docker Compose.
 # Uso:
-#   .\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
-#   .\start_presentation.ps1 -BackupPath "E:\asofamech_migration" -SkipChecksum
+#   .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
+#   .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration" -SkipChecksum
 
 param(
     [Parameter(Mandatory = $true)]
@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$projectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
 function Write-Step($n, $total, $msg) {
     Write-Host "`n[$n/$total] $msg" -ForegroundColor Cyan
@@ -136,6 +136,56 @@ function Wait-Url($Url, $Label, $Retries = 30) {
     return $false
 }
 
+function Wait-PostgresReady {
+    for ($i = 1; $i -le 30; $i++) {
+        docker exec asofamech_db pg_isready -U app_user -d app_db *> $null
+        if ($LASTEXITCODE -eq 0) { return $true }
+        Start-Sleep -Seconds 2
+    }
+    return $false
+}
+
+function Sync-ExplicitHistologySelection($Manifest) {
+    if ($null -eq $Manifest) { return }
+    if ($null -eq $Manifest.folders -or $null -eq $Manifest.folders.histology_images) { return }
+    if ($Manifest.folders.histology_images.selection -ne "explicit_file_names") { return }
+
+    $selectedNames = @(
+        $Manifest.folders.histology_images.referenced_files |
+            ForEach-Object { [string]$_ } |
+            Where-Object { $_.Trim() -ne "" }
+    )
+
+    if ($selectedNames.Count -eq 0) {
+        Write-Warn "Backup con seleccion explicita de laminas, pero la lista esta vacia."
+        return
+    }
+
+    $quotedNames = @(
+        $selectedNames |
+            ForEach-Object { "'" + ($_.Replace("'", "''")) + "'" }
+    ) -join ", "
+
+    $query = @"
+UPDATE medical_images
+SET is_active = false
+WHERE is_active = true
+  AND (
+    lower(coalesce(pathology_type, '')) = 'camelyon17'
+    OR replace(lower(file_path), '\', '/') LIKE '%data/camelyon17/images/%'
+  )
+  AND filename NOT IN ($quotedNames);
+"@
+
+    $queryLine = ($query -split "`r?`n") -join " "
+    docker exec asofamech_db psql -U app_user -d app_db -c $queryLine | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "Biblioteca sincronizada con seleccion de laminas: $($selectedNames.Count) archivo(s)"
+    } else {
+        Write-Warn "No se pudo sincronizar la biblioteca con la seleccion de laminas."
+    }
+}
+
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host "  ASOFAMECH - Setup presentacion" -ForegroundColor Cyan
@@ -206,7 +256,7 @@ Write-Step 6 8 "Restaurando volumenes de modelos"
 $hfRestored = Restore-DockerVolume "${ProjectName}_huggingface_cache" "hf_backup.tar.gz" "HuggingFace cache / CONCH"
 Restore-DockerVolume "${ProjectName}_ollama_data" "ollama_backup.tar.gz" "Ollama"
 if (-not $hfRestored) {
-    Write-Warn "CONCH no viene incluido en este backup. Luego ejecuta .\prepare_histopathology_model.ps1 para descargarlo con tu token HuggingFace."
+    Write-Warn "CONCH no viene incluido en este backup. Luego ejecuta .\scripts\prepare_histopathology_model.ps1 para descargarlo con tu token HuggingFace."
 }
 
 Write-Step 7 8 "Cargando imagenes Docker y levantando servicios"
@@ -230,7 +280,12 @@ if (Test-Path -LiteralPath $composeImagesTar) {
 
 docker compose up -d db
 Write-Host "  Esperando que PostgreSQL este listo..." -ForegroundColor Yellow
-Start-Sleep -Seconds 8
+if (Wait-PostgresReady) {
+    Write-OK "PostgreSQL listo"
+    Sync-ExplicitHistologySelection $manifest
+} else {
+    Write-Warn "PostgreSQL no respondio a tiempo; se levantaran servicios igualmente."
+}
 docker compose up -d
 Write-OK "Servicios Docker solicitados"
 
@@ -255,7 +310,7 @@ Write-Host "    docker compose logs -f frontend    <- ver logs del frontend"
 Write-Host "    docker compose ps                  <- estado de contenedores"
 Write-Host "    docker compose down                <- apagar todo al terminar"
 if (-not $hfRestored) {
-    Write-Host "    .\prepare_histopathology_model.ps1 <- preparar CONCH con token HuggingFace" -ForegroundColor Yellow
+    Write-Host "    .\scripts\prepare_histopathology_model.ps1 <- preparar CONCH con token HuggingFace" -ForegroundColor Yellow
 }
 Write-Host ""
 

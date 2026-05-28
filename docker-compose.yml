@@ -28,7 +28,7 @@ services:
       - OLLAMA_URL=http://ollama:11434
       - LLM_MODEL=llama3:8b
       - HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage15_heavy_neg_v1.pt
-      - HISTO_CONCH_CHECKPOINT_REF=${HISTO_CONCH_CHECKPOINT_REF:-/root/.cache/huggingface/conch/pytorch_model.bin}
+      - HISTO_CONCH_CHECKPOINT_REF=${HISTO_CONCH_CHECKPOINT_REF:-hf_hub:MahmoodLab/conch}
       - HISTO_AUDIT_LOG_PATH=/app/artifacts/histopathology/audit_log.jsonl
       - HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD=${HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD:-0.90}
       - HISTO_LOW_SUSPICION_NO_METASTATIC_MIN=${HISTO_LOW_SUSPICION_NO_METASTATIC_MIN:-0.55}
@@ -95,7 +95,7 @@ services:
     container_name: asofamech_frontend
     restart: unless-stopped
     environment:
-      - API_BASE=${FRONTEND_API_BASE:-http://localhost:8001}
+      - API_BASE=${FRONTEND_API_BASE:-}
     ports:
       - "3000:80"
     depends_on:

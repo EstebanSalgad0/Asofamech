@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import OpenSeadragon from 'openseadragon';
 import { heatmapMaxTilesForCurrentRole, histopathologyHeaders, isPrivilegedRole } from '../histopathologyAccess';
-import { authFetch } from '../authClient';
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8001';
+import { API_BASE, authFetch } from '../authClient';
 
 const ROI_COLORS = {
   roi1: '#38bdf8',

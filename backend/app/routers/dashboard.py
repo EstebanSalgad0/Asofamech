@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..db import get_db
-from ..models import ChatLog, HistopathologySession, User
+from ..models import ChatLog, HistopathologySession, SCTAttempt, User
 
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -40,6 +40,11 @@ def get_stats(current_user: User = Depends(get_current_user), db: Session = Depe
     histo_total = histo_q.count()
     histo_week  = histo_q.filter(HistopathologySession.analyzed_at >= week_ago).count()
 
+    sct_q = db.query(SCTAttempt).filter(SCTAttempt.user_id == current_user.id)
+    sct_total = sct_q.count()
+    sct_week = sct_q.filter(SCTAttempt.completed_at >= week_ago).count()
+    latest_sct = sct_q.order_by(SCTAttempt.completed_at.desc()).first()
+
     chat_daily = _daily_counts(db, lambda s, e: (
         db.query(func.count(ChatLog.id))
         .filter(ChatLog.user_id == uid_str, ChatLog.created_at >= s, ChatLog.created_at < e)
@@ -54,10 +59,26 @@ def get_stats(current_user: User = Depends(get_current_user), db: Session = Depe
             HistopathologySession.analyzed_at < e,
         ).scalar() or 0
     ))
+    sct_daily = _daily_counts(db, lambda s, e: (
+        db.query(func.count(SCTAttempt.id))
+        .filter(SCTAttempt.user_id == current_user.id, SCTAttempt.completed_at >= s, SCTAttempt.completed_at < e)
+        .scalar() or 0
+    ))
 
     return {
         "chat":  {"total": chat_total,  "week": chat_week,  "daily": chat_daily},
         "histo": {"total": histo_total, "week": histo_week, "daily": histo_daily},
+        "sct": {
+            "total": sct_total,
+            "week": sct_week,
+            "daily": sct_daily,
+            "latest": {
+                "score": latest_sct.score,
+                "correct_count": latest_sct.correct_count,
+                "total_items": latest_sct.total_items,
+                "completed_at": latest_sct.completed_at.isoformat(),
+            } if latest_sct else None,
+        },
     }
 
 

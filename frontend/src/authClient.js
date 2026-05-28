@@ -1,9 +1,14 @@
 // En Docker el entrypoint inyecta window.__ASOFAMECH_CONFIG__ en runtime.
 // En dev local se usa VITE_API_BASE de .env.local como fallback.
+const runtimeApiBase =
+  typeof window !== "undefined" && window.__ASOFAMECH_CONFIG__
+    ? window.__ASOFAMECH_CONFIG__.API_BASE
+    : undefined;
+
 export const API_BASE =
-  (typeof window !== "undefined" && window.__ASOFAMECH_CONFIG__?.API_BASE) ||
-  import.meta.env.VITE_API_BASE ||
-  "http://localhost:8001";
+  runtimeApiBase !== undefined
+    ? runtimeApiBase
+    : import.meta.env.VITE_API_BASE || "http://localhost:8001";
 
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "user";

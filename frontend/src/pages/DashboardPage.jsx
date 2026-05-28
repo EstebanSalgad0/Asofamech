@@ -253,9 +253,15 @@ export function DashboardPage() {
   const histoCount  = dashStats?.histo?.total ?? activity.filter(i => i.type === "images").length;
   const histoWeek   = dashStats?.histo?.week  ?? 0;
   const histoDaily  = dashStats?.histo?.daily ?? [];
-  const sctCount    = metrics.testsTotal || activity.filter(i => i.type === "sct").length;
+  const localSctCount = metrics.testsTotal || activity.filter(i => i.type === "sct").length;
+  const sctCount    = dashStats?.sct?.total ?? localSctCount;
+  const sctWeek     = dashStats?.sct?.week  ?? 0;
+  const sctDaily    = dashStats?.sct?.daily ?? [];
+  const latestSctScore = dashStats?.sct?.latest?.total_items
+    ? Math.round((dashStats.sct.latest.correct_count / dashStats.sct.latest.total_items) * 100)
+    : null;
   const studyLabel  = formatStudyTime(metrics.studyMs);
-  const testsPassedPct = metrics.testsTotal > 0 ? Math.round((metrics.testsPassed / metrics.testsTotal) * 100) : null;
+  const testsPassedPct = latestSctScore ?? (metrics.testsTotal > 0 ? Math.round((metrics.testsPassed / metrics.testsTotal) * 100) : null);
 
   const latestChat  = activity.find(i => i.type === "chat");
   const latestSct   = activity.find(i => i.type === "sct");
@@ -285,9 +291,9 @@ export function DashboardPage() {
       id: "sct",
       label: "TESTS SCT",
       value: sctCount,
-      sub: testsPassedPct !== null ? `ultimo: ${testsPassedPct}%` : "sin tests completados",
+      sub: testsPassedPct !== null ? `ultimo: ${testsPassedPct}%` : (sctWeek > 0 ? `+${sctWeek} esta semana` : "sin tests completados"),
       color: "#f59e0b",
-      daily: null,
+      daily: sctDaily,
     },
     {
       id: "histo",

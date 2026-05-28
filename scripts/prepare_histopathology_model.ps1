@@ -1,8 +1,8 @@
 # prepare_histopathology_model.ps1
 # Descarga/cachea CONCH en el volumen Docker HuggingFace usando un token temporal.
 # Uso:
-#   .\prepare_histopathology_model.ps1
-#   .\prepare_histopathology_model.ps1 -Token "hf_..."
+#   .\scripts\prepare_histopathology_model.ps1
+#   .\scripts\prepare_histopathology_model.ps1 -Token "hf_..."
 
 param(
     [string]$Token,
@@ -13,7 +13,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$projectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $projectDir
 
 function Write-Step($n, $total, $msg) {

@@ -18,7 +18,7 @@ Docker. Se copian como archivos locales y Docker las monta en el backend.
 
 ## 1. Que incluye la transferencia
 
-El script `migrate_export.ps1` prepara un backup con:
+El script `scripts\migrate_export.ps1` prepara un backup con:
 
 ```text
 asofamech_migration/
@@ -54,7 +54,7 @@ Nota sobre CONCH:
 
 El backbone CONCH de MahmoodLab se obtiene desde HuggingFace y requiere aceptar
 sus terminos. Para pruebas cerradas en equipos controlados, el responsable puede
-usar su token para preparar el equipo destino con `prepare_histopathology_model.ps1`.
+usar su token para preparar el equipo destino con `scripts\prepare_histopathology_model.ps1`.
 El token no se entrega a estudiantes ni se guarda en el repositorio.
 
 ---
@@ -84,8 +84,20 @@ compose/override CPU o quitar temporalmente esas secciones.
 Desde la raiz del proyecto:
 
 ```powershell
-.\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
+.\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
 ```
+
+Si solo se quieren mover laminas especificas para una prueba, pasar los nombres
+exactos:
+
+```powershell
+.\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -HistologyImageNames "patient_017_node_2.tif","patient_012_node_1.tif"
+```
+
+Ese modo copia solo esas laminas desde `backend/data/camelyon17/images/` y evita
+llevar todo el dataset local. Al restaurar, `scripts\start_presentation.ps1` sincroniza
+la biblioteca para que no queden visibles laminas CAMELYON17 no incluidas en el
+backup.
 
 El script hace lo siguiente:
 
@@ -114,7 +126,7 @@ backend/artifacts/
 Si no se quieren exportar las imagenes Docker:
 
 ```powershell
-.\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -SkipDockerImages
+.\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -SkipDockerImages
 ```
 
 Eso reduce el peso del backup, pero el equipo destino necesitara internet o
@@ -123,11 +135,20 @@ tiempo para construir/descargar imagenes.
 Si existe autorizacion explicita para mover el cache de CONCH, se puede incluir:
 
 ```powershell
-.\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -IncludeRestrictedModelCache
+.\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -IncludeRestrictedModelCache
 ```
 
 Para las pruebas con estudiantes, la recomendacion es no usar esa opcion y
 preparar CONCH en el equipo destino con tu token.
+
+Si se quiere forzar la exportacion de todas las laminas locales disponibles:
+
+```powershell
+.\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -AllHistologyImages
+```
+
+Usar esa opcion solo cuando realmente se quiera mover toda la carpeta
+`backend/data/camelyon17/images/`, porque puede pesar cientos de GB.
 
 ---
 
@@ -182,7 +203,7 @@ E:\asofamech_migration
 Desde la raiz del proyecto:
 
 ```powershell
-.\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
+.\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
 ```
 
 El script hace lo siguiente:
@@ -218,7 +239,7 @@ http://localhost:3000
 Si se necesita omitir la verificacion de hashes:
 
 ```powershell
-.\start_presentation.ps1 -BackupPath "E:\asofamech_migration" -SkipChecksum
+.\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration" -SkipChecksum
 ```
 
 Usar esto solo si el archivo `checksums.sha256` no existe o si se esta haciendo
@@ -232,7 +253,7 @@ Si el backup no incluye `volumes/hf_backup.tar.gz`, preparar el backbone
 preentrenado CONCH en el equipo destino con:
 
 ```powershell
-.\prepare_histopathology_model.ps1
+.\scripts\prepare_histopathology_model.ps1
 ```
 
 El script:
@@ -253,7 +274,7 @@ El script:
 Tambien se puede pasar el token como parametro si estas solo en el equipo:
 
 ```powershell
-.\prepare_histopathology_model.ps1 -Token "hf_xxx"
+.\scripts\prepare_histopathology_model.ps1 -Token "hf_xxx"
 ```
 
 No guardar el token en `.env`, README, backups, capturas de pantalla ni chats.
@@ -436,7 +457,7 @@ docker compose logs -f backend
 Si el error menciona CONCH, HuggingFace o autenticacion:
 
 ```powershell
-.\prepare_histopathology_model.ps1
+.\scripts\prepare_histopathology_model.ps1
 ```
 
 ---
@@ -445,13 +466,13 @@ Si el error menciona CONCH, HuggingFace o autenticacion:
 
 Antes de enviar:
 
-- [ ] Ejecutar `.\migrate_export.ps1 -BackupPath "<ruta>"`.
+- [ ] Ejecutar `.\scripts\migrate_export.ps1 -BackupPath "<ruta>"`.
 - [ ] Confirmar que el backup tiene `manifest.json`.
 - [ ] Confirmar que existe `checksums.sha256`.
 - [ ] Confirmar que `volumes/db_backup.tar.gz` existe.
 - [ ] Confirmar que `volumes/ollama_backup.tar.gz` existe si se requiere LLaMA local.
 - [ ] Confirmar que `backend/artifacts/histopathology/checkpoints/` contiene la cabeza clasificadora.
-- [ ] Preparar CONCH en destino con `prepare_histopathology_model.ps1` si no se incluyo `hf_backup.tar.gz`.
+- [ ] Preparar CONCH en destino con `scripts\prepare_histopathology_model.ps1` si no se incluyo `hf_backup.tar.gz`.
 - [ ] Confirmar que las laminas estan en `histology_images/camelyon17/images/`.
 - [ ] Confirmar que el disco externo usa NTFS o exFAT.
 - [ ] Probar restauracion en al menos un equipo limpio antes de las pruebas.
@@ -459,12 +480,12 @@ Antes de enviar:
 En el equipo destino:
 
 - [ ] Docker Desktop abierto.
-- [ ] Ejecutar `.\start_presentation.ps1 -BackupPath "<ruta_backup>"`.
+- [ ] Ejecutar `.\scripts\start_presentation.ps1 -BackupPath "<ruta_backup>"`.
 - [ ] Abrir `http://localhost:3000`.
 - [ ] Verificar login.
 - [ ] Verificar biblioteca de imagenes.
 - [ ] Abrir una lamina histologica.
-- [ ] Ejecutar `.\prepare_histopathology_model.ps1` si `model_ready` es `False`.
+- [ ] Ejecutar `.\scripts\prepare_histopathology_model.ps1` si `model_ready` es `False`.
 - [ ] Probar un ROI o heatmap si corresponde.
 - [ ] Probar chatbot/SCT si corresponde.
 
@@ -475,7 +496,7 @@ En el equipo destino:
 En el equipo origen:
 
 ```powershell
-.\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
+.\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
 ```
 
 Mover `E:\asofamech_migration` al equipo destino.
@@ -483,13 +504,13 @@ Mover `E:\asofamech_migration` al equipo destino.
 En el equipo destino:
 
 ```powershell
-.\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
+.\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
 ```
 
 Preparar CONCH una vez, solo por el responsable:
 
 ```powershell
-.\prepare_histopathology_model.ps1
+.\scripts\prepare_histopathology_model.ps1
 ```
 
 Abrir:

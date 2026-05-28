@@ -95,6 +95,20 @@ El primer usuario registrado se convierte automáticamente en administrador.
 
 ---
 
+## Publicacion temporal con ngrok
+
+Para exponer la plataforma desde este equipo con una URL publica temporal:
+
+```powershell
+.\abrir_publicador.cmd
+```
+
+El publicador levanta Docker Compose, abre un tunel ngrok hacia `http://localhost:3000`,
+muestra la URL publica y permite copiarla o detener el tunel desde una ventana simple.
+Los scripts PowerShell de administracion estan en `scripts/`.
+
+---
+
 ## Variables de entorno
 
 Ver `.env.example` para la lista completa con descripciones. Las variables obligatorias son:
