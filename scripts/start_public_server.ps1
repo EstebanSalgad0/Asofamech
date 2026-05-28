@@ -1,0 +1,404 @@
+param(
+    [switch]$NoBuild
+)
+
+$ErrorActionPreference = "Stop"
+$projectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$script:currentJob = $null
+$script:currentJobName = ""
+$script:publicUrl = ""
+$script:ngrokProcess = $null
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+function Append-Log {
+    param([string]$Message)
+    if ([string]::IsNullOrWhiteSpace($Message)) { return }
+    $stamp = Get-Date -Format "HH:mm:ss"
+    $logBox.AppendText("[$stamp] $Message`r`n")
+    $logBox.SelectionStart = $logBox.Text.Length
+    $logBox.ScrollToCaret()
+    [System.Windows.Forms.Application]::DoEvents()
+}
+
+function Set-Status {
+    param(
+        [string]$Text,
+        [System.Drawing.Color]$Color = [System.Drawing.Color]::FromArgb(68, 84, 106)
+    )
+    $statusLabel.Text = $Text
+    $statusLabel.ForeColor = $Color
+}
+
+function Invoke-CommandText {
+    param(
+        [string]$Command,
+        [switch]$Quiet
+    )
+    if (-not $Quiet) { Append-Log "> $Command" }
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "cmd.exe"
+    $psi.Arguments = "/d /c $Command"
+    $psi.WorkingDirectory = $projectDir
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    $process = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if (-not $Quiet) {
+        if ($stdout) { Append-Log ($stdout.TrimEnd()) }
+        if ($stderr) { Append-Log ($stderr.TrimEnd()) }
+    }
+    return @{ ExitCode = $process.ExitCode; StdOut = $stdout; StdErr = $stderr }
+}
+
+function Test-CommandAvailable {
+    param([string]$Command)
+    $result = Invoke-CommandText "where $Command" -Quiet
+    return $result.ExitCode -eq 0
+}
+
+function Get-NgrokUrl {
+    try {
+        $payload = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -TimeoutSec 2
+        $tunnel = $payload.tunnels | Where-Object { $_.proto -eq "https" } | Select-Object -First 1
+        if ($tunnel.public_url) { return [string]$tunnel.public_url }
+    } catch {
+        return ""
+    }
+    return ""
+}
+
+function Refresh-Status {
+    $compose = Invoke-CommandText "docker compose ps --services --filter status=running" -Quiet
+    $running = @()
+    if ($compose.ExitCode -eq 0 -and $compose.StdOut) {
+        $running = @($compose.StdOut -split "`r?`n" | Where-Object { $_.Trim() -ne "" })
+    }
+
+    $url = Get-NgrokUrl
+    if ($url) {
+        $script:publicUrl = $url
+        $publicText.Text = $url
+    } elseif (-not $script:publicUrl) {
+        $publicText.Text = "Sin tunel activo"
+    }
+
+    $servicesText.Text = if ($running.Count -gt 0) { $running -join ", " } else { "Sin servicios activos detectados" }
+    if ($running -contains "backend" -and $running -contains "frontend" -and $url) {
+        Set-Status "Plataforma publicada" ([System.Drawing.Color]::FromArgb(16, 137, 91))
+    } elseif ($running -contains "backend" -and $running -contains "frontend") {
+        Set-Status "Plataforma local activa" ([System.Drawing.Color]::FromArgb(58, 99, 197))
+    } else {
+        Set-Status "Pendiente de levantar" ([System.Drawing.Color]::FromArgb(166, 109, 21))
+    }
+}
+
+function Set-ButtonsEnabled {
+    param([bool]$Enabled)
+    $btnStart.Enabled = $Enabled
+    $btnPublish.Enabled = $Enabled
+    $btnStopNgrok.Enabled = $Enabled
+    $btnRefresh.Enabled = $Enabled
+    $btnCopy.Enabled = $Enabled
+    $btnOpenLocal.Enabled = $Enabled
+    $btnOpenPublic.Enabled = $Enabled
+}
+
+function Start-Task {
+    param(
+        [string]$Name,
+        [scriptblock]$ScriptBlock
+    )
+    if ($script:currentJob -and $script:currentJob.State -eq "Running") {
+        Append-Log "Ya hay una tarea en ejecucion: $script:currentJobName"
+        return
+    }
+    Set-ButtonsEnabled $false
+    Set-Status "Ejecutando: $Name" ([System.Drawing.Color]::FromArgb(58, 99, 197))
+    Append-Log "Iniciando: $Name"
+    $script:currentJobName = $Name
+    $script:currentJob = Start-Job -ScriptBlock $ScriptBlock -ArgumentList $projectDir, [bool]$NoBuild
+    $timer.Start()
+}
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "ASOFAMECH - Publicador de plataforma"
+$form.StartPosition = "CenterScreen"
+$form.Size = New-Object System.Drawing.Size(920, 620)
+$form.MinimumSize = New-Object System.Drawing.Size(820, 560)
+$form.BackColor = [System.Drawing.Color]::FromArgb(247, 248, 250)
+
+$title = New-Object System.Windows.Forms.Label
+$title.Text = "ASOFAMECH Public Server"
+$title.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
+$title.Location = New-Object System.Drawing.Point(24, 18)
+$title.Size = New-Object System.Drawing.Size(520, 36)
+$form.Controls.Add($title)
+
+$subtitle = New-Object System.Windows.Forms.Label
+$subtitle.Text = "Levanta Docker Compose y publica el puerto 3000 con ngrok."
+$subtitle.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$subtitle.ForeColor = [System.Drawing.Color]::FromArgb(91, 99, 112)
+$subtitle.Location = New-Object System.Drawing.Point(27, 56)
+$subtitle.Size = New-Object System.Drawing.Size(620, 24)
+$form.Controls.Add($subtitle)
+
+$statusLabel = New-Object System.Windows.Forms.Label
+$statusLabel.Text = "Pendiente de levantar"
+$statusLabel.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$statusLabel.Location = New-Object System.Drawing.Point(690, 24)
+$statusLabel.Size = New-Object System.Drawing.Size(190, 26)
+$statusLabel.TextAlign = "MiddleRight"
+$form.Controls.Add($statusLabel)
+
+$panel = New-Object System.Windows.Forms.Panel
+$panel.Location = New-Object System.Drawing.Point(24, 96)
+$panel.Size = New-Object System.Drawing.Size(856, 142)
+$panel.Anchor = "Top,Left,Right"
+$panel.BackColor = [System.Drawing.Color]::White
+$panel.BorderStyle = "FixedSingle"
+$form.Controls.Add($panel)
+
+$localLabel = New-Object System.Windows.Forms.Label
+$localLabel.Text = "URL local"
+$localLabel.Location = New-Object System.Drawing.Point(18, 18)
+$localLabel.Size = New-Object System.Drawing.Size(120, 20)
+$localLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$panel.Controls.Add($localLabel)
+
+$localText = New-Object System.Windows.Forms.TextBox
+$localText.Text = "http://localhost:3000"
+$localText.Location = New-Object System.Drawing.Point(150, 15)
+$localText.Size = New-Object System.Drawing.Size(660, 24)
+$localText.ReadOnly = $true
+$panel.Controls.Add($localText)
+
+$publicLabel = New-Object System.Windows.Forms.Label
+$publicLabel.Text = "URL publica"
+$publicLabel.Location = New-Object System.Drawing.Point(18, 56)
+$publicLabel.Size = New-Object System.Drawing.Size(120, 20)
+$publicLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$panel.Controls.Add($publicLabel)
+
+$publicText = New-Object System.Windows.Forms.TextBox
+$publicText.Text = "Sin tunel activo"
+$publicText.Location = New-Object System.Drawing.Point(150, 53)
+$publicText.Size = New-Object System.Drawing.Size(660, 24)
+$publicText.ReadOnly = $true
+$panel.Controls.Add($publicText)
+
+$servicesLabel = New-Object System.Windows.Forms.Label
+$servicesLabel.Text = "Servicios"
+$servicesLabel.Location = New-Object System.Drawing.Point(18, 94)
+$servicesLabel.Size = New-Object System.Drawing.Size(120, 20)
+$servicesLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$panel.Controls.Add($servicesLabel)
+
+$servicesText = New-Object System.Windows.Forms.TextBox
+$servicesText.Text = "Sin servicios activos detectados"
+$servicesText.Location = New-Object System.Drawing.Point(150, 91)
+$servicesText.Size = New-Object System.Drawing.Size(660, 24)
+$servicesText.ReadOnly = $true
+$panel.Controls.Add($servicesText)
+
+$btnStart = New-Object System.Windows.Forms.Button
+$btnStart.Text = if ($NoBuild) { "Levantar plataforma" } else { "Levantar / reconstruir" }
+$btnStart.Location = New-Object System.Drawing.Point(24, 256)
+$btnStart.Size = New-Object System.Drawing.Size(150, 34)
+$form.Controls.Add($btnStart)
+
+$btnPublish = New-Object System.Windows.Forms.Button
+$btnPublish.Text = "Publicar con ngrok"
+$btnPublish.Location = New-Object System.Drawing.Point(184, 256)
+$btnPublish.Size = New-Object System.Drawing.Size(150, 34)
+$form.Controls.Add($btnPublish)
+
+$btnCopy = New-Object System.Windows.Forms.Button
+$btnCopy.Text = "Copiar URL"
+$btnCopy.Location = New-Object System.Drawing.Point(344, 256)
+$btnCopy.Size = New-Object System.Drawing.Size(110, 34)
+$form.Controls.Add($btnCopy)
+
+$btnOpenLocal = New-Object System.Windows.Forms.Button
+$btnOpenLocal.Text = "Abrir local"
+$btnOpenLocal.Location = New-Object System.Drawing.Point(464, 256)
+$btnOpenLocal.Size = New-Object System.Drawing.Size(100, 34)
+$form.Controls.Add($btnOpenLocal)
+
+$btnOpenPublic = New-Object System.Windows.Forms.Button
+$btnOpenPublic.Text = "Abrir publica"
+$btnOpenPublic.Location = New-Object System.Drawing.Point(574, 256)
+$btnOpenPublic.Size = New-Object System.Drawing.Size(110, 34)
+$form.Controls.Add($btnOpenPublic)
+
+$btnStopNgrok = New-Object System.Windows.Forms.Button
+$btnStopNgrok.Text = "Detener ngrok"
+$btnStopNgrok.Location = New-Object System.Drawing.Point(694, 256)
+$btnStopNgrok.Size = New-Object System.Drawing.Size(120, 34)
+$form.Controls.Add($btnStopNgrok)
+
+$btnRefresh = New-Object System.Windows.Forms.Button
+$btnRefresh.Text = "Estado"
+$btnRefresh.Location = New-Object System.Drawing.Point(824, 256)
+$btnRefresh.Size = New-Object System.Drawing.Size(56, 34)
+$btnRefresh.Anchor = "Top,Right"
+$form.Controls.Add($btnRefresh)
+
+$logBox = New-Object System.Windows.Forms.TextBox
+$logBox.Location = New-Object System.Drawing.Point(24, 308)
+$logBox.Size = New-Object System.Drawing.Size(856, 248)
+$logBox.Anchor = "Top,Bottom,Left,Right"
+$logBox.Multiline = $true
+$logBox.ScrollBars = "Vertical"
+$logBox.ReadOnly = $true
+$logBox.BackColor = [System.Drawing.Color]::FromArgb(15, 23, 42)
+$logBox.ForeColor = [System.Drawing.Color]::FromArgb(226, 232, 240)
+$logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
+$form.Controls.Add($logBox)
+
+$timer = New-Object System.Windows.Forms.Timer
+$timer.Interval = 800
+$timer.Add_Tick({
+    if (-not $script:currentJob) { return }
+    $output = Receive-Job -Job $script:currentJob 2>&1
+    foreach ($line in $output) { Append-Log ([string]$line) }
+    if ($script:currentJob.State -in @("Completed", "Failed", "Stopped")) {
+        $state = $script:currentJob.State
+        $more = Receive-Job -Job $script:currentJob 2>&1
+        foreach ($line in $more) { Append-Log ([string]$line) }
+        if ($state -eq "Completed") {
+            Append-Log "Tarea completada: $script:currentJobName"
+        } else {
+            Append-Log "Tarea finalizada con estado: $state"
+        }
+        Remove-Job -Job $script:currentJob -Force -ErrorAction SilentlyContinue
+        $script:currentJob = $null
+        $script:currentJobName = ""
+        $timer.Stop()
+        Set-ButtonsEnabled $true
+        Refresh-Status
+    }
+})
+
+$btnStart.Add_Click({
+    if (-not (Test-CommandAvailable "docker")) {
+        Append-Log "Docker CLI no esta disponible en PATH."
+        return
+    }
+    Start-Task "Levantar Docker Compose" {
+        param($ProjectDir, $NoBuildFlag)
+        Set-Location $ProjectDir
+        $dockerDesktop = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+        if (Test-Path -LiteralPath $dockerDesktop) {
+            Start-Process -FilePath $dockerDesktop -WindowStyle Hidden | Out-Null
+            "Docker Desktop solicitado."
+        }
+        $deadline = (Get-Date).AddMinutes(3)
+        do {
+            docker info --format "{{.ServerVersion}}" 2>$null | ForEach-Object { "Docker daemon listo: $_" }
+            if ($LASTEXITCODE -eq 0) { break }
+            "Esperando Docker daemon..."
+            Start-Sleep -Seconds 3
+        } while ((Get-Date) -lt $deadline)
+        if ($LASTEXITCODE -ne 0) { throw "Docker no quedo disponible dentro del tiempo esperado." }
+        if ($NoBuildFlag) {
+            docker compose up -d 2>&1 | ForEach-Object { $_.ToString() }
+        } else {
+            docker compose up -d --build 2>&1 | ForEach-Object { $_.ToString() }
+        }
+        if ($LASTEXITCODE -ne 0) { throw "docker compose up fallo." }
+        docker compose ps 2>&1 | ForEach-Object { $_.ToString() }
+    }
+})
+
+$btnPublish.Add_Click({
+    if (-not (Test-CommandAvailable "ngrok")) {
+        Append-Log "ngrok no esta disponible en PATH."
+        return
+    }
+    $existing = Get-NgrokUrl
+    if ($existing) {
+        $script:publicUrl = $existing
+        $publicText.Text = $existing
+        Append-Log "Ya existe un tunel activo: $existing"
+        Refresh-Status
+        return
+    }
+    Append-Log "Iniciando ngrok hacia http://localhost:3000"
+    try {
+        $script:ngrokProcess = Start-Process -FilePath "ngrok" -ArgumentList "http 3000 --log=stdout" -WindowStyle Hidden -PassThru
+    } catch {
+        Append-Log "No se pudo iniciar ngrok: $($_.Exception.Message)"
+        return
+    }
+    $deadline = (Get-Date).AddSeconds(35)
+    do {
+        Start-Sleep -Seconds 1
+        $url = Get-NgrokUrl
+        if ($url) { break }
+        [System.Windows.Forms.Application]::DoEvents()
+    } while ((Get-Date) -lt $deadline)
+    if ($url) {
+        $script:publicUrl = $url
+        $publicText.Text = $url
+        Append-Log "Tunel publico activo: $url"
+        try {
+            $health = Invoke-RestMethod -Uri "$url/health" -Headers @{ "ngrok-skip-browser-warning" = "1" } -TimeoutSec 10
+            Append-Log "Health publico: $($health.status)"
+        } catch {
+            Append-Log "Tunel creado, pero health publico no respondio aun: $($_.Exception.Message)"
+        }
+    } else {
+        Append-Log "ngrok no entrego URL. Revisa si tu cuenta/token de ngrok esta configurado."
+    }
+    Refresh-Status
+})
+
+$btnCopy.Add_Click({
+    $url = if ($script:publicUrl) { $script:publicUrl } else { Get-NgrokUrl }
+    if (-not $url) {
+        Append-Log "No hay URL publica para copiar."
+        return
+    }
+    [System.Windows.Forms.Clipboard]::SetText($url)
+    Append-Log "URL copiada al portapapeles: $url"
+})
+
+$btnOpenLocal.Add_Click({
+    Start-Process "http://localhost:3000"
+})
+
+$btnOpenPublic.Add_Click({
+    $url = if ($script:publicUrl) { $script:publicUrl } else { Get-NgrokUrl }
+    if (-not $url) {
+        Append-Log "No hay URL publica activa."
+        return
+    }
+    Start-Process $url
+})
+
+$btnStopNgrok.Add_Click({
+    Append-Log "Deteniendo procesos ngrok..."
+    Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    $script:publicUrl = ""
+    $publicText.Text = "Sin tunel activo"
+    Refresh-Status
+})
+
+$btnRefresh.Add_Click({
+    Refresh-Status
+    Append-Log "Estado actualizado."
+})
+
+$form.Add_Shown({
+    Append-Log "Directorio del proyecto: $projectDir"
+    Append-Log "Orden sugerido: 1) Levantar / reconstruir, 2) Publicar con ngrok, 3) Copiar URL."
+    Refresh-Status
+})
+
+[void]$form.ShowDialog()

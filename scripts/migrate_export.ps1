@@ -1,9 +1,11 @@
 # migrate_export.ps1
 # Exporta lo necesario para migrar ASOFAMECH a otro equipo.
 # Uso:
-#   .\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
-#   .\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -SkipDockerImages
-#   .\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -IncludeRestrictedModelCache
+#   .\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
+#   .\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -HistologyImageNames "patient_017_node_2.tif","patient_012_node_1.tif"
+#   .\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -AllHistologyImages
+#   .\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -SkipDockerImages
+#   .\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -IncludeRestrictedModelCache
 
 param(
     [Parameter(Mandatory = $true)]
@@ -13,11 +15,17 @@ param(
 
     [switch]$SkipDockerImages,
 
-    [switch]$IncludeRestrictedModelCache
+    [switch]$IncludeRestrictedModelCache,
+
+    [string[]]$HistologyImageNames = @(),
+
+    [switch]$AllHistologyImages,
+
+    [switch]$LeaveStackStopped
 )
 
 $ErrorActionPreference = "Stop"
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
 function Write-Step($n, $total, $msg) {
     Write-Host "`n[$n/$total] $msg" -ForegroundColor Cyan
@@ -45,7 +53,62 @@ function Get-DirectoryStats($Path) {
     return @{ files = $files.Count; bytes = [int64]$bytes }
 }
 
-function Copy-DirectoryContents($Source, $Destination, $Label) {
+function Clear-DirectoryContents($Path, $Root) {
+    New-Item -ItemType Directory -Force -Path $Path | Out-Null
+
+    $rootFull = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $Root).Path).TrimEnd("\")
+    $pathFull = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $Path).Path).TrimEnd("\")
+    if (-not $pathFull.StartsWith($rootFull + "\", [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Ruta fuera del backup; no se limpia por seguridad: $pathFull"
+    }
+
+    Get-ChildItem -LiteralPath $pathFull -Force -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force
+}
+
+function Get-ReferencedCamelyonImageNames {
+    $query = @"
+SELECT DISTINCT filename
+FROM medical_images
+WHERE is_active = true
+  AND (
+    lower(coalesce(pathology_type, '')) = 'camelyon17'
+    OR replace(lower(file_path), '\', '/') LIKE '%data/camelyon17/images/%'
+  )
+ORDER BY filename;
+"@
+
+    $queryLine = ($query -split "`r?`n") -join " "
+    $output = docker exec asofamech_db psql -U app_user -d app_db -t -A -c $queryLine 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "No se pudieron leer las laminas CAMELYON17 registradas en la base de datos."
+        return @()
+    }
+
+    return @(
+        $output |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ }
+    )
+}
+
+function Copy-DirectoryContents {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Source,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Destination,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label,
+
+        [switch]$ShowProgress,
+
+        [AllowEmptyCollection()]
+        [string[]]$IncludeFileNames
+    )
+
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 
     if (-not (Test-Path -LiteralPath $Source)) {
@@ -57,6 +120,85 @@ function Copy-DirectoryContents($Source, $Destination, $Label) {
     if ($items.Count -eq 0) {
         Write-Warn "$Label esta vacio."
         return @{ files = 0; bytes = 0 }
+    }
+
+    if ($ShowProgress) {
+        Write-Host "  Calculando tamano de $Label..." -ForegroundColor DarkGray
+        $sourceFull = (Resolve-Path -LiteralPath $Source).Path.TrimEnd("\")
+        $destinationFull = (Resolve-Path -LiteralPath $Destination).Path.TrimEnd("\")
+        $directories = @(Get-ChildItem -LiteralPath $sourceFull -Recurse -Directory -Force -ErrorAction SilentlyContinue)
+        $files = @(Get-ChildItem -LiteralPath $sourceFull -Recurse -File -Force -ErrorAction SilentlyContinue)
+
+        if ($PSBoundParameters.ContainsKey("IncludeFileNames")) {
+            $wanted = @{}
+            foreach ($name in $IncludeFileNames) {
+                if ($name) {
+                    $wanted[$name.ToLowerInvariant()] = $true
+                }
+            }
+
+            $files = @(
+                $files | Where-Object {
+                    $wanted.ContainsKey($_.Name.ToLowerInvariant())
+                }
+            )
+
+            $found = @{}
+            foreach ($file in $files) {
+                $found[$file.Name.ToLowerInvariant()] = $true
+            }
+
+            foreach ($name in $IncludeFileNames) {
+                if ($name -and -not $found.ContainsKey($name.ToLowerInvariant())) {
+                    Write-Warn "Lamina solicitada pero no encontrada en carpeta local: $name"
+                }
+            }
+        }
+
+        if ($files.Count -eq 0) {
+            Write-Warn "$Label no tiene archivos para copiar con el filtro actual."
+            return @{ files = 0; bytes = 0 }
+        }
+
+        $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
+        if ($null -eq $totalBytes) { $totalBytes = 0 }
+
+        foreach ($directory in $directories) {
+            $relativeDir = $directory.FullName.Substring($sourceFull.Length).TrimStart([char[]]"\/")
+            New-Item -ItemType Directory -Force -Path (Join-Path $destinationFull $relativeDir) | Out-Null
+        }
+
+        $copiedBytes = [int64]0
+        $copiedFiles = 0
+        $activity = "Copiando $Label"
+
+        foreach ($file in $files) {
+            $relativePath = $file.FullName.Substring($sourceFull.Length).TrimStart([char[]]"\/")
+            $targetPath = Join-Path $destinationFull $relativePath
+            $targetDir = Split-Path -Parent $targetPath
+            New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+
+            Copy-Item -LiteralPath $file.FullName -Destination $targetPath -Force
+
+            $copiedFiles += 1
+            $copiedBytes += [int64]$file.Length
+            if ($totalBytes -gt 0) {
+                $percent = [math]::Min(100, [math]::Round(($copiedBytes / $totalBytes) * 100, 1))
+            } else {
+                $percent = 100
+            }
+
+            Write-Progress `
+                -Activity $activity `
+                -Status "$copiedFiles/$($files.Count) archivo(s) - $(Format-Bytes $copiedBytes) de $(Format-Bytes $totalBytes)" `
+                -PercentComplete $percent `
+                -CurrentOperation $relativePath
+        }
+
+        Write-Progress -Activity $activity -Completed
+        $stats = Get-DirectoryStats $Destination
+        Write-OK "$Label copiado: $($stats.files) archivo(s), $(Format-Bytes $stats.bytes)"
+        return $stats
     }
 
     foreach ($item in $items) {
@@ -137,6 +279,11 @@ try {
     exit 1
 }
 
+if ($AllHistologyImages -and $HistologyImageNames.Count -gt 0) {
+    Write-Fail "Usa -AllHistologyImages o -HistologyImageNames, pero no ambos al mismo tiempo."
+    exit 1
+}
+
 $existingBackupFiles = @(
     Get-ChildItem -LiteralPath $backupRoot -Recurse -File -Force -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -notlike (Join-Path $backupRoot ".placeholder") }
@@ -153,12 +300,47 @@ if (Wait-PostgresReady) {
 } else {
     Write-Warn "PostgreSQL no respondio a tiempo; se intentara exportar el volumen igualmente."
 }
+$referencedCamelyonImages = @()
+if (-not $AllHistologyImages) {
+    if ($HistologyImageNames.Count -gt 0) {
+        $referencedCamelyonImages = @(
+            $HistologyImageNames |
+                ForEach-Object { [System.IO.Path]::GetFileName($_.Trim()) } |
+                Where-Object { $_ } |
+                Select-Object -Unique
+        )
+        Write-OK "Se exportaran $($referencedCamelyonImages.Count) lamina(s) CAMELYON17 seleccionadas explicitamente."
+    } else {
+        $referencedCamelyonImages = Get-ReferencedCamelyonImageNames
+    }
+
+    if ($referencedCamelyonImages.Count -gt 0) {
+        if ($HistologyImageNames.Count -eq 0) {
+            Write-OK "Se exportaran $($referencedCamelyonImages.Count) lamina(s) CAMELYON17 registradas en la base."
+        }
+    } else {
+        Write-Warn "No hay laminas CAMELYON17 registradas en la base. Usa -AllHistologyImages si quieres mover toda la carpeta local."
+    }
+} else {
+    Write-Warn "Se exportaran todas las laminas locales por -AllHistologyImages."
+}
 docker compose down | Out-Null
 $dbExported = Export-DockerVolume "${ProjectName}_db_data" "db_backup.tar.gz" "PostgreSQL"
+if (-not $LeaveStackStopped) {
+    Write-Host ""
+    Write-Host "Reiniciando stack Docker antes de copiar archivos pesados..." -ForegroundColor Cyan
+    docker compose up -d | Out-Null
+    Write-OK "Stack Docker reiniciado"
+}
 
 Write-Step 2 6 "Copiando laminas histologicas locales"
 $sourceCamelyonImages = Join-Path $scriptDir "backend\data\camelyon17\images"
-$histologyStats = Copy-DirectoryContents $sourceCamelyonImages $histologyCamelyonDir "backend\data\camelyon17\images"
+Clear-DirectoryContents $histologyCamelyonDir $backupRoot
+if ($AllHistologyImages) {
+    $histologyStats = Copy-DirectoryContents $sourceCamelyonImages $histologyCamelyonDir "backend\data\camelyon17\images" -ShowProgress
+} else {
+    $histologyStats = Copy-DirectoryContents $sourceCamelyonImages $histologyCamelyonDir "backend\data\camelyon17\images" -ShowProgress -IncludeFileNames $referencedCamelyonImages
+}
 
 Write-Step 3 6 "Copiando artifacts y uploads"
 $artifactsStats = Copy-DirectoryContents (Join-Path $scriptDir "backend\artifacts") $artifactsDir "backend\artifacts"
@@ -206,7 +388,7 @@ if ($SkipDockerImages) {
 Write-Step 6 6 "Generando manifest y checksums"
 $volumeFiles = @(Get-ChildItem -LiteralPath $volumesDir -File -Force -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
 $manifest = [ordered]@{
-    backup_format_version = 3
+    backup_format_version = 4
     exported_at = (Get-Date).ToString("o")
     project_name = $ProjectName
     source_project_dir = $scriptDir
@@ -214,6 +396,8 @@ $manifest = [ordered]@{
         histology_images = [ordered]@{
             source = "backend/data/camelyon17/images"
             destination = "histology_images/camelyon17/images"
+            selection = if ($AllHistologyImages) { "all_local_files" } elseif ($HistologyImageNames.Count -gt 0) { "explicit_file_names" } else { "db_referenced_active_camelyon17" }
+            referenced_files = $referencedCamelyonImages
             files = $histologyStats.files
             bytes = $histologyStats.bytes
         }
@@ -255,6 +439,15 @@ Write-OK "checksums.sha256 generado para $checksumCount archivo(s)"
 
 $totalStats = Get-DirectoryStats $backupRoot
 
+if ($LeaveStackStopped) {
+    Write-Warn "El stack Docker quedo detenido por -LeaveStackStopped."
+} else {
+    Write-Host ""
+    Write-Host "Reiniciando stack Docker de ASOFAMECH..." -ForegroundColor Cyan
+    docker compose up -d | Out-Null
+    Write-OK "Stack Docker reiniciado"
+}
+
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Green
 Write-Host "  EXPORTACION COMPLETADA ($(Format-Bytes $totalStats.bytes) total)" -ForegroundColor Green
@@ -278,5 +471,5 @@ if (-not $SkipDockerImages) {
 Write-Host ""
 Write-Host "En el equipo destino:" -ForegroundColor Yellow
 Write-Host "  1. Copia este backup junto al repositorio."
-Write-Host "  2. Ejecuta: .\start_presentation.ps1 -BackupPath '$backupRoot'"
+Write-Host "  2. Ejecuta: .\scripts\start_presentation.ps1 -BackupPath '$backupRoot'"
 Write-Host ""

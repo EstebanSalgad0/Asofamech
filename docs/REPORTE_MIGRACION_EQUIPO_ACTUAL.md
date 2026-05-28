@@ -64,7 +64,7 @@ asofamech_migration/
 Nota: en el flujo actual, el backup de CONCH/HuggingFace es opcional y solo
 debe exportarse si se tiene permiso para redistribuir esa cache. Para pruebas en
 otros equipos, lo recomendado es preparar CONCH en el destino con
-`prepare_histopathology_model.ps1` usando un token HuggingFace autorizado.
+`scripts\prepare_histopathology_model.ps1` usando un token HuggingFace autorizado.
 
 Se buscaron rutas comunes dentro del perfil del usuario, pero no aparecieron:
 
@@ -78,7 +78,7 @@ C:\Users\salga\Documents
 
 Impacto:
 
-- No se pudo ejecutar `.\start_presentation.ps1 -BackupPath "<ruta_backup>"`.
+- No se pudo ejecutar `.\scripts\start_presentation.ps1 -BackupPath "<ruta_backup>"`.
 - No se restauraron usuarios, imagenes, uploads, artifacts ni volumenes desde un backup formal.
 - Se tuvo que levantar el proyecto desde cero con `docker compose up`.
 
@@ -115,7 +115,7 @@ Como resolverlo:
 ```powershell
 New-Item -ItemType Directory -Force backend\artifacts\histopathology\checkpoints
 Copy-Item "<ruta_backup>\artifacts\histopathology\checkpoints\tri_head_camelyon17_stage15_heavy_neg_v1.pt" backend\artifacts\histopathology\checkpoints\
-.\prepare_histopathology_model.ps1
+.\scripts\prepare_histopathology_model.ps1
 Invoke-RestMethod http://localhost:8001/api/histopathology/status
 ```
 
@@ -127,7 +127,7 @@ clasificadora con los scripts de `backend/histopathology_offline`.
 El script correcto para preparar CONCH es:
 
 ```powershell
-.\prepare_histopathology_model.ps1
+.\scripts\prepare_histopathology_model.ps1
 ```
 
 En el flujo actual, Docker Compose espera que CONCH quede disponible dentro del
@@ -279,7 +279,7 @@ Despues de recrear la base, el backend quedo `healthy` y el frontend arranco.
 En el equipo que tiene los datos correctos, generar un backup completo:
 
 ```powershell
-.\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
+.\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration"
 ```
 
 Luego copiar la carpeta `E:\asofamech_migration` al equipo destino, usando disco
@@ -288,7 +288,7 @@ externo, red local u otro medio con espacio suficiente.
 En el equipo destino, restaurar ese backup:
 
 ```powershell
-.\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
+.\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
 ```
 
 Ese paso debe restaurar:
@@ -319,7 +319,7 @@ Copy-Item "E:\asofamech_migration\artifacts\histopathology\checkpoints\tri_head_
 Luego preparar CONCH en el equipo destino:
 
 ```powershell
-.\prepare_histopathology_model.ps1
+.\scripts\prepare_histopathology_model.ps1
 ```
 
 Este script pide un token HuggingFace con acceso a `MahmoodLab/conch`. El token
@@ -361,15 +361,15 @@ instalacion limpia. En ese caso hay que:
 1. Registrar el primer usuario administrador.
 2. Copiar manualmente las laminas a `backend\data\camelyon17\images`.
 3. Copiar manualmente el checkpoint `.pt` a `backend\artifacts\histopathology\checkpoints`.
-4. Ejecutar `.\prepare_histopathology_model.ps1`.
+4. Ejecutar `.\scripts\prepare_histopathology_model.ps1`.
 5. Volver a probar `/api/histopathology/status`.
 
 ## Pendientes recomendados
 
 1. Ubicar o generar el backup `asofamech_migration` desde el equipo origen.
-2. Restaurar el backup en este equipo con `.\start_presentation.ps1 -BackupPath "<ruta_backup>"`.
+2. Restaurar el backup en este equipo con `.\scripts\start_presentation.ps1 -BackupPath "<ruta_backup>"`.
 3. Confirmar que existe el checkpoint `tri_head_camelyon17_stage15_heavy_neg_v1.pt`.
-4. Ejecutar `.\prepare_histopathology_model.ps1` con token HuggingFace autorizado.
+4. Ejecutar `.\scripts\prepare_histopathology_model.ps1` con token HuggingFace autorizado.
 5. Verificar `model_ready = true` en `/api/histopathology/status`.
 6. Registrar el primer usuario en la app para crear el administrador inicial.
 7. Probar login, chatbot/SCT, biblioteca de imagenes y modulo ROI.
