@@ -132,6 +132,52 @@ Si no se quieren exportar las imagenes Docker:
 Eso reduce el peso del backup, pero el equipo destino necesitara internet o
 tiempo para construir/descargar imagenes.
 
+### Modo recomendado si el disco externo es lento
+
+Para presentacion o pruebas con pocas laminas, conviene usar el modo liviano.
+Este modo deja que Docker reconstruya/descargue lo que pueda en el equipo
+destino y evita mover por disco:
+
+- `compose_images.tar`;
+- volumen de Ollama;
+- artifacts de entrenamiento, embeddings, patches y debug pesados;
+- tiles DZI pregenerados.
+
+Si solo se quieren mover las dos laminas de validacion actuales:
+
+```powershell
+& {
+  $names = @("patient_017_node_2.tif", "patient_012_node_1.tif")
+  .\scripts\migrate_export.ps1 `
+    -BackupPath "E:\asofamech_migration_lite" `
+    -PresentationLite `
+    -HistologyImageNames $names
+}
+```
+
+El backup liviano conserva:
+
+- base de datos;
+- laminas seleccionadas;
+- checkpoints/reportes/heatmaps minimos del modelo histopatologico;
+- manifiestos `.dzi` necesarios para abrir WSI con tiles dinamicos.
+
+En destino se restaura igual:
+
+```powershell
+.\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration_lite"
+```
+
+Si tambien se quiere descargar el modelo de chat local durante la restauracion:
+
+```powershell
+.\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration_lite" -PullOllamaModel
+```
+
+Este modo requiere que el equipo destino pueda construir/descargar imagenes
+Docker o que ya las tenga en cache. Si el destino no tiene internet, usar el
+modo normal con `compose_images.tar` sigue siendo mas autonomo, pero mas pesado.
+
 Si existe autorizacion explicita para mover el cache de CONCH, se puede incluir:
 
 ```powershell

@@ -3,6 +3,7 @@
 # Uso:
 #   .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
 #   .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration" -SkipChecksum
+#   .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration_lite" -PullOllamaModel
 
 param(
     [Parameter(Mandatory = $true)]
@@ -10,7 +11,11 @@ param(
 
     [string]$ProjectName = "asofamech",
 
-    [switch]$SkipChecksum
+    [switch]$SkipChecksum,
+
+    [switch]$PullOllamaModel,
+
+    [string]$OllamaModel = "llama3:8b"
 )
 
 $ErrorActionPreference = "Stop"
@@ -254,9 +259,16 @@ Copy-DirectoryContents (Join-Path $backupRoot "uploads") (Join-Path $projectDir 
 
 Write-Step 6 8 "Restaurando volumenes de modelos"
 $hfRestored = Restore-DockerVolume "${ProjectName}_huggingface_cache" "hf_backup.tar.gz" "HuggingFace cache / CONCH"
-Restore-DockerVolume "${ProjectName}_ollama_data" "ollama_backup.tar.gz" "Ollama"
+$ollamaRestored = Restore-DockerVolume "${ProjectName}_ollama_data" "ollama_backup.tar.gz" "Ollama"
 if (-not $hfRestored) {
     Write-Warn "CONCH no viene incluido en este backup. Luego ejecuta .\scripts\prepare_histopathology_model.ps1 para descargarlo con tu token HuggingFace."
+}
+if (-not $ollamaRestored) {
+    if ($PullOllamaModel) {
+        Write-Warn "Ollama no viene incluido. Se descargara $OllamaModel despues de levantar el servicio."
+    } else {
+        Write-Warn "Ollama no viene incluido. Si necesitas chatbot local, ejecuta luego: docker exec asofamech_ollama ollama pull $OllamaModel"
+    }
 }
 
 Write-Step 7 8 "Cargando imagenes Docker y levantando servicios"
@@ -289,6 +301,16 @@ if (Wait-PostgresReady) {
 docker compose up -d
 Write-OK "Servicios Docker solicitados"
 
+if (-not $ollamaRestored -and $PullOllamaModel) {
+    Write-Host "  Descargando modelo Ollama $OllamaModel..." -ForegroundColor Yellow
+    docker exec asofamech_ollama ollama pull $OllamaModel
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "Modelo Ollama disponible: $OllamaModel"
+    } else {
+        Write-Warn "No se pudo descargar $OllamaModel automaticamente. Puedes repetir: docker exec asofamech_ollama ollama pull $OllamaModel"
+    }
+}
+
 Write-Step 8 8 "Verificando servicios y abriendo frontend"
 $backendUrl = "http://localhost:8001/health"
 $frontendUrl = "http://localhost:3000"
@@ -311,6 +333,9 @@ Write-Host "    docker compose ps                  <- estado de contenedores"
 Write-Host "    docker compose down                <- apagar todo al terminar"
 if (-not $hfRestored) {
     Write-Host "    .\scripts\prepare_histopathology_model.ps1 <- preparar CONCH con token HuggingFace" -ForegroundColor Yellow
+}
+if (-not $ollamaRestored) {
+    Write-Host "    docker exec asofamech_ollama ollama pull $OllamaModel <- descargar LLM local" -ForegroundColor Yellow
 }
 Write-Host ""
 

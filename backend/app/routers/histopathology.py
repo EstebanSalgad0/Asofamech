@@ -203,13 +203,18 @@ def _configured_low_suspicion_tumor_max() -> float:
     return parsed if 0.0 <= parsed < 1.0 else 0.25
 
 
+def _non_tumor_support(probabilities: dict) -> float:
+    return float(probabilities.get("no_metastasico", 0.0) or 0.0) + float(
+        probabilities.get("estroma", 0.0) or 0.0
+    )
+
+
 def _is_low_suspicion_non_metastatic(raw_prediction: dict) -> bool:
     probabilities = raw_prediction.get("probabilities") or {}
-    no_metastatic = float(probabilities.get("no_metastasico", 0.0) or 0.0)
     tumor = float(probabilities.get("metastasico", 0.0) or 0.0)
     return (
-        raw_prediction.get("predicted_class") == "no_metastasico"
-        and no_metastatic >= _configured_low_suspicion_no_metastatic_min()
+        raw_prediction.get("predicted_class") in {"no_metastasico", "estroma"}
+        and _non_tumor_support(probabilities) >= _configured_low_suspicion_no_metastatic_min()
         and tumor <= _configured_low_suspicion_tumor_max()
     )
 
@@ -223,21 +228,39 @@ def _decision_from_prediction(raw_prediction: dict, confidence_threshold: float)
     prediction = raw_prediction
 
     if model_predicted_class == "estroma":
-        status = "roi_no_evaluable"
-        predicted_class = "roi_no_evaluable"
-        reason = (
-            "ROI no evaluable: el clasificador 3-class detecto predominio de "
-            "patron estromal."
-        )
-        recommendation = (
-            "Seleccione otra ROI con mayor celularidad tumoral o registre esta "
-            "region como estroma/no evaluable."
-        )
-        prediction = {
-            **raw_prediction,
-            "predicted_class": "roi_no_evaluable",
-            "model_predicted_class": model_predicted_class,
-        }
+        if _is_low_suspicion_non_metastatic(raw_prediction):
+            status = LOW_SUSPICION_STATUS
+            predicted_class = LOW_SUSPICION_CLASS
+            reason = (
+                "Baja sospecha metastasica: el clasificador 3-class detecto "
+                "predominio estromal/no tumoral y la probabilidad metastasica es baja."
+            )
+            recommendation = (
+                "Use esta salida como orientacion educativa de zona probablemente "
+                "sin metastasis; si la ROI buscaba tumor, seleccione una subregion "
+                "con mayor densidad celular sospechosa."
+            )
+            prediction = {
+                **raw_prediction,
+                "predicted_class": LOW_SUSPICION_CLASS,
+                "model_predicted_class": model_predicted_class,
+            }
+        else:
+            status = "roi_no_evaluable"
+            predicted_class = "roi_no_evaluable"
+            reason = (
+                "ROI no evaluable: el clasificador 3-class detecto predominio de "
+                "patron estromal con senal tumoral no suficientemente baja."
+            )
+            recommendation = (
+                "Seleccione otra ROI con mayor celularidad tumoral o registre esta "
+                "region como estroma/no evaluable."
+            )
+            prediction = {
+                **raw_prediction,
+                "predicted_class": "roi_no_evaluable",
+                "model_predicted_class": model_predicted_class,
+            }
     elif raw_prediction["confidence"] < confidence_threshold:
         if _is_low_suspicion_non_metastatic(raw_prediction):
             status = LOW_SUSPICION_STATUS
@@ -406,7 +429,7 @@ def _model_metadata(inference_service) -> dict:
     return {
         "task": "camelyon_patch_classification_with_stroma_abstention",
         "backbone": "CONCH frozen",
-        "classifier": f"{inference_service.num_classes}-class linear head over CONCH embeddings",
+        "classifier": f"{inference_service.num_classes}-class {inference_service.head_type} head over CONCH embeddings",
         "checkpoint_ref": inference_service.checkpoint_ref,
         "classifier_checkpoint": inference_service.classifier_path,
         "device": inference_service.device,
@@ -763,7 +786,7 @@ async def histopathology_status():
             "model_ready": True,
             "task": "camelyon_patch_classification_with_stroma_abstention",
             "backbone": "CONCH frozen",
-            "classifier": f"{inference_service.num_classes}-class linear head over CONCH embeddings",
+            "classifier": f"{inference_service.num_classes}-class {inference_service.head_type} head over CONCH embeddings",
             "checkpoint_configured": checkpoint_configured,
             "classifier_checkpoint": checkpoint_path,
             "checkpoint_ref": inference_service.checkpoint_ref,
