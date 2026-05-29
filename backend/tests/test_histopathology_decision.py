@@ -78,13 +78,29 @@ class HistopathologyDecisionTestCase(unittest.TestCase):
         self.assertEqual(decision["status"], "clasificado")
         self.assertEqual(decision["predicted_class"], "no_metastasico")
 
-    def test_stroma_remains_not_evaluable(self):
+    def test_low_tumor_stroma_counts_as_low_suspicion_non_metastatic(self):
         raw = prediction(
             "estroma",
             {
                 "no_metastasico": 0.10,
                 "metastasico": 0.05,
                 "estroma": 0.85,
+            },
+        )
+
+        decision = _decision_from_prediction(raw, confidence_threshold=0.90)
+
+        self.assertEqual(decision["status"], LOW_SUSPICION_STATUS)
+        self.assertEqual(decision["predicted_class"], LOW_SUSPICION_CLASS)
+        self.assertEqual(decision["prediction"]["model_predicted_class"], "estroma")
+
+    def test_stroma_with_non_low_tumor_score_remains_not_evaluable(self):
+        raw = prediction(
+            "estroma",
+            {
+                "no_metastasico": 0.10,
+                "metastasico": 0.30,
+                "estroma": 0.60,
             },
         )
 

@@ -6,6 +6,7 @@
 #   .\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -AllHistologyImages
 #   .\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -SkipDockerImages
 #   .\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration" -IncludeRestrictedModelCache
+#   .\scripts\migrate_export.ps1 -BackupPath "E:\asofamech_migration_lite" -PresentationLite -HistologyImageNames "patient_017_node_2.tif","patient_012_node_1.tif"
 
 param(
     [Parameter(Mandatory = $true)]
@@ -14,6 +15,16 @@ param(
     [string]$ProjectName = "asofamech",
 
     [switch]$SkipDockerImages,
+
+    [switch]$PresentationLite,
+
+    [switch]$MinimalArtifacts,
+
+    [switch]$MinimalUploads,
+
+    [switch]$SkipUploads,
+
+    [switch]$SkipOllama,
 
     [switch]$IncludeRestrictedModelCache,
 
@@ -64,6 +75,20 @@ function Clear-DirectoryContents($Path, $Root) {
 
     Get-ChildItem -LiteralPath $pathFull -Force -ErrorAction SilentlyContinue |
         Remove-Item -Recurse -Force
+}
+
+function Remove-BackupFileIfExists($Path, $Root) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    $rootFull = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $Root).Path).TrimEnd("\")
+    $pathFull = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $Path).Path)
+    if (-not $pathFull.StartsWith($rootFull + "\", [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Archivo fuera del backup; no se elimina por seguridad: $pathFull"
+    }
+
+    Remove-Item -LiteralPath $pathFull -Force
 }
 
 function Get-ReferencedCamelyonImageNames {
@@ -210,6 +235,92 @@ function Copy-DirectoryContents {
     return $stats
 }
 
+function Copy-FilePreservingRelativePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+
+    $sourceRootFull = (Resolve-Path -LiteralPath $SourceRoot).Path.TrimEnd("\")
+    $fileFull = (Resolve-Path -LiteralPath $FilePath).Path
+    if (-not $fileFull.StartsWith($sourceRootFull + "\", [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Archivo fuera del origen esperado: $fileFull"
+    }
+
+    $relativePath = $fileFull.Substring($sourceRootFull.Length + 1)
+    $targetPath = Join-Path $DestinationRoot $relativePath
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $targetPath) | Out-Null
+    Copy-Item -LiteralPath $fileFull -Destination $targetPath -Force
+}
+
+function Copy-MinimalArtifacts($SourceRoot, $DestinationRoot) {
+    New-Item -ItemType Directory -Force -Path $DestinationRoot | Out-Null
+    if (-not (Test-Path -LiteralPath $SourceRoot)) {
+        Write-Warn "backend\artifacts no existe en origen: $SourceRoot"
+        return @{ files = 0; bytes = 0 }
+    }
+
+    $relativeDirs = @(
+        "histopathology\checkpoints",
+        "histopathology\reports",
+        "histopathology\heatmaps"
+    )
+
+    foreach ($relativeDir in $relativeDirs) {
+        $sourceDir = Join-Path $SourceRoot $relativeDir
+        if (Test-Path -LiteralPath $sourceDir) {
+            $targetDir = Join-Path $DestinationRoot $relativeDir
+            Copy-DirectoryContents $sourceDir $targetDir "backend\artifacts\$relativeDir" | Out-Null
+        }
+    }
+
+    $relativeFiles = @(
+        "histopathology\audit_log.jsonl",
+        "email_outbox.jsonl"
+    )
+
+    foreach ($relativeFile in $relativeFiles) {
+        $sourceFile = Join-Path $SourceRoot $relativeFile
+        if (Test-Path -LiteralPath $sourceFile) {
+            Copy-FilePreservingRelativePath $SourceRoot $DestinationRoot $sourceFile
+        }
+    }
+
+    $stats = Get-DirectoryStats $DestinationRoot
+    Write-OK "backend\artifacts minimo copiado: $($stats.files) archivo(s), $(Format-Bytes $stats.bytes)"
+    return $stats
+}
+
+function Copy-MinimalUploads($SourceRoot, $DestinationRoot) {
+    New-Item -ItemType Directory -Force -Path $DestinationRoot | Out-Null
+    if (-not (Test-Path -LiteralPath $SourceRoot)) {
+        Write-Warn "backend\uploads no existe en origen: $SourceRoot"
+        return @{ files = 0; bytes = 0 }
+    }
+
+    $dziRoot = Join-Path $SourceRoot "dzi_tiles"
+    if (Test-Path -LiteralPath $dziRoot) {
+        $dziFiles = @(Get-ChildItem -LiteralPath $dziRoot -File -Filter "*.dzi" -Force -ErrorAction SilentlyContinue)
+        foreach ($file in $dziFiles) {
+            Copy-FilePreservingRelativePath $SourceRoot $DestinationRoot $file.FullName
+        }
+    }
+
+    $stats = Get-DirectoryStats $DestinationRoot
+    if ($stats.files -eq 0) {
+        Write-Warn "backend\uploads minimo no encontro manifiestos .dzi para copiar."
+    } else {
+        Write-OK "backend\uploads minimo copiado: $($stats.files) archivo(s), $(Format-Bytes $stats.bytes)"
+    }
+    return $stats
+}
+
 function Export-DockerVolume($VolumeName, $OutputFileName, $Label) {
     docker volume inspect $VolumeName *> $null
     if ($LASTEXITCODE -ne 0) {
@@ -279,8 +390,21 @@ try {
     exit 1
 }
 
+if ($PresentationLite) {
+    $SkipDockerImages = $true
+    $MinimalArtifacts = $true
+    if (-not $SkipUploads) {
+        $MinimalUploads = $true
+    }
+    $SkipOllama = $true
+    Write-Warn "Modo presentacion liviana activo: se omiten imagenes Docker y Ollama; se copian artifacts/uploads minimos."
+}
 if ($AllHistologyImages -and $HistologyImageNames.Count -gt 0) {
     Write-Fail "Usa -AllHistologyImages o -HistologyImageNames, pero no ambos al mismo tiempo."
+    exit 1
+}
+if ($SkipUploads -and $MinimalUploads) {
+    Write-Fail "Usa -SkipUploads o -MinimalUploads, pero no ambos al mismo tiempo."
     exit 1
 }
 
@@ -343,8 +467,21 @@ if ($AllHistologyImages) {
 }
 
 Write-Step 3 6 "Copiando artifacts y uploads"
-$artifactsStats = Copy-DirectoryContents (Join-Path $scriptDir "backend\artifacts") $artifactsDir "backend\artifacts"
-$uploadsStats = Copy-DirectoryContents (Join-Path $scriptDir "backend\uploads") $uploadsDir "backend\uploads"
+Clear-DirectoryContents $artifactsDir $backupRoot
+Clear-DirectoryContents $uploadsDir $backupRoot
+if ($MinimalArtifacts) {
+    $artifactsStats = Copy-MinimalArtifacts (Join-Path $scriptDir "backend\artifacts") $artifactsDir
+} else {
+    $artifactsStats = Copy-DirectoryContents (Join-Path $scriptDir "backend\artifacts") $artifactsDir "backend\artifacts"
+}
+if ($SkipUploads) {
+    Write-Warn "Omitiendo backend\uploads por -SkipUploads."
+    $uploadsStats = @{ files = 0; bytes = 0 }
+} elseif ($MinimalUploads) {
+    $uploadsStats = Copy-MinimalUploads (Join-Path $scriptDir "backend\uploads") $uploadsDir
+} else {
+    $uploadsStats = Copy-DirectoryContents (Join-Path $scriptDir "backend\uploads") $uploadsDir "backend\uploads"
+}
 
 Write-Step 4 6 "Exportando volumenes Docker necesarios"
 $hfExported = $false
@@ -352,13 +489,23 @@ if ($IncludeRestrictedModelCache) {
     Write-Warn "Se exportara el cache HuggingFace/CONCH. Usar solo si tienes autorizacion para mover ese cache."
     $hfExported = Export-DockerVolume "${ProjectName}_huggingface_cache" "hf_backup.tar.gz" "HuggingFace cache / CONCH"
 } else {
+    Remove-BackupFileIfExists (Join-Path $volumesDir "hf_backup.tar.gz") $backupRoot
     Write-Warn "No se exporta HuggingFace/CONCH por defecto. En destino usa prepare_histopathology_model.ps1 con tu token."
 }
-$ollamaExported = Export-DockerVolume "${ProjectName}_ollama_data" "ollama_backup.tar.gz" "Ollama"
+$ollamaExported = $false
+if ($SkipOllama) {
+    Remove-BackupFileIfExists (Join-Path $volumesDir "ollama_backup.tar.gz") $backupRoot
+    Write-Warn "Omitiendo volumen Ollama por -SkipOllama. En destino ejecuta: docker exec asofamech_ollama ollama pull llama3:8b"
+} else {
+    $ollamaExported = Export-DockerVolume "${ProjectName}_ollama_data" "ollama_backup.tar.gz" "Ollama"
+}
 
 Write-Step 5 6 "Guardando imagenes Docker disponibles"
 $dockerImages = @()
 if ($SkipDockerImages) {
+    Remove-BackupFileIfExists (Join-Path $volumesDir "compose_images.tar") $backupRoot
+    Get-ChildItem -LiteralPath $volumesDir -File -Filter ".tmp-compose_images.tar*" -Force -ErrorAction SilentlyContinue |
+        ForEach-Object { Remove-BackupFileIfExists $_.FullName $backupRoot }
     Write-Warn "Omitiendo exportacion de imagenes Docker por -SkipDockerImages."
 } else {
     $candidateImages = @(
@@ -388,10 +535,11 @@ if ($SkipDockerImages) {
 Write-Step 6 6 "Generando manifest y checksums"
 $volumeFiles = @(Get-ChildItem -LiteralPath $volumesDir -File -Force -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
 $manifest = [ordered]@{
-    backup_format_version = 4
+    backup_format_version = 5
     exported_at = (Get-Date).ToString("o")
     project_name = $ProjectName
     source_project_dir = $scriptDir
+    export_mode = if ($PresentationLite) { "presentation_lite" } else { "standard" }
     folders = [ordered]@{
         histology_images = [ordered]@{
             source = "backend/data/camelyon17/images"
@@ -404,12 +552,14 @@ $manifest = [ordered]@{
         artifacts = [ordered]@{
             source = "backend/artifacts"
             destination = "artifacts"
+            mode = if ($MinimalArtifacts) { "minimal_checkpoints_reports_heatmaps" } else { "all" }
             files = $artifactsStats.files
             bytes = $artifactsStats.bytes
         }
         uploads = [ordered]@{
             source = "backend/uploads"
             destination = "uploads"
+            mode = if ($SkipUploads) { "skipped" } elseif ($MinimalUploads) { "minimal_dzi_manifests" } else { "all" }
             files = $uploadsStats.files
             bytes = $uploadsStats.bytes
         }
@@ -417,7 +567,7 @@ $manifest = [ordered]@{
     volumes = [ordered]@{
         db = @{ exported = $dbExported; file = "db_backup.tar.gz" }
         huggingface_cache = @{ exported = $hfExported; file = "hf_backup.tar.gz" }
-        ollama = @{ exported = $ollamaExported; file = "ollama_backup.tar.gz" }
+        ollama = @{ exported = $ollamaExported; file = "ollama_backup.tar.gz"; skipped = [bool]$SkipOllama }
     }
     restricted_model_policy = [ordered]@{
         conch_cache_exported_by_default = $false
@@ -455,18 +605,34 @@ Write-Host "======================================================" -ForegroundC
 Write-Host ""
 Write-Host "Contenido exportado:" -ForegroundColor White
 Write-Host "  histology_images\camelyon17\images\  <- laminas WSI locales"
-Write-Host "  uploads\                             <- imagenes subidas y DZI"
-Write-Host "  artifacts\                           <- checkpoints, heatmaps y auditorias"
+if ($SkipUploads) {
+    Write-Host "  uploads\                             <- omitido"
+} elseif ($MinimalUploads) {
+    Write-Host "  uploads\                             <- manifiestos DZI minimos"
+} else {
+    Write-Host "  uploads\                             <- imagenes subidas y DZI"
+}
+if ($MinimalArtifacts) {
+    Write-Host "  artifacts\                           <- checkpoints, reportes y heatmaps minimos"
+} else {
+    Write-Host "  artifacts\                           <- checkpoints, heatmaps y auditorias"
+}
 Write-Host "  volumes\db_backup.tar.gz             <- base de datos"
 if ($hfExported) {
     Write-Host "  volumes\hf_backup.tar.gz             <- cache HuggingFace / CONCH"
 } else {
     Write-Host "  prepare_histopathology_model.ps1      <- preparar CONCH en destino con token autorizado"
 }
-Write-Host "  volumes\ollama_backup.tar.gz         <- modelos Ollama"
+if ($ollamaExported) {
+    Write-Host "  volumes\ollama_backup.tar.gz         <- modelos Ollama"
+} else {
+    Write-Host "  Ollama no incluido                   <- en destino: docker exec asofamech_ollama ollama pull llama3:8b"
+}
 Write-Host "  manifest.json / checksums.sha256     <- inventario e integridad"
 if (-not $SkipDockerImages) {
     Write-Host "  volumes\compose_images.tar           <- imagenes Docker disponibles, si existian"
+} else {
+    Write-Host "  Imagenes Docker no incluidas         <- en destino se construyen/descargan con Docker"
 }
 Write-Host ""
 Write-Host "En el equipo destino:" -ForegroundColor Yellow

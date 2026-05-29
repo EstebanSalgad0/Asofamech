@@ -27,7 +27,7 @@ services:
       - DATABASE_URL=postgresql://app_user:app_pass@db:5432/app_db
       - OLLAMA_URL=http://ollama:11434
       - LLM_MODEL=llama3:8b
-      - HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage15_heavy_neg_v1.pt
+      - HISTO_CLASSIFIER_CHECKPOINT=/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage16_sane_tuned_v1.pt
       - HISTO_CONCH_CHECKPOINT_REF=${HISTO_CONCH_CHECKPOINT_REF:-hf_hub:MahmoodLab/conch}
       - HISTO_AUDIT_LOG_PATH=/app/artifacts/histopathology/audit_log.jsonl
       - HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD=${HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD:-0.90}
