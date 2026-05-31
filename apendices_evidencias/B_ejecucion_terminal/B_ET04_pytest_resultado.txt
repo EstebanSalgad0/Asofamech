@@ -1,0 +1,44 @@
+﻿Fecha ejecucion: 2026-05-29 22:17:48
+Exit code: 0
+
+........................................................................ [ 40%]
+........................................................................ [ 80%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+app/schemas.py:5
+  [RUTA CONTENEDOR OCULTA] PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class CaseOut(BaseModel):
+
+../usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386
+../usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386
+  /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+  * 'orm_mode' has been renamed to 'from_attributes'
+    warnings.warn(message, UserWarning)
+
+app/schemas.py:91
+  [RUTA CONTENEDOR OCULTA] PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SCTTestOut(BaseModel):
+
+app/schemas.py:104
+  [RUTA CONTENEDOR OCULTA] PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SCTTestDetail(BaseModel):
+
+app/schemas.py:133
+  [RUTA CONTENEDOR OCULTA] PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SCTAttemptOut(BaseModel):
+
+app/schemas.py:177
+  [RUTA CONTENEDOR OCULTA] PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class FeedbackOut(BaseModel):
+
+app/histopathology/schemas.py:73
+  [RUTA CONTENEDOR OCULTA] PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class HistopathologySessionSummary(BaseModel):
+
+tests/test_feedback.py::test_submit_feedback_rejects_invalid_rating
+tests/test_feedback.py::test_submit_feedback_rejects_zero_rating
+  [RUTA CONTENEDOR OCULTA] DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    _validate_ratings(data)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+178 passed, 10 warnings in 5.04s

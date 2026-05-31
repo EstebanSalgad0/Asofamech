@@ -1,0 +1,5 @@
+﻿{
+    "ok":  true,
+    "status":  200,
+    "body":  "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003cImage xmlns=\"http://schemas.microsoft.com/deepzoom/2008\"\n  Format=\"jpeg\"\n  Overlap=\"1\"\n  TileSize=\"256\"\u003e\n  \u003cSize Height=\"210579\"\n    Width=\"94968\"/\u003e\n\u003c/Image\u003e"
+}

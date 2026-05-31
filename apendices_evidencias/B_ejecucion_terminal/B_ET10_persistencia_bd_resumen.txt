@@ -1,0 +1,17 @@
+﻿Fecha ejecucion: 2026-05-29 22:18:12
+Exit code: 0
+
+ sct_attempts
+--------------
+           11
+(1 row)
+
+ histopathology_sessions
+-------------------------
+                      42
+(1 row)
+
+ chat_logs
+-----------
+        11
+(1 row)

@@ -4,6 +4,7 @@ import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, submitSCTAttempt, l
 import { startSession, flushSession, trackTestCompleted, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
 import { clearAuthSession, getStoredRole, userStorageKey, canManageEducationalContent } from "../authClient";
+import { formatDisplayTitle } from "../displayText";
 
 /* ── Persistent SCT result log (one entry per completed test) ── */
 const SCT_RESULTS_KEY = "asofamech_sct_result_log";
@@ -65,30 +66,60 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-// Simple SVG sparkline
+function scorePercent(score) {
+  const value = Number(score);
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value <= 1 ? value * 100 : value);
+}
+
+function attemptAreaLabel(attempt) {
+  const raw = attempt?.test_focus ? attempt.test_focus.split(",")[0].trim() : "";
+  return raw ? formatDisplayTitle(raw) : "Sin área";
+}
+
+// Progress chart: Y axis is score percentage, X axis is recent SCT attempts.
 function Sparkline({ points = [], color = "#1ec99a" }) {
-  const w = 160, h = 44;
+  const w = 180, h = 58, padY = 4;
   if (points.length < 2) return null;
-  const min = Math.min(...points), max = Math.max(...points);
-  const range = max - min || 1;
+  const safePoints = points.map((v) => Math.max(0, Math.min(100, Number(v) || 0)));
   const xs = points.map((_, i) => (i / (points.length - 1)) * w);
-  const ys = points.map((v) => h - ((v - min) / range) * (h - 8) - 4);
+  const yFor = (value) => h - padY - (value / 100) * (h - padY * 2);
+  const ys = safePoints.map(yFor);
   const path = xs.map((x, i) => `${i === 0 ? "M" : "L"}${x},${ys[i]}`).join(" ");
   const area =
     `M${xs[0]},${h} ` +
     xs.map((x, i) => `L${x},${ys[i]}`).join(" ") +
     ` L${xs[xs.length - 1]},${h} Z`;
+  const ticks = [100, 50, 0];
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="sct-sparkline">
-      <defs>
-        <linearGradient id="sp-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#sp-fill)" />
-      <path d={path} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div className="sct-sparkline-chart" role="img" aria-label="Tendencia SCT: eje Y puntaje porcentual y eje X tests recientes">
+      <div className="sct-sparkline-y-title" aria-hidden="true">Puntaje</div>
+      <div className="sct-sparkline-y" aria-hidden="true">
+        {ticks.map((tick) => <span key={tick}>{tick}%</span>)}
+      </div>
+      <div className="sct-sparkline-main">
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="sct-sparkline" aria-hidden="true">
+          <defs>
+            <linearGradient id="sp-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={color} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {ticks.map((tick) => (
+            <line key={tick} className="sct-sparkline-grid" x1="0" x2={w} y1={yFor(tick)} y2={yFor(tick)} />
+          ))}
+          <line className="sct-sparkline-axis" x1="0" x2="0" y1={padY} y2={h - padY} />
+          <line className="sct-sparkline-axis" x1="0" x2={w} y1={h - padY} y2={h - padY} />
+          <path d={area} fill="url(#sp-fill)" />
+          <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <div className="sct-sparkline-x" aria-hidden="true">
+          <span>Antiguo</span>
+          <b>Tests recientes</b>
+          <span>Reciente</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -724,10 +755,10 @@ export function SCTPage() {
             {/* Progress card */}
             <div className="sct3-progress-card">
               <div className="sct3-card-topbar">
-                <span className="sct3-card-tag">✦ Tu Progreso</span>
+                <span className="sct3-card-tag">✦ Tu progreso</span>
                 <span className="sct3-card-meta">{resultLog.length} test{resultLog.length !== 1 ? "s" : ""} completados</span>
               </div>
-              <div className="sct3-progress-label">Promedio Global</div>
+              <div className="sct3-progress-label">Promedio global</div>
               {globalAverage === null ? (
                 <div className="sct3-progress-empty">
                   <div className="sct3-progress-empty-num">—</div>
@@ -772,7 +803,7 @@ export function SCTPage() {
             {/* History card (replaces fake ranking) */}
             <div className="sct3-ranking-card">
               <div className="sct3-card-topbar">
-                <span className="sct3-ranking-title">Tu Historial</span>
+                <span className="sct3-ranking-title">Tu historial</span>
                 <span className="sct3-card-meta">últimos tests</span>
               </div>
               {historyRows.length === 0 ? (
@@ -1022,7 +1053,7 @@ export function SCTPage() {
 
               <div className="sct3-preview-stats">
                 <div className="sct3-preview-stat">
-                  <div className="sct3-preview-stat-label">Items</div>
+                  <div className="sct3-preview-stat-label">Ítems</div>
                   <div className="sct3-preview-stat-val">{numItems}</div>
                 </div>
                 <div className="sct3-preview-stat">
@@ -1158,6 +1189,9 @@ export function SCTPage() {
               <span className="sct3-section-meta">{myDbAttempts.length} intento{myDbAttempts.length !== 1 ? "s" : ""}</span>
             )}
           </div>
+          <p className="sct3-section-desc">
+            Registro de tus resoluciones SCT guardadas en la base de datos: test realizado, área evaluada, respuestas correctas, puntuación y fecha.
+          </p>
           {myDbAttempts.length === 0 ? (
             <div className="sct3-library-empty">
               <span className="sct3-library-empty-icon">📊</span>
@@ -1177,11 +1211,11 @@ export function SCTPage() {
               {myDbAttempts.map((a) => (
                 <div key={a.id} className="sct3-attempts-row">
                   <span className="sct3-att-name">{a.test_name || `Test #${a.test_id}`}</span>
-                  <span>{a.test_focus ? a.test_focus.split(",")[0].trim().slice(0, 14) : "—"}</span>
+                  <span>{attemptAreaLabel(a)}</span>
                   <span>{a.test_difficulty || "—"}</span>
                   <span>{a.correct_count}/{a.total_items}</span>
-                  <span className={`sct3-att-score ${a.score >= 70 ? "good" : a.score >= 50 ? "avg" : "low"}`}>
-                    {Math.round(a.score)}%
+                  <span className={`sct3-att-score ${scorePercent(a.score) >= 70 ? "good" : scorePercent(a.score) >= 50 ? "avg" : "low"}`}>
+                    {scorePercent(a.score)}%
                   </span>
                   <span>{formatDate(a.completed_at)}</span>
                 </div>
@@ -1201,6 +1235,9 @@ export function SCTPage() {
                   <span className="sct3-section-meta">{allAttempts.length} intento{allAttempts.length !== 1 ? "s" : ""}</span>
                 )}
               </div>
+              <p className="sct3-section-desc">
+                Vista docente basada en los intentos guardados por estudiantes. Sirve para ver participación y desempeño por test/área, no para diagnosticar al estudiante.
+              </p>
               {allAttempts.length === 0 ? (
                 <div className="sct3-library-empty" style={{ marginBottom: 48 }}>
                   <span className="sct3-library-empty-icon">📋</span>
@@ -1221,10 +1258,10 @@ export function SCTPage() {
                     <div key={a.id} className="sct3-attempts-row">
                       <span className="sct3-att-name">{a.user_name || a.user_email || `#${a.user_id}`}</span>
                       <span>{a.test_name || `Test #${a.test_id}`}</span>
-                      <span>{a.test_focus ? a.test_focus.split(",")[0].trim().slice(0, 14) : "—"}</span>
+                      <span>{attemptAreaLabel(a)}</span>
                       <span>{a.correct_count}/{a.total_items}</span>
-                      <span className={`sct3-att-score ${a.score >= 70 ? "good" : a.score >= 50 ? "avg" : "low"}`}>
-                        {Math.round(a.score)}%
+                      <span className={`sct3-att-score ${scorePercent(a.score) >= 70 ? "good" : scorePercent(a.score) >= 50 ? "avg" : "low"}`}>
+                        {scorePercent(a.score)}%
                       </span>
                       <span>{formatDate(a.completed_at)}</span>
                     </div>

@@ -1,0 +1,51 @@
+﻿{
+    "ok":  true,
+    "status":  200,
+    "body":  {
+                 "model_ready":  true,
+                 "task":  "camelyon_patch_classification_with_stroma_abstention",
+                 "backbone":  "CONCH frozen",
+                 "classifier":  "3-class mlp head over CONCH embeddings",
+                 "checkpoint_configured":  true,
+                 "classifier_checkpoint":  "[RUTA CONTENEDOR OCULTA]",
+                 "checkpoint_ref":  "hf_hub:MahmoodLab/conch",
+                 "device":  "cuda",
+                 "feature_dim":  512,
+                 "num_classes":  3,
+                 "classifier_kind":  "tri",
+                 "labels":  {
+                                "0":  "no_metastasico",
+                                "1":  "metastasico",
+                                "2":  "estroma"
+                            },
+                 "class_mapping":  {
+                                       "0":  "no_metastasico",
+                                       "1":  "metastasico",
+                                       "2":  "estroma"
+                                   },
+                 "confidence_threshold":  0.9,
+                 "low_suspicion_no_metastatic_min":  0.55,
+                 "low_suspicion_tumor_max":  0.25,
+                 "roi_quality_thresholds":  {
+                                                "max_white_fraction":  0.45,
+                                                "min_tissue_fraction":  0.4,
+                                                "min_nuclear_fraction":  0.035,
+                                                "max_dominant_stroma_fraction":  0.55,
+                                                "max_stroma_fraction_when_low_nuclear":  0.65,
+                                                "low_nuclear_for_stroma_fraction":  0.12
+                                            },
+                 "training_mode":  "frozen_conch_mlp_probe_3class",
+                 "validation":  {
+                                    "best_epoch":  2,
+                                    "best_val_loss":  0.751441819092323,
+                                    "selection_metric":  "tumor_recall_minus_stroma_fp",
+                                    "best_selection_score":  0.5631687242798353
+                                },
+                 "created_at":  "2026-05-29T02:01:26.133156+00:00",
+                 "head_type":  "mlp",
+                 "model_version":  "tri_head_camelyon17_stage16_sane_tuned_v1",
+                 "audit_log_path":  "[RUTA CONTENEDOR OCULTA]",
+                 "model_input":  "CONCH preprocess target, typically 224x224",
+                 "warning":  "Modulo educativo no diagnostico. La prediccion esta limitada a patches de ganglio linfatico tipo CAMELYON/PCam y puede abstenerse ante estroma."
+             }
+}

@@ -1,0 +1,13 @@
+﻿{
+    "ok":  true,
+    "status":  200,
+    "body":  {
+                 "id":  12,
+                 "email":  "[CORREO OCULTO]",
+                 "name":  "Student E2E",
+                 "role":  "estudiante",
+                 "role_label":  "Estudiante",
+                 "is_active":  true,
+                 "account_status":  "approved"
+             }
+}

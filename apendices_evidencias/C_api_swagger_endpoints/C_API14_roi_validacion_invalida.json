@@ -1,0 +1,6 @@
+﻿{
+    "ok":  false,
+    "status":  400,
+    "body":  null,
+    "error":  "Error en el servidor remoto: (400) Solicitud incorrecta."
+}

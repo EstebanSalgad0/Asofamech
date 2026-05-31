@@ -1,0 +1,220 @@
+﻿Fecha ejecucion: 2026-05-29 22:17:48
+Exit code: 0
+
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | /usr/local/lib/python3.11/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+asofamech_backend  | * 'orm_mode' has been renamed to 'from_attributes'
+asofamech_backend  |   warnings.warn(message, UserWarning)
+asofamech_backend  | INFO:     172.19.0.1:57900 - "GET /openapi.json HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:57900 - "GET /api/sct/list HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:57900 - "GET /api/sct/6 HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:57900 - "POST /api/sct/6/attempt HTTP/1.1" 200 OK
+asofamech_backend  |
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|██████████| 1/1 [00:00<00:00,  3.12it/s]
+Batches: 100%|██████████| 1/1 [00:00<00:00,  3.12it/s]
+asofamech_backend  | INFO:     172.19.0.1:57900 - "GET /api/rag/search?q=fiebre&limit=2 HTTP/1.1" 200 OK
+asofamech_backend  | INFO:app.routers.chat:Enviando clasificacion de alcance a Ollama URL: http://ollama:11434/api/chat
+asofamech_backend  | INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+asofamech_backend  | INFO:app.routers.chat:Ollama respondio clasificacion de alcance con status: 200
+asofamech_backend  | INFO:app.routers.chat:Respuesta clasificacion de alcance: {"model":"llama3:8b","created_at":"2026-05-30T02:11:39.132164784Z","message":{"role":"assistant","content":"{\"scope\":\"medical\",\"reason\":\"request for educational content\"}"},"done":true,"done_r
+asofamech_backend  |
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|██████████| 1/1 [00:00<00:00, 121.48it/s]
+asofamech_backend  | INFO:app.routers.chat:Enviando respuesta de chat a Ollama URL: http://ollama:11434/api/chat
+asofamech_backend  | INFO:     127.0.0.1:35620 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+asofamech_backend  | INFO:app.routers.chat:Ollama respondio respuesta de chat con status: 200
+asofamech_backend  | INFO:app.routers.chat:Respuesta respuesta de chat: {"model":"llama3:8b","created_at":"2026-05-30T02:11:47.712312451Z","message":{"role":"assistant","content":"Hola! Como asistente medico educativo, puedo ofrecerte algunos consejos generales para estud
+asofamech_backend  | INFO:     172.19.0.1:57900 - "POST /api/chat HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:57900 - "GET /api/medical-images/list HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:57900 - "GET /api/medical-images/dzi/12.dzi HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:57900 - "POST /api/histopathology/analyze-roi HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:57900 - "POST /api/histopathology/analyze-roi HTTP/1.1" 400 Bad Request
+asofamech_backend  | INFO:     127.0.0.1:51436 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:40186 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:41584 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:38210 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:36270 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:45582 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.5:47404 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "POST /api/auth/login HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/auth/me HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/dashboard/stats HTTP/1.1" 401 Unauthorized
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/admin/users HTTP/1.1" 403 Forbidden
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/histopathology/status HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /openapi.json HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/sct/list HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/sct/6 HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "POST /api/sct/6/attempt HTTP/1.1" 200 OK
+asofamech_backend  |
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|██████████| 1/1 [00:00<00:00, 119.81it/s]
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/rag/search?q=fiebre&limit=2 HTTP/1.1" 200 OK
+asofamech_backend  | INFO:app.routers.chat:Enviando clasificacion de alcance a Ollama URL: http://ollama:11434/api/chat
+asofamech_backend  | INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+asofamech_backend  | INFO:app.routers.chat:Ollama respondio clasificacion de alcance con status: 200
+asofamech_backend  | INFO:app.routers.chat:Respuesta clasificacion de alcance: {"model":"llama3:8b","created_at":"2026-05-30T02:13:22.524538074Z","message":{"role":"assistant","content":"{\"scope\":\"medical\",\"reason\":\"request for educational content\"}"},"done":true,"done_r
+asofamech_backend  |
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|██████████| 1/1 [00:00<00:00, 139.16it/s]
+asofamech_backend  | INFO:app.routers.chat:Enviando respuesta de chat a Ollama URL: http://ollama:11434/api/chat
+asofamech_backend  | INFO:     127.0.0.1:41444 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+asofamech_backend  | INFO:app.routers.chat:Ollama respondio respuesta de chat con status: 200
+asofamech_backend  | INFO:app.routers.chat:Respuesta respuesta de chat: {"model":"llama3:8b","created_at":"2026-05-30T02:13:31.099232584Z","message":{"role":"assistant","content":"Excelente elección! Estudiar histopatología es fundamental para entender los procesos patoló
+asofamech_backend  | INFO:     172.19.0.1:56102 - "POST /api/chat HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/medical-images/list HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "GET /api/medical-images/dzi/12.dzi HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "POST /api/histopathology/analyze-roi HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56102 - "POST /api/histopathology/analyze-roi HTTP/1.1" 400 Bad Request
+asofamech_backend  | INFO:     172.19.0.1:48430 - "GET /docs HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:37516 - "GET /openapi.json HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:37532 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:48204 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:56984 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:36030 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:57504 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:57704 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.5:43818 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "POST /api/auth/login HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/auth/me HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/dashboard/stats HTTP/1.1" 401 Unauthorized
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/admin/users HTTP/1.1" 403 Forbidden
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/histopathology/status HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /openapi.json HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/sct/list HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/sct/6 HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "POST /api/sct/6/attempt HTTP/1.1" 200 OK
+asofamech_backend  |
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|██████████| 1/1 [00:00<00:00, 133.18it/s]
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/rag/search?q=fiebre&limit=2 HTTP/1.1" 200 OK
+asofamech_backend  | INFO:app.routers.chat:Enviando clasificacion de alcance a Ollama URL: http://ollama:11434/api/chat
+asofamech_backend  | INFO:     127.0.0.1:50858 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+asofamech_backend  | INFO:app.routers.chat:Ollama respondio clasificacion de alcance con status: 200
+asofamech_backend  | INFO:app.routers.chat:Respuesta clasificacion de alcance: {"model":"llama3:8b","created_at":"2026-05-30T02:15:05.099564382Z","message":{"role":"assistant","content":"{\"scope\":\"medical\",\"reason\":\"request for educational content\"}"},"done":true,"done_r
+asofamech_backend  |
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|██████████| 1/1 [00:00<00:00, 166.41it/s]
+asofamech_backend  | INFO:app.routers.chat:Enviando respuesta de chat a Ollama URL: http://ollama:11434/api/chat
+asofamech_backend  | INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+asofamech_backend  | INFO:app.routers.chat:Ollama respondio respuesta de chat con status: 200
+asofamech_backend  | INFO:app.routers.chat:Respuesta respuesta de chat: {"model":"llama3:8b","created_at":"2026-05-30T02:15:11.941029948Z","message":{"role":"assistant","content":"¡hola!\n\nSi deseas profundizar en histopatología, te recomiendo empezar por entender los co
+asofamech_backend  | INFO:     172.19.0.1:56114 - "POST /api/chat HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/medical-images/list HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "GET /api/medical-images/dzi/12.dzi HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "POST /api/histopathology/analyze-roi HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:56114 - "POST /api/histopathology/analyze-roi HTTP/1.1" 400 Bad Request
+asofamech_backend  | INFO:     172.19.0.1:59906 - "GET /docs HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:59906 - "GET /openapi.json HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:59908 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:57720 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:45500 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:42438 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:39982 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:59108 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:39470 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.5:34524 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "POST /api/auth/login HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/auth/me HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/dashboard/stats HTTP/1.1" 401 Unauthorized
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/dashboard/stats HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/admin/users HTTP/1.1" 403 Forbidden
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/histopathology/status HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /openapi.json HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/sct/list HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/sct/6 HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "POST /api/sct/6/attempt HTTP/1.1" 200 OK
+asofamech_backend  |
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|██████████| 1/1 [00:00<00:00, 150.26it/s]
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/rag/search?q=fiebre&limit=2 HTTP/1.1" 200 OK
+asofamech_backend  | INFO:app.routers.chat:Enviando clasificacion de alcance a Ollama URL: http://ollama:11434/api/chat
+asofamech_backend  | INFO:     127.0.0.1:49672 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+asofamech_backend  | INFO:app.routers.chat:Ollama respondio clasificacion de alcance con status: 200
+asofamech_backend  | INFO:app.routers.chat:Respuesta clasificacion de alcance: {"model":"llama3:8b","created_at":"2026-05-30T02:16:51.899132696Z","message":{"role":"assistant","content":"{\"scope\":\"medical\",\"reason\":\"request for educational content\"}"},"done":true,"done_r
+asofamech_backend  |
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|██████████| 1/1 [00:00<00:00, 156.55it/s]
+asofamech_backend  | INFO:app.routers.chat:Enviando respuesta de chat a Ollama URL: http://ollama:11434/api/chat
+asofamech_backend  | INFO:httpx:HTTP Request: POST http://ollama:11434/api/chat "HTTP/1.1 200 OK"
+asofamech_backend  | INFO:app.routers.chat:Ollama respondio respuesta de chat con status: 200
+asofamech_backend  | INFO:app.routers.chat:Respuesta respuesta de chat: {"model":"llama3:8b","created_at":"2026-05-30T02:16:59.175448021Z","message":{"role":"assistant","content":"¡Hola! Si deseas estudiar histopatología, te recomiendo comenzar por entender los conceptos
+asofamech_backend  | INFO:     172.19.0.1:54086 - "POST /api/chat HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/medical-images/list HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "GET /api/medical-images/dzi/12.dzi HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "POST /api/histopathology/analyze-roi HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:54086 - "POST /api/histopathology/analyze-roi HTTP/1.1" 400 Bad Request
+asofamech_backend  | INFO:     172.19.0.1:53492 - "GET /docs HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:53492 - "GET /openapi.json HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:53508 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:45040 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:47188 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     172.19.0.1:55206 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:42902 - "GET /health HTTP/1.1" 200 OK
+asofamech_backend  | INFO:     127.0.0.1:56828 - "GET /health HTTP/1.1" 200 OK

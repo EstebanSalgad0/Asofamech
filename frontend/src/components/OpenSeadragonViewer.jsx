@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import OpenSeadragon from 'openseadragon';
 import { heatmapMaxTilesForCurrentRole, histopathologyHeaders, isPrivilegedRole } from '../histopathologyAccess';
 import { API_BASE, authFetch } from '../authClient';
+import { formatImageDisplayName } from '../displayText';
 
 const ROI_COLORS = {
   roi1: '#38bdf8',
@@ -777,7 +778,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
       reason: session.reason,
       recommendation: session.recommendation,
       roi_quality: session.roi_quality_metrics ? { metrics: session.roi_quality_metrics } : null,
-      warning: session.warning || 'Resultado educativo restaurado de sesion anterior.',
+      warning: session.warning || 'Resultado educativo restaurado de sesión anterior.',
     });
     setRoiError(null);
     setActiveTool('navigate');
@@ -943,7 +944,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
               MODO  {modeLabel}
             </span>
             <span style={{ color: '#94a3b8', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {imageData.title || imageData.filename}
+              {formatImageDisplayName(imageData)}
             </span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', color: '#94a3b8', flexShrink: 0, userSelect: 'none' }}>
               <input type="checkbox" checked={showHeatmapOverlay} onChange={(e) => setShowHeatmapOverlay(e.target.checked)} style={{ accentColor: '#38bdf8' }} aria-label="Mostrar heatmap" data-testid="heatmap-toggle" />

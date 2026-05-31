@@ -43,9 +43,9 @@ function activitySubtitle(item) {
   if (!item?.title) return "Actividad registrada";
   const parts = item.title.split(" - ");
   if (parts.length > 1) return parts.slice(1).join(" - ");
-  if (item.type === "chat") return "conversacion guardada";
-  if (item.type === "sct") return "caso de razonamiento clinico";
-  if (item.type === "images") return "visualizacion histopatologica";
+  if (item.type === "chat") return "conversación guardada";
+  if (item.type === "sct") return "caso de razonamiento clínico";
+  if (item.type === "images") return "visualización histopatológica";
   return "registro local";
 }
 
@@ -79,13 +79,13 @@ function makeHistoryGroups(historyData) {
   return [
     {
       id: "analyses",
-      title: "Analisis ROI",
+      title: "Análisis ROI",
       route: "/dashboard/images",
       accent: "histo",
-      empty: "Sin analisis registrados",
+      empty: "Sin análisis registrados",
       items: analyses.slice(0, 3).map((item) => ({
         id: `analysis-${item.id}`,
-        title: item.image_title || "Lamina histopatologica",
+        title: item.image_title || "Lámina histopatológica",
         meta: `${item.clase || item.status || "registrado"} - ${formatHistoryDate(item.analyzed_at)}`,
       })),
     },
@@ -283,7 +283,7 @@ export function DashboardPage() {
       id: "study",
       label: "TIEMPO DE ESTUDIO",
       value: studyLabel,
-      sub: metrics.studyMs > 0 ? "sesion activa" : "empieza a estudiar",
+      sub: metrics.studyMs > 0 ? "sesión activa" : "empieza a estudiar",
       color: "#6366f1",
       daily: null,
     },
@@ -291,13 +291,13 @@ export function DashboardPage() {
       id: "sct",
       label: "TESTS SCT",
       value: sctCount,
-      sub: testsPassedPct !== null ? `ultimo: ${testsPassedPct}%` : (sctWeek > 0 ? `+${sctWeek} esta semana` : "sin tests completados"),
+      sub: testsPassedPct !== null ? `último: ${testsPassedPct}%` : (sctWeek > 0 ? `+${sctWeek} esta semana` : "sin tests completados"),
       color: "#f59e0b",
       daily: sctDaily,
     },
     {
       id: "histo",
-      label: "LAMINAS VISTAS",
+      label: "LÁMINAS VISTAS",
       value: histoCount,
       sub: histoWeek > 0 ? `${histoWeek} nuevas` : "sin láminas esta semana",
       color: "#ef4444",
@@ -307,24 +307,24 @@ export function DashboardPage() {
 
   const moduleCards = [
     {
-      id: "chat", eyebrow: "01 - Modulo", title: "Asistente Medico IA",
-      description: "Consulta educativa 24/7 sobre temas medicos, diagnosticos y tratamientos.",
+      id: "chat", eyebrow: "01 - Módulo", title: "Asistente Médico IA",
+      description: "Consulta educativa 24/7 sobre temas médicos, diagnósticos y tratamientos.",
       stat: `${chatCount} consultas`,
-      detail: latestChat ? `Ultima: ${activityTitle(latestChat)}` : "Inicia una conversacion clinica",
+      detail: latestChat ? `Última: ${activityTitle(latestChat)}` : "Inicia una conversación clínica",
       route: "/dashboard/chat", className: "home-v3-card-dark", glyph: "chat",
     },
     {
-      id: "sct", eyebrow: "02 - Modulo", title: "Test SCT",
-      description: "Evalua tu razonamiento clinico con casos medicos generados por IA.",
+      id: "sct", eyebrow: "02 - Módulo", title: "Test SCT",
+      description: "Evalúa tu razonamiento clínico con casos médicos generados por IA.",
       stat: `${sctCount} tests completados`,
-      detail: latestSct ? `Ultimo: ${activityTitle(latestSct)}` : "Practica con casos cortos",
+      detail: latestSct ? `Último: ${activityTitle(latestSct)}` : "Practica con casos cortos",
       route: "/dashboard/sct", className: "home-v3-card-coral", glyph: "sct",
     },
     {
-      id: "images", eyebrow: "03 - Modulo", title: "Analisis Histopatologico",
-      description: "Visualiza y analiza imagenes histologicas de alta resolucion.",
+      id: "images", eyebrow: "03 - Módulo", title: "Análisis Histopatológico",
+      description: "Visualiza y analiza imágenes histológicas de alta resolución.",
       stat: `${histoCount} visualizaciones`,
-      detail: latestHisto ? `Ultima: ${activityTitle(latestHisto)}` : "Explora laminas educativas",
+      detail: latestHisto ? `Última: ${activityTitle(latestHisto)}` : "Explora láminas educativas",
       route: "/dashboard/images", className: "home-v3-card-mint", glyph: "histo",
     },
   ];
@@ -343,18 +343,18 @@ export function DashboardPage() {
           <div>
             <div className="home-v3-pill">
               <span />
-              Plataforma activa · Sesion {getSessionLabel()}
+              Plataforma activa · Sesión {getSessionLabel()}
             </div>
             <h1>{getGreeting()}, <em>{firstName}.</em></h1>
             <p>
-              Continua tu entrenamiento clinico donde lo dejaste.
+              Continúa tu entrenamiento clínico donde lo dejaste.
               {pendingSct > 0 ? ` Tienes ${pendingSct} caso SCT pendiente` : ""}
               {newConversations > 0 ? `${pendingSct > 0 ? " y" : " Tienes"} ${newConversations} conversaciones nuevas.` : "."}
             </p>
           </div>
           <div className="home-v3-actions">
             <button className="home-v3-primary-btn" type="button" onClick={openNewChat}>
-              <span>+</span> Nueva sesion
+              <span>+</span> Nueva sesión
             </button>
           </div>
         </header>
@@ -458,7 +458,7 @@ export function DashboardPage() {
               {filteredActivity.length === 0 ? (
                 <div className="home-v3-empty-activity">
                   <strong>Sin actividad para este filtro</strong>
-                  <span>Usa un modulo para generar nuevos registros.</span>
+                  <span>Usa un módulo para generar nuevos registros.</span>
                 </div>
               ) : (
                 filteredActivity.map((item, index) => (
@@ -485,7 +485,7 @@ export function DashboardPage() {
             <div className="home-v3-suggestion-card">
               <span className="home-v3-suggest-label">Sugerido</span>
               <h3>Repasa <em>histopatologia</em> hoy.</h3>
-              <p>Analiza una nueva lamina o genera 5 items SCT para reforzar tu razonamiento clinico.</p>
+              <p>Analiza una nueva lámina o genera 5 ítems SCT para reforzar tu razonamiento clínico.</p>
               <button type="button" onClick={() => navigate("/dashboard/sct")}>
                 Empezar caso <span>{"->"}</span>
               </button>
@@ -511,7 +511,7 @@ export function DashboardPage() {
               )}
               {yourPosition != null && (
                 <div className="home-v3-ranking-foot">
-                  Posicion #{yourPosition} de {rankingData?.total_users} usuarios activos
+                  Posición #{yourPosition} de {rankingData?.total_users} usuarios activos
                 </div>
               )}
             </div>

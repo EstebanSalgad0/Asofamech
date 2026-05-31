@@ -178,7 +178,7 @@ export function AuthPage() {
             <ul className="auth-info-features">
               <li><span className="feature-check">OK</span> Asistente médico educativo</li>
               <li><span className="feature-check">OK</span> Tests SCT personalizados</li>
-              <li><span className="feature-check">OK</span> Modulo histopatologico protegido por rol</li>
+              <li><span className="feature-check">OK</span> Módulo histopatológico protegido por rol</li>
             </ul>
           </div>
         </div>

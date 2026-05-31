@@ -66,9 +66,9 @@ export function canManageAdminSettings(role = getStoredRole()) {
   return hasAnyRole(role, ["administrador"]);
 }
 
-export function authErrorMessage(status, fallback = "No se pudo completar la accion") {
-  if (status === 401) return "Sesion expirada o no autenticada. Vuelve a iniciar sesion.";
-  if (status === 403) return "No tienes permisos para realizar esta accion.";
+export function authErrorMessage(status, fallback = "No se pudo completar la acción") {
+  if (status === 401) return "Sesión expirada o no autenticada. Vuelve a iniciar sesión.";
+  if (status === 403) return "No tienes permisos para realizar esta acción.";
   return fallback;
 }
 
@@ -85,7 +85,7 @@ export function userStorageKey(baseKey) {
 export function saveAuthSession(payload) {
   const user = payload?.user;
   if (!payload?.access_token || !user) {
-    throw new Error("Respuesta de autenticacion incompleta");
+    throw new Error("Respuesta de autenticación incompleta");
   }
   localStorage.setItem(TOKEN_KEY, payload.access_token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));

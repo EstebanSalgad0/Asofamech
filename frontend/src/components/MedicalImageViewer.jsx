@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as fabric from 'fabric';
 import { authFetch } from '../authClient';
+import { formatDisplayTag, formatImageDisplayName } from '../displayText';
 
 export function MedicalImageViewer({ imageData }) {
   const canvasRef = useRef(null);
@@ -33,7 +34,7 @@ export function MedicalImageViewer({ imageData }) {
         sourceUrl = objectUrl;
       } catch (err) {
         console.error("Error descargando imagen autenticada:", err);
-        alert("No tienes permiso para cargar esta imagen o la sesion expiro.");
+        alert("No tienes permiso para cargar esta imagen o la sesión expiró.");
         return;
       }
     }
@@ -381,7 +382,7 @@ export function MedicalImageViewer({ imageData }) {
 
   const handleExportAnnotations = () => {
     const data = {
-      image: imageData?.title || 'Imagen médica',
+      image: formatImageDisplayName(imageData),
       annotations: annotations.map(ann => ({
         id: ann.id,
         type: ann.type,
@@ -423,10 +424,10 @@ export function MedicalImageViewer({ imageData }) {
       <div className="viewer-info-bar">
         <div className="image-title">
           <span className="title-icon">🔬</span>
-          <span className="title-text">{imageData?.title || "Imagen médica"}</span>
+          <span className="title-text">{formatImageDisplayName(imageData)}</span>
         </div>
         {imageData?.pathology_type && (
-          <div className="pathology-badge">{imageData.pathology_type}</div>
+          <div className="pathology-badge">{formatDisplayTag(imageData.pathology_type)}</div>
         )}
       </div>
 

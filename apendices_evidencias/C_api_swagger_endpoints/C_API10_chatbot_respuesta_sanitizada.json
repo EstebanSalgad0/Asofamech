@@ -1,0 +1,24 @@
+﻿{
+    "ok":  true,
+    "status":  200,
+    "body":  {
+                 "answer":  "Hola! Solo puedo responder preguntas del ambito medico y de salud.\n\nSi tienes una duda sobre histopatología, te recomiendo seguir los siguientes pasos:\n\n1. Aprende los conceptos básicos de anatomía patológica y patofisiología.\n2. Estudia las características generales de los tejidos normales y patológicos.\n3. Familiarizate con la morfología y estructura de diferentes tipos de células, glándulas y órganos.\n4. Practica identificando y describiendo lesiones patológicas en imágenes y casos clínicos.\n5. Investiga sobre las enfermedades más comunes que se relacionan con la histopatología (por ejemplo, cáncer, enfermedad cardiovascular, etc.).\n\nRecuerda que la histopatología es una disciplina fundamental para entender los mecanismos patológicos y diagnosticar enfermedades. Sin embargo, si tienes alguna duda específica o signos de alarma, siempre es recomendable consultar con un profesional de la salud.\n\nSolo puedo responder preguntas del ambito medico y de salud. Si tienes una duda medica, clinica, preventiva, farmacologica o de educación en salud, puedo ayudarte con fines educativos.",
+                 "messages":  [
+                                  {
+                                      "text":  "Hola! Solo puedo responder preguntas del ambito medico y de salud.\n\nSi tienes una duda sobre histopatología, te recomiendo seguir los siguientes pasos:\n\n1. Aprende los conceptos básicos de anatomía patológica y patofisiología.\n2. Estudia las características generales de los tejidos normales y patológicos.\n3. Familiarizate con la morfología y estructura de diferentes tipos de células, glándulas y órganos.\n4. Practica identificando y describiendo lesiones patológicas en imágenes y casos clínicos.\n5. Investiga sobre las enfermedades más comunes que se relacionan con la histopatología (por ejemplo, cáncer, enfermedad cardiovascular, etc.).\n\nRecuerda que la histopatología es una disciplina fundamental para entender los mecanismos patológicos y diagnosticar enfermedades. Sin embargo, si tienes alguna duda específica o signos de alarma, siempre es recomendable consultar con un profesional de la salud.\n\nSolo puedo responder preguntas del ambito medico y de salud. Si tienes una duda medica, clinica, preventiva, farmacologica o de educación en salud, puedo ayudarte con fines educativos."
+                                  }
+                              ],
+                 "message_type":  "answer",
+                 "used_rag":  false,
+                 "sources":  [
+
+                             ],
+                 "source_chunks":  [
+
+                                   ],
+                 "rag_sources":  [
+
+                                 ],
+                 "warning":  "Contenido con finalidad educativa. No constituye diagnostico, indicacion terapeutica ni reemplaza el criterio docente o clinico. No se recupero contexto documental suficiente desde las fuentes cargadas; la respuesta debe interpretarse como orientacion educativa general."
+             }
+}

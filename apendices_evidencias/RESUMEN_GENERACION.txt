@@ -1,0 +1,10 @@
+﻿Generación completada: 2026-05-29 22:18:15
+
+Carpeta: [RUTA LOCAL OCULTA]\OneDrive\Escritorio\Asofamech\apendices_evidencias
+
+Subcarpetas:
+- A_matrices_verificacion
+- B_ejecucion_terminal
+- C_api_swagger_endpoints
+- D_seguridad_control_acceso
+- E_trazabilidad_desarrollo

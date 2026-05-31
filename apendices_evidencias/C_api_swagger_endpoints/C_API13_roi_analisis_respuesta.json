@@ -1,0 +1,150 @@
+﻿{
+    "ok":  true,
+    "status":  200,
+    "body":  {
+                 "trace_id":  "3f701d7a-ebc1-414f-8db8-239925cb3fdd",
+                 "analyzed_at":  "2026-05-30T02:18:12.292943+00:00",
+                 "image_id":  12,
+                 "status":  "roi_no_evaluable",
+                 "class":  "roi_no_evaluable",
+                 "clase":  "roi_no_evaluable",
+                 "confidence":  0.0,
+                 "probabilities":  {
+
+                                   },
+                 "reason":  "ROI no evaluable: baja densidad celular/nuclear.",
+                 "recommendation":  "Seleccione una ROI con mayor densidad celular, menor fondo blanco y menor predominio de tejido adiposo, estroma o artefactos.",
+                 "roi_1":  {
+                               "x":  1000,
+                               "y":  1000,
+                               "width":  2048,
+                               "height":  2048
+                           },
+                 "roi_2":  {
+                               "x":  1200,
+                               "y":  1200,
+                               "width":  256,
+                               "height":  256
+                           },
+                 "prediction":  {
+                                    "predicted_index":  null,
+                                    "predicted_class":  "roi_no_evaluable",
+                                    "model_predicted_class":  null,
+                                    "confidence":  0.0,
+                                    "probabilities":  {
+
+                                                      },
+                                    "class_mapping":  {
+                                                          "0":  "no_metastasico",
+                                                          "1":  "metastasico",
+                                                          "2":  "estroma"
+                                                      },
+                                    "decision_threshold":  0.9
+                                },
+                 "patch_size":  {
+                                    "extracted_width":  256,
+                                    "extracted_height":  256,
+                                    "roi_2_width":  256,
+                                    "roi_2_height":  256,
+                                    "model_input":  "CONCH preprocess target, typically 224x224",
+                                    "color_mode":  "RGB",
+                                    "debug_artifacts":  {
+                                                            "enabled":  true,
+                                                            "directory":  "[RUTA CONTENEDOR OCULTA]",
+                                                            "original_patch":  "[RUTA CONTENEDOR OCULTA]",
+                                                            "preprocessed_patch":  "[RUTA CONTENEDOR OCULTA]",
+                                                            "preprocessed_tensor":  "[RUTA CONTENEDOR OCULTA]"
+                                                        }
+                                },
+                 "patch_metadata":  {
+                                        "extracted_width":  256,
+                                        "extracted_height":  256,
+                                        "roi_2_width":  256,
+                                        "roi_2_height":  256,
+                                        "model_input":  "CONCH preprocess target, typically 224x224",
+                                        "color_mode":  "RGB",
+                                        "debug_artifacts":  {
+                                                                "enabled":  true,
+                                                                "directory":  "[RUTA CONTENEDOR OCULTA]",
+                                                                "original_patch":  "[RUTA CONTENEDOR OCULTA]",
+                                                                "preprocessed_patch":  "[RUTA CONTENEDOR OCULTA]",
+                                                                "preprocessed_tensor":  "[RUTA CONTENEDOR OCULTA]"
+                                                            }
+                                    },
+                 "slide_dimensions":  {
+                                          "width":  94968,
+                                          "height":  210579
+                                      },
+                 "roi_quality":  {
+                                     "is_evaluable":  false,
+                                     "status":  "roi_no_evaluable",
+                                     "reason":  "ROI no evaluable: baja densidad celular/nuclear.",
+                                     "recommendation":  "Seleccione una ROI con mayor densidad celular, menor fondo blanco y menor predominio de tejido adiposo, estroma o artefactos.",
+                                     "metrics":  {
+                                                     "white_fraction":  0.0,
+                                                     "tissue_fraction":  1.0,
+                                                     "nuclear_fraction":  0.0,
+                                                     "stroma_fraction":  0.0,
+                                                     "analysis_width":  256,
+                                                     "analysis_height":  256
+                                                 },
+                                     "checks":  {
+                                                    "white_fraction_ok":  true,
+                                                    "tissue_fraction_ok":  true,
+                                                    "nuclear_fraction_ok":  false,
+                                                    "dominant_stroma_fraction_ok":  true,
+                                                    "stroma_fraction_ok":  true
+                                                },
+                                     "thresholds":  {
+                                                        "max_white_fraction":  0.45,
+                                                        "min_tissue_fraction":  0.4,
+                                                        "min_nuclear_fraction":  0.035,
+                                                        "max_dominant_stroma_fraction":  0.55,
+                                                        "max_stroma_fraction_when_low_nuclear":  0.65,
+                                                        "low_nuclear_for_stroma_fraction":  0.12
+                                                    }
+                                 },
+                 "debug_artifacts":  {
+                                         "enabled":  true,
+                                         "directory":  "[RUTA CONTENEDOR OCULTA]",
+                                         "original_patch":  "[RUTA CONTENEDOR OCULTA]",
+                                         "preprocessed_patch":  "[RUTA CONTENEDOR OCULTA]",
+                                         "preprocessed_tensor":  "[RUTA CONTENEDOR OCULTA]"
+                                     },
+                 "model":  {
+                               "task":  "camelyon_patch_classification_with_stroma_abstention",
+                               "backbone":  "CONCH frozen",
+                               "classifier":  "3-class mlp head over CONCH embeddings",
+                               "checkpoint_ref":  "hf_hub:MahmoodLab/conch",
+                               "classifier_checkpoint":  "[RUTA CONTENEDOR OCULTA]",
+                               "device":  "cuda",
+                               "feature_dim":  512,
+                               "num_classes":  3,
+                               "classifier_kind":  "tri",
+                               "labels":  {
+                                              "0":  "no_metastasico",
+                                              "1":  "metastasico",
+                                              "2":  "estroma"
+                                          },
+                               "class_mapping":  {
+                                                     "0":  "no_metastasico",
+                                                     "1":  "metastasico",
+                                                     "2":  "estroma"
+                                                 },
+                               "confidence_threshold":  0.9,
+                               "low_suspicion_no_metastatic_min":  0.55,
+                               "low_suspicion_tumor_max":  0.25,
+                               "training_mode":  "frozen_conch_mlp_probe_3class",
+                               "validation":  {
+                                                  "best_epoch":  2,
+                                                  "best_val_loss":  0.751441819092323,
+                                                  "selection_metric":  "tumor_recall_minus_stroma_fp",
+                                                  "best_selection_score":  0.5631687242798353
+                                              },
+                               "created_at":  "2026-05-29T02:01:26.133156+00:00",
+                               "head_type":  "mlp",
+                               "model_version":  "tri_head_camelyon17_stage16_sane_tuned_v1"
+                           },
+                 "warning":  "Modulo educativo no diagnostico. La prediccion esta limitada a patches de ganglio linfatico tipo CAMELYON/PCam y puede abstenerse ante estroma."
+             }
+}

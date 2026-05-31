@@ -36,6 +36,7 @@ import {
   getStoredRole,
 } from "../authClient";
 import { histopathologyHeaders } from "../histopathologyAccess";
+import { formatDisplayTag, formatFileType, formatImageDisplayName } from "../displayText";
 
 const HEATMAP_EDUCATIONAL_TYPES = [
   { value: "referencia", label: "Referencia" },
@@ -44,7 +45,7 @@ const HEATMAP_EDUCATIONAL_TYPES = [
   { value: "mixto", label: "Zona mixta" },
   { value: "estroma", label: "Estroma/no evaluable" },
   { value: "falso_positivo", label: "Falso positivo" },
-  { value: "discusion", label: "Discusion docente" },
+  { value: "discusion", label: "Discusión docente" },
 ];
 const DEFAULT_HEATMAP_METADATA = {
   label: "",
@@ -260,7 +261,7 @@ export function ConfigPage() {
         if (firstAvailable) setSelectedCamelyonSlide(firstAvailable.filename);
       }
     } catch (error) {
-      console.error("Error cargando laminas CAMELYON17:", error);
+      console.error("Error cargando láminas CAMELYON17:", error);
     } finally {
       setLoadingCamelyonSlides(false);
     }
@@ -281,9 +282,9 @@ export function ConfigPage() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.detail || "No se pudo importar la lamina local");
+        throw new Error(payload?.detail || "No se pudo importar la lámina local");
       }
-      showToast(payload?.message || "Lamina CAMELYON17 importada", "success");
+      showToast(payload?.message || "Lámina CAMELYON17 importada", "success");
       await loadImageLibrary();
       await loadLocalCamelyonSlides();
     } catch (error) {
@@ -452,7 +453,7 @@ export function ConfigPage() {
       const payload = await getAIConfig();
       setAiConfigItems(payload?.items || []);
     } catch (error) {
-      console.warn("No se pudo cargar configuracion IA:", error);
+      console.warn("No se pudo cargar configuración IA:", error);
     } finally {
       setLoadingAIConfig(false);
     }
@@ -472,7 +473,7 @@ export function ConfigPage() {
       showToast("Configuración IA guardada", "success");
       await loadIntegrationStatus();
     } catch (error) {
-      showToast(error.message || "No se pudo guardar la configuracion IA", "error", 7000);
+      showToast(error.message || "No se pudo guardar la configuración IA", "error", 7000);
     } finally {
       setSavingAIConfig(false);
     }
@@ -598,7 +599,7 @@ export function ConfigPage() {
     setSavingAdminUserId(targetUser.id);
     try {
       const payload = await approveAdminUser(targetUser.id, { role: selectedRole, notify_email: true });
-      showToast(payload?.email?.sent ? "Usuario aprobado y correo enviado" : "Usuario aprobado. Revisa configuracion SMTP para envio real.", "success", 7000);
+      showToast(payload?.email?.sent ? "Usuario aprobado y correo enviado" : "Usuario aprobado. Revisa configuración SMTP para envío real.", "success", 7000);
       await loadAdminUsers();
     } catch (error) {
       showToast(error.message || "No se pudo aprobar el usuario", "error", 7000);
@@ -826,7 +827,7 @@ export function ConfigPage() {
       if (!response.ok) {
         if (response.status === 404) {
           setLatestHeatmap(null);
-          showToast("Esta imagen aun no tiene heatmap guardado", "error", 4500);
+          showToast("Esta imagen aún no tiene heatmap guardado", "error", 4500);
           return;
         }
         throw new Error(describeApiError(payload, `Error HTTP ${response.status}`));
@@ -1129,7 +1130,7 @@ export function ConfigPage() {
                       disabled={loadingCamelyonSlides || importingCamelyonSlide || localCamelyonSlides.length === 0}
                     >
                       {localCamelyonSlides.length === 0 && (
-                        <option value="">Sin laminas locales</option>
+                        <option value="">Sin láminas locales</option>
                       )}
                       {localCamelyonSlides.map((slide) => (
                         <option key={slide.filename} value={slide.filename}>
@@ -1180,7 +1181,7 @@ export function ConfigPage() {
                         {heatmapImages.length === 0 && <option value="">Sin imágenes DZI</option>}
                         {heatmapImages.map((image) => (
                           <option key={image.id} value={image.id}>
-                            #{image.id} · {image.title || image.filename}
+                            #{image.id} · {formatImageDisplayName(image)}
                           </option>
                         ))}
                       </select>
@@ -1396,18 +1397,20 @@ export function ConfigPage() {
                           >🗑</button>
                           <div className="cfg-img-card-placeholder">
                             <span className="cfg-img-card-ft" style={{ color: ftColor.color }}>
-                              {ft.toUpperCase() || "IMG"}
+                              {formatFileType(ft) || "IMG"}
                             </span>
                             <span className="cfg-img-card-fsize">{formatFileSize(img.file_size)}</span>
                           </div>
                           {img.pathology_type && (
-                            <span className="cfg-img-card-label">{img.pathology_type.toLowerCase()}</span>
+                            <span className="cfg-img-card-label">{formatDisplayTag(img.pathology_type)}</span>
                           )}
                         </div>
                         <div className="cfg-img-card-info">
-                          <div className="cfg-img-card-name">{img.title}</div>
+                          <div className="cfg-img-card-name" title={img.title || img.filename}>
+                            {formatImageDisplayName(img)}
+                          </div>
                           <div className="cfg-img-card-meta">
-                            {img.file_type?.toUpperCase()} · {formatFileSize(img.file_size)}
+                            {formatFileType(img.file_type)} · {formatFileSize(img.file_size)}
                           </div>
                         </div>
                       </div>
@@ -1450,7 +1453,7 @@ export function ConfigPage() {
                     <div className="cfg-stat-lbl">Documentos cargados</div>
                     <div className="cfg-stat-val clr-coral">{ragDocuments.length}</div>
                     <div className="cfg-stat-sub">
-                      {ragDocuments.length === 0 ? "Sin contenido aun" : `${indexedDocs} indexado${indexedDocs !== 1 ? "s" : ""}`}
+                      {ragDocuments.length === 0 ? "Sin contenido aún" : `${indexedDocs} indexado${indexedDocs !== 1 ? "s" : ""}`}
                     </div>
                   </div>
                   <div className="cfg-stat-card">
@@ -2719,7 +2722,7 @@ function UploadModal({ onClose, onSuccess, onError }) {
               </div>
               {uploadPhase === "processing" && (
                 <div className="cfg-field-hint" style={{ marginTop: '8px' }}>
-                  No cierres esta ventana. Para laminas WSI grandes, el backend prepara el manifiesto DZI y habilita tiles bajo demanda.</div>
+                  No cierres esta ventana. Para láminas WSI grandes, el backend prepara el manifiesto DZI y habilita tiles bajo demanda.</div>
               )}
             </div>
           )}

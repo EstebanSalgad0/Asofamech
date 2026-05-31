@@ -4,13 +4,13 @@ import { getStreakDisplay } from "../tracker";
 import { ThemeToggle, ThemeToggleHeader } from "./ThemeToggle";
 
 const navItems = [
-  { id: "dashboard", label: "Inicio", path: "/dashboard", icon: "home", group: "Navegacion" },
-  { id: "chat", label: "Asistente IA", path: "/dashboard/chat", icon: "chat", group: "Navegacion" },
-  { id: "sct", label: "Test SCT", path: "/dashboard/sct", icon: "clipboard", group: "Navegacion" },
-  { id: "images", label: "Imagenes IA", path: "/dashboard/images", icon: "image", group: "Navegacion" },
-  { id: "cases", label: "Casos Clinicos", path: "/dashboard/cases", icon: "cases", group: "Navegacion" },
-  { id: "feedback", label: "Evaluacion", path: "/dashboard/feedback", icon: "feedback", group: "Navegacion" },
-  { id: "config", label: "Configuracion", path: "/dashboard/config", icon: "settings", group: "Admin", privileged: true },
+  { id: "dashboard", label: "Inicio", path: "/dashboard", icon: "home", group: "Navegación" },
+  { id: "chat", label: "Asistente IA", path: "/dashboard/chat", icon: "chat", group: "Navegación" },
+  { id: "sct", label: "Test SCT", path: "/dashboard/sct", icon: "clipboard", group: "Navegación" },
+  { id: "images", label: "Imágenes IA", path: "/dashboard/images", icon: "image", group: "Navegación" },
+  { id: "cases", label: "Casos Clínicos", path: "/dashboard/cases", icon: "cases", group: "Navegación" },
+  { id: "feedback", label: "Evaluación", path: "/dashboard/feedback", icon: "feedback", group: "Navegación" },
+  { id: "config", label: "Configuración", path: "/dashboard/config", icon: "settings", group: "Admin", privileged: true },
 ];
 
 function Icon({ name }) {
@@ -133,13 +133,13 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar..."
-          aria-label="Buscar modulo"
+          aria-label="Buscar módulo"
           data-testid="sidebar-search-input"
         />
         <kbd>⌘K</kbd>
       </form>
 
-      <nav className="app-sidebar-nav" aria-label="Navegacion principal" data-testid="app-sidebar-nav">
+      <nav className="app-sidebar-nav" aria-label="Navegación principal" data-testid="app-sidebar-nav">
         {Object.entries(navGroups).map(([group, items]) => (
           <div className="app-nav-group" key={group}>
             <div className="app-nav-heading">{group}</div>
@@ -191,7 +191,7 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
             <div className="app-user-name">{user.name}</div>
             <div className="app-user-role-label">{role}</div>
           </div>
-          <button onClick={onLogout} className="app-user-logout-icon" aria-label="Cerrar sesion">
+          <button onClick={onLogout} className="app-user-logout-icon" aria-label="Cerrar sesión">
             <LogoutIcon />
           </button>
         </div>

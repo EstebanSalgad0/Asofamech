@@ -1,0 +1,51 @@
+﻿{
+    "ok":  true,
+    "status":  200,
+    "body":  {
+                 "chat":  {
+                              "total":  5,
+                              "week":  5,
+                              "daily":  [
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            5
+                                        ]
+                          },
+                 "histo":  {
+                               "total":  5,
+                               "week":  5,
+                               "daily":  [
+                                             0,
+                                             0,
+                                             0,
+                                             0,
+                                             0,
+                                             0,
+                                             5
+                                         ]
+                           },
+                 "sct":  {
+                             "total":  5,
+                             "week":  5,
+                             "daily":  [
+                                           0,
+                                           0,
+                                           0,
+                                           0,
+                                           0,
+                                           0,
+                                           5
+                                       ],
+                             "latest":  {
+                                            "score":  1.0,
+                                            "correct_count":  3,
+                                            "total_items":  3,
+                                            "completed_at":  "2026-05-30T02:16:47.169353"
+                                        }
+                         }
+             }
+}

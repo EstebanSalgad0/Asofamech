@@ -1,0 +1,11 @@
+﻿{
+    "ok":  true,
+    "status":  200,
+    "body":  {
+                 "query":  "fiebre",
+                 "hits":  [
+
+                          ],
+                 "context":  ""
+             }
+}
