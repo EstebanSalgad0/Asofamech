@@ -13,6 +13,12 @@ import {
   getStoredRole,
 } from "../authClient";
 import { listMyRoiSessions } from "../api";
+import {
+  formatDisplayTag,
+  formatFileSizeMB,
+  formatFileType,
+  formatImageDisplayName,
+} from "../displayText";
 
 const CLASE_COLORS = {
   metastasico: "#ef4444",
@@ -132,7 +138,7 @@ export function ImagesPage() {
   };
 
   const handleImageSelect = (image, session = null) => {
-    pushActivity("images", `Visualización: ${image.title}`);
+    pushActivity("images", `Visualización: ${formatImageDisplayName(image)}`);
     setInitialSession(session);
     setSelectedImage({
       url: `${API_BASE}/api/medical-images/view/${image.id}`,
@@ -142,7 +148,7 @@ export function ImagesPage() {
 
   const handleFileUpload = async (e) => {
     if (!canManageEducationalContent(role)) {
-      alert("No tienes permisos para cargar imagenes.");
+      alert("No tienes permisos para cargar imágenes.");
       e.target.value = "";
       return;
     }
@@ -152,7 +158,7 @@ export function ImagesPage() {
     formData.append("file", file);
     formData.append("title", file.name.replace(/\.[^.]+$/, ""));
     formData.append("description", "Imagen de prueba cargada desde el visor");
-    formData.append("pathology_type", "Histopatologia");
+    formData.append("pathology_type", "Histopatología");
     try {
       setLoading(true);
       const response = await authFetch("/api/medical-images/upload", {
@@ -169,7 +175,7 @@ export function ImagesPage() {
         id: uploaded.id, filename: uploaded.filename,
         title: uploaded.title, file_type: uploaded.file_type,
         file_size: uploaded.file_size, has_dzi: uploaded.has_dzi,
-        pathology_type: "Histopatologia",
+        pathology_type: "Histopatología",
         url: `${API_BASE}/api/medical-images/view/${uploaded.id}`,
       });
     } catch (error) {
@@ -268,18 +274,20 @@ export function ImagesPage() {
                       onClick={() => handleImageSelect(img)}
                       role="button"
                       tabIndex={0}
-                      aria-label={`Abrir imagen ${img.title}`}
+                      aria-label={`Abrir imagen ${formatImageDisplayName(img)}`}
                       data-testid={`image-library-item-${img.id}`}
                     >
                       <div className="images-v2-img-thumb">🔬</div>
                       <div className="images-v2-img-info">
-                        <div className="images-v2-img-name">{img.title}</div>
+                        <div className="images-v2-img-name" title={img.title || img.filename}>
+                          {formatImageDisplayName(img)}
+                        </div>
                         <div className="images-v2-img-meta">
                           {img.pathology_type && (
-                            <span className="images-v2-img-tag">{img.pathology_type}</span>
+                            <span className="images-v2-img-tag">{formatDisplayTag(img.pathology_type)}</span>
                           )}
-                          <span>{img.file_type?.toUpperCase()}</span>
-                          <span>{(img.file_size / 1024 / 1024).toFixed(1)} MB</span>
+                          <span>{formatFileType(img.file_type)}</span>
+                          {formatFileSizeMB(img.file_size) && <span>{formatFileSizeMB(img.file_size)}</span>}
                         </div>
                       </div>
                     </div>

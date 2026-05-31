@@ -13,12 +13,46 @@ from ..auth import (
     ROLE_STUDENT,
     user_role,
 )
-from ..models import Case, User
+from ..models import Case, MedicalImage, SCTTest, User
 from ..schemas import CaseOut, CaseCreate, CaseUpdate, CaseStatusUpdate
 
 router = APIRouter(prefix="/api", tags=["cases"])
 
 _VALID_STATUSES = {"draft", "published", "archived"}
+
+
+def _schema_values(schema, **kwargs) -> dict:
+    if hasattr(schema, "model_dump"):
+        return schema.model_dump(**kwargs)
+    return schema.dict(**kwargs)
+
+
+def _validate_case_links(values: dict, db: Session) -> None:
+    image_id = values.get("image_id")
+    if image_id is not None:
+        image = (
+            db.query(MedicalImage.id)
+            .filter(MedicalImage.id == image_id, MedicalImage.is_active == True)
+            .first()
+        )
+        if not image:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Imagen histopatológica no encontrada: ID {image_id}",
+            )
+
+    sct_test_id = values.get("sct_test_id")
+    if sct_test_id is not None:
+        sct_test = (
+            db.query(SCTTest.id)
+            .filter(SCTTest.id == sct_test_id, SCTTest.is_active == True)
+            .first()
+        )
+        if not sct_test:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Test SCT no encontrado: ID {sct_test_id}",
+            )
 
 
 def _serialize(case: Case) -> dict:
@@ -127,18 +161,21 @@ def create_case(
     if case_data.status not in _VALID_STATUSES:
         raise HTTPException(status_code=422, detail=f"Estado inválido: {case_data.status}")
 
+    values = _schema_values(case_data)
+    _validate_case_links(values, db)
+
     new_case = Case(
-        title=case_data.title,
-        description=case_data.description,
-        body=case_data.body,
-        clinical_context=case_data.clinical_context,
-        learning_objectives=case_data.learning_objectives,
-        difficulty=case_data.difficulty,
-        topic=case_data.topic,
-        image_id=case_data.image_id,
-        sct_test_id=case_data.sct_test_id,
+        title=values["title"],
+        description=values["description"],
+        body=values["body"],
+        clinical_context=values.get("clinical_context"),
+        learning_objectives=values.get("learning_objectives"),
+        difficulty=values.get("difficulty"),
+        topic=values.get("topic"),
+        image_id=values.get("image_id"),
+        sct_test_id=values.get("sct_test_id"),
         created_by=current_user.id,
-        status=case_data.status,
+        status=values["status"],
         is_active=True,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -160,7 +197,10 @@ def update_case(
     if not case:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
-    for field, value in case_data.dict(exclude_unset=True).items():
+    values = _schema_values(case_data, exclude_unset=True)
+    _validate_case_links(values, db)
+
+    for field, value in values.items():
         setattr(case, field, value)
     case.updated_at = datetime.utcnow()
 

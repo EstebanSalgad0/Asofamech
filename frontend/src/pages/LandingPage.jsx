@@ -247,7 +247,7 @@ export function LandingPage() {
             </div>
             <div className="step-card">
               <span className="step-number">02</span>
-              <span className="step-tag">Practica</span>
+              <span className="step-tag">Práctica</span>
               <div>
                 <h4 className="step-title">Combinas los tres módulos.</h4>
                 <p className="step-desc">Resuelve dudas con MediChat, calibra tu juicio con SCT, observa anatomía con el visor histopatológico — todo en una sesión.</p>

@@ -1,0 +1,8 @@
+﻿Fecha ejecucion: 2026-05-29 22:17:48
+Exit code: 0
+
+NAME                 IMAGE                    COMMAND                  SERVICE    CREATED        STATUS                    PORTS
+asofamech_backend    asofamech-backend        "./start.sh --reload…"   backend    5 hours ago    Up 15 minutes (healthy)   0.0.0.0:8001->8001/tcp, [::]:8001->8001/tcp
+asofamech_db         pgvector/pgvector:pg15   "docker-entrypoint.s…"   db         23 hours ago   Up 15 minutes (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+asofamech_frontend   asofamech-frontend       "/docker-entrypoint.…"   frontend   5 hours ago    Up 15 minutes             0.0.0.0:3000->80/tcp, [::]:3000->80/tcp
+asofamech_ollama     ollama/ollama:latest     "/bin/ollama serve"      ollama     23 hours ago   Up 15 minutes             0.0.0.0:11434->11434/tcp, [::]:11434->11434/tcp

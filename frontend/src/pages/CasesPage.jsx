@@ -7,6 +7,8 @@ import {
   updateCase,
   updateCaseStatus,
   deleteCase,
+  listMedicalImages,
+  listSCTTests,
 } from "../api";
 import { AppSidebar } from "../components/AppSidebar";
 import {
@@ -59,6 +61,16 @@ function DiffBadge({ difficulty }) {
   );
 }
 
+function imageOptionLabel(image) {
+  const title = image.title || image.original_filename || image.filename || `Imagen ${image.id}`;
+  return `#${image.id} - ${title}`;
+}
+
+function sctOptionLabel(test) {
+  const title = test.name || test.focus || `Test SCT ${test.id}`;
+  return `#${test.id} - ${title}`;
+}
+
 export function CasesPage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -81,6 +93,9 @@ export function CasesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState(null);
   const [formSaving, setFormSaving] = useState(false);
+  const [medicalImages, setMedicalImages] = useState([]);
+  const [sctTests, setSctTests] = useState([]);
+  const [resourceError, setResourceError] = useState(null);
 
   const [deletingId, setDeletingId] = useState(null);
 
@@ -117,6 +132,41 @@ export function CasesPage() {
   useEffect(() => {
     if (user) loadCases();
   }, [user, loadCases]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+
+    async function loadFormResources() {
+      setResourceError(null);
+      const [imagesResult, testsResult] = await Promise.allSettled([
+        listMedicalImages(),
+        listSCTTests(),
+      ]);
+      if (cancelled) return;
+
+      if (imagesResult.status === "fulfilled") {
+        setMedicalImages(imagesResult.value);
+      } else {
+        setMedicalImages([]);
+      }
+
+      if (testsResult.status === "fulfilled") {
+        setSctTests(testsResult.value);
+      } else {
+        setSctTests([]);
+      }
+
+      if (imagesResult.status === "rejected" || testsResult.status === "rejected") {
+        setResourceError("No se pudieron cargar todos los recursos asociados.");
+      }
+    }
+
+    loadFormResources();
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage]);
 
   function handleLogout() {
     clearAuthSession();
@@ -493,26 +543,42 @@ export function CasesPage() {
 
               <div className="cases-form-row-2col">
                 <div className="cases-form-row">
-                  <label>ID Imagen histopatológica</label>
-                  <input
-                    type="number"
+                  <label>Imagen histopatológica asociada</label>
+                  <select
                     value={form.image_id}
                     onChange={(e) => setForm((f) => ({ ...f, image_id: e.target.value }))}
-                    placeholder="ID numérico"
-                    min={1}
-                  />
+                  >
+                    <option value="">Sin imagen asociada</option>
+                    {medicalImages.map((image) => (
+                      <option key={image.id} value={String(image.id)}>
+                        {imageOptionLabel(image)}
+                      </option>
+                    ))}
+                    {form.image_id && !medicalImages.some((image) => String(image.id) === form.image_id) && (
+                      <option value={form.image_id}>ID {form.image_id} no disponible</option>
+                    )}
+                  </select>
                 </div>
                 <div className="cases-form-row">
-                  <label>ID Test SCT</label>
-                  <input
-                    type="number"
+                  <label>Test SCT asociado</label>
+                  <select
                     value={form.sct_test_id}
                     onChange={(e) => setForm((f) => ({ ...f, sct_test_id: e.target.value }))}
-                    placeholder="ID numérico"
-                    min={1}
-                  />
+                  >
+                    <option value="">Sin test asociado</option>
+                    {sctTests.map((test) => (
+                      <option key={test.id} value={String(test.id)}>
+                        {sctOptionLabel(test)}
+                      </option>
+                    ))}
+                    {form.sct_test_id && !sctTests.some((test) => String(test.id) === form.sct_test_id) && (
+                      <option value={form.sct_test_id}>ID {form.sct_test_id} no disponible</option>
+                    )}
+                  </select>
                 </div>
               </div>
+
+              {resourceError && <p className="cases-form-hint">{resourceError}</p>}
 
               {!editingCase && (
                 <div className="cases-form-row">

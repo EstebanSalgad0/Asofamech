@@ -1,0 +1,7 @@
+﻿Fecha ejecucion: 2026-05-29 22:17:59
+Exit code: 0
+
+
+StatusCode Content
+---------- -------
+       200 {"models":[{"name":"llama3:8b","model":"llama3:8b","modified_at":"2026-01-09T16:41:00.326803955Z","size":...

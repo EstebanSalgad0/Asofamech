@@ -1,0 +1,22 @@
+﻿Fecha ejecucion: 2026-05-29 22:17:58
+Exit code: 0
+
+ database | db_user
+----------+----------
+ app_db   | app_user
+(1 row)
+
+ extname | extversion
+---------+------------
+ vector  | 0.8.2
+(1 row)
+
+ users_total
+-------------
+           6
+(1 row)
+
+ medical_images_activas
+------------------------
+                      9
+(1 row)

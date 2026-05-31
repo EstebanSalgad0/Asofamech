@@ -1,0 +1,1 @@
+﻿Captura generada correctamente: C_api_swagger_endpoints/C_API01_swagger_openapi.png

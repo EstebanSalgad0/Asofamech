@@ -76,7 +76,7 @@ export async function searchRagDocuments(query, limit = 4) {
 
 export async function getAIConfig() {
   const res = await authFetch("/api/admin/ai-config");
-  return parseJsonResponse(res, "No se pudo cargar la configuracion IA");
+  return parseJsonResponse(res, "No se pudo cargar la configuración IA");
 }
 
 export async function updateAIConfig(items) {
@@ -85,7 +85,7 @@ export async function updateAIConfig(items) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ items }),
   });
-  return parseJsonResponse(res, "No se pudo guardar la configuracion IA");
+  return parseJsonResponse(res, "No se pudo guardar la configuración IA");
 }
 
 export async function getIntegrationStatus() {
@@ -232,6 +232,11 @@ export async function listMyRoiSessions(limit = 20) {
 export async function getRoiSession(sessionId) {
   const res = await authFetch(`/api/histopathology/sessions/${sessionId}`);
   return parseJsonResponse(res, "No se pudo cargar la sesión ROI");
+}
+
+export async function listMedicalImages() {
+  const res = await authFetch("/api/medical-images/list");
+  return parseJsonResponse(res, "No se pudieron cargar las imágenes médicas");
 }
 
 export async function listCases(filters = {}) {

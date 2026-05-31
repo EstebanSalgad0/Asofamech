@@ -1,0 +1,117 @@
+﻿{
+    "ok":  true,
+    "status":  200,
+    "body":  {
+                 "value":  [
+                               {
+                                   "id":  12,
+                                   "filename":  "patient_004_node_0.tif",
+                                   "title":  "patient_004_node_0",
+                                   "description":  null,
+                                   "pathology_type":  "CAMELYON17",
+                                   "file_type":  "tif",
+                                   "file_size":  2560689117,
+                                   "has_dzi":  true,
+                                   "created_at":  "2026-05-15T21:48:53.917597",
+                                   "uploader_name":  "Esteban Salgado"
+                               },
+                               {
+                                   "id":  11,
+                                   "filename":  "patient_012_node_1.tif",
+                                   "title":  "CAMELYON17 patient_012_node_1 negative check",
+                                   "description":  "Imported by Codex for Stage 8 validation",
+                                   "pathology_type":  "CAMELYON17 negativo oficial",
+                                   "file_type":  "tif",
+                                   "file_size":  2633131551,
+                                   "has_dzi":  true,
+                                   "created_at":  "2026-05-14T22:51:51.606149",
+                                   "uploader_name":  "Desconocido"
+                               },
+                               {
+                                   "id":  4,
+                                   "filename":  "61b113ca-6d06-483c-983d-5200024c1035.png",
+                                   "title":  "METASTASIS",
+                                   "description":  "TEST",
+                                   "pathology_type":  "CANCER",
+                                   "file_type":  "png",
+                                   "file_size":  25292,
+                                   "has_dzi":  true,
+                                   "created_at":  "2026-05-08T03:36:10.890973",
+                                   "uploader_name":  "Desconocido"
+                               },
+                               {
+                                   "id":  5,
+                                   "filename":  "ba053fdd-dace-4100-9de9-5ce5f2954621.png",
+                                   "title":  "Metastasis 2",
+                                   "description":  "test2",
+                                   "pathology_type":  "cancer",
+                                   "file_type":  "png",
+                                   "file_size":  5537598,
+                                   "has_dzi":  true,
+                                   "created_at":  "2026-05-08T04:41:36.872946",
+                                   "uploader_name":  "Desconocido"
+                               },
+                               {
+                                   "id":  6,
+                                   "filename":  "09335b28-1783-48f5-ae43-13eda13fec0f.png",
+                                   "title":  "metastasis hd",
+                                   "description":  "test hd",
+                                   "pathology_type":  "cancer",
+                                   "file_type":  "png",
+                                   "file_size":  24184,
+                                   "has_dzi":  true,
+                                   "created_at":  "2026-05-08T04:42:01.759386",
+                                   "uploader_name":  "Desconocido"
+                               },
+                               {
+                                   "id":  7,
+                                   "filename":  "ce3e5991-6db5-4a1b-b9d7-920eb8fe429d.svs",
+                                   "title":  "testeo real cancer",
+                                   "description":  null,
+                                   "pathology_type":  "Cancer de mama",
+                                   "file_type":  "svs",
+                                   "file_size":  502770727,
+                                   "has_dzi":  true,
+                                   "created_at":  "2026-05-08T05:24:47.669153",
+                                   "uploader_name":  "Desconocido"
+                               },
+                               {
+                                   "id":  8,
+                                   "filename":  "2854b740-7bbf-467c-9f1e-37204ed8306c.svs",
+                                   "title":  "SLN-Breast negativo HobI16-723628532151",
+                                   "description":  "SLN-Breast target=0 negativo/no metastasico",
+                                   "pathology_type":  "SLN-Breast negativo",
+                                   "file_type":  "svs",
+                                   "file_size":  45995309,
+                                   "has_dzi":  true,
+                                   "created_at":  "2026-05-08T05:33:06.356843",
+                                   "uploader_name":  "Desconocido"
+                               },
+                               {
+                                   "id":  9,
+                                   "filename":  "6240c564-99b1-4635-a8c0-b0ec35663b4d.svs",
+                                   "title":  "SLN-Breast positivo HobI17-440719796933",
+                                   "description":  "SLN-Breast target=1 positivo/metastasico",
+                                   "pathology_type":  "SLN-Breast positivo",
+                                   "file_type":  "svs",
+                                   "file_size":  85442789,
+                                   "has_dzi":  true,
+                                   "created_at":  "2026-05-08T05:37:23.285346",
+                                   "uploader_name":  "Desconocido"
+                               },
+                               {
+                                   "id":  10,
+                                   "filename":  "patient_017_node_2.tif",
+                                   "title":  "CAMELYON17 patient_017_node_2 macro",
+                                   "description":  "Lamina CAMELYON17 positiva macro importada desde backend/data",
+                                   "pathology_type":  "CAMELYON17 macro metastasis",
+                                   "file_type":  "tif",
+                                   "file_size":  3862737543,
+                                   "has_dzi":  true,
+                                   "created_at":  "2026-05-09T06:57:38.503290",
+                                   "uploader_name":  "Desconocido"
+                               }
+                           ],
+                 "Count":  9
+             }
+}

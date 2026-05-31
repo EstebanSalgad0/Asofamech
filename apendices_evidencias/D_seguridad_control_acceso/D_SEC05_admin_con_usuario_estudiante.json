@@ -1,0 +1,6 @@
+﻿{
+    "ok":  false,
+    "status":  403,
+    "body":  null,
+    "error":  "Error en el servidor remoto: (403) Prohibido."
+}

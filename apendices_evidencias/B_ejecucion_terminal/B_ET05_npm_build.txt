@@ -1,0 +1,27 @@
+﻿Fecha ejecucion: 2026-05-29 22:17:55
+Exit code: 0
+
+
+> asofamech-frontend@1.0.0 build
+> vite build
+
+npm.cmd : [33mThe CJS build of Vite's Node API is deprecated. See
+https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+En [RUTA LOCAL OCULTA]\OneDrive\Escritorio\Asofamech\scripts\generate_apendices_evidencias.ps1: 206 Carácter: 9
++   try { npm.cmd run build } finally { Pop-Location }
++         ~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([33mThe CJS bu...e details.[39m:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+vite v5.4.21 building for production...
+transforming...
+✓ 62 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                          1.13 kB │ gzip:  0.55 kB
+dist/assets/index-DANSltPD.css         263.54 kB │ gzip: 42.59 kB
+dist/assets/vendor-react-E2cH4DFV.js   177.59 kB │ gzip: 58.35 kB
+dist/assets/vendor-osd-Dz9QlszY.js     277.64 kB │ gzip: 68.20 kB
+dist/assets/index-BFbRU5vt.js          278.57 kB │ gzip: 74.07 kB
+dist/assets/vendor-fabric-DY1TEihu.js  280.12 kB │ gzip: 84.85 kB
+✓ built in 1.89s
