@@ -210,8 +210,22 @@ class UsabilityFeedback(Base):
     chatbot_utility = Column(Integer, nullable=False)   # 1-5 utilidad del chatbot
     sct_utility = Column(Integer, nullable=False)       # 1-5 utilidad del SCT
     observations = Column(Text, nullable=True)
+    display_name = Column(String(100), nullable=True)
     submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
+
+
+class PasswordResetToken(Base):
+    """Token de un solo uso para recuperación de contraseña. Expira en 1 hora."""
+    __tablename__ = "password_reset_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)  # SHA-256 hex
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     user = relationship("User")
 

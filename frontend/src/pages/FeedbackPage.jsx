@@ -70,6 +70,7 @@ export function FeedbackPage() {
   const [tab, setTab] = useState("form");   // "form" | "summary"
   const [ratings, setRatings] = useState(EMPTY_RATINGS);
   const [observations, setObservations] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -105,6 +106,7 @@ export function FeedbackPage() {
             sct_utility: fb.sct_utility,
           });
           setObservations(fb.observations || "");
+          setDisplayName(fb.display_name || "");
         }
       })
       .catch(() => {})
@@ -140,7 +142,11 @@ export function FeedbackPage() {
     setSaveError(null);
     setSaving(true);
     try {
-      const result = await submitFeedback({ ...ratings, observations: observations.trim() || null });
+      const result = await submitFeedback({
+        ...ratings,
+        observations: observations.trim() || null,
+        display_name: displayName.trim() || null,
+      });
       setExistingFeedback(result);
       setSubmitted(true);
     } catch (err) {
@@ -227,6 +233,21 @@ export function FeedbackPage() {
                       onChange={handleRatingChange}
                     />
                   ))}
+
+                  <div className="fb-obs-row">
+                    <label className="fb-obs-label">
+                      Tu nombre <span className="fb-optional">(opcional)</span>
+                    </label>
+                    <input
+                      className="fb-name-input"
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="Escribe tu nombre si deseas identificar tu evaluación"
+                      maxLength={100}
+                      data-testid="feedback-display-name"
+                    />
+                  </div>
 
                   <div className="fb-obs-row">
                     <label className="fb-obs-label">
@@ -347,6 +368,7 @@ export function FeedbackPage() {
                         <table className="fb-responses-table">
                           <thead>
                             <tr>
+                              <th>Nombre</th>
                               <th>Rol</th>
                               {DIMENSIONS.map((d) => (
                                 <th key={d.key} title={d.label}>{d.label.split(" ")[0]}</th>
@@ -358,6 +380,7 @@ export function FeedbackPage() {
                           <tbody>
                             {responses.map((r, i) => (
                               <tr key={i}>
+                                <td className="fb-cell-name">{r.display_name || <span className="fb-anon">—</span>}</td>
                                 <td><span className="fb-role-tag">{r.role}</span></td>
                                 {DIMENSIONS.map((d) => (
                                   <td key={d.key} className="fb-cell-rating">

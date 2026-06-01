@@ -398,8 +398,9 @@ a { color: inherit; text-decoration: none; }
 .auth-form { display: flex; flex-direction: column; gap: 24px; }
 .form-group { display: flex; flex-direction: column; gap: 8px; }
 .form-label { font-size: 14px; font-weight: 600; }
-.form-label-row { display: flex; justify-content: space-between; }
+.form-label-row { display: flex; justify-content: space-between; align-items: center; }
 .form-link { font-size: 13px; color: var(--primary); text-decoration: none; }
+.auth-forgot-link { font-size: 13px; color: var(--primary); background: none; border: none; cursor: pointer; padding: 0; text-decoration: none; font-family: inherit; }
 .form-input { padding: 14px 16px; border: 2px solid var(--border); border-radius: var(--radius-md); font-size: 15px; outline: none; }
 .form-input:focus { border-color: var(--primary); }
 .form-select { padding: 14px 16px; border: 2px solid var(--border); border-radius: var(--radius-md); font-size: 15px; outline: none; background: white; cursor: pointer; }
@@ -8240,6 +8241,12 @@ a { color: inherit; text-decoration: none; }
 .fb-obs-row { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
 .fb-obs-label { font-size: 13px; font-weight: 700; color: var(--ink-2); }
 .fb-optional { font-weight: 400; color: var(--muted); }
+.fb-name-input {
+  padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px;
+  font-size: 14px; font-family: inherit; color: var(--ink);
+  outline: none; transition: border-color 0.15s; width: 100%; box-sizing: border-box;
+}
+.fb-name-input:focus { border-color: var(--accent); }
 .fb-obs-textarea {
   padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px;
   font-size: 14px; font-family: inherit; color: var(--ink); resize: vertical;
@@ -8247,6 +8254,8 @@ a { color: inherit; text-decoration: none; }
 }
 .fb-obs-textarea:focus { border-color: var(--accent); }
 .fb-char-count { font-size: 11px; color: var(--muted); text-align: right; }
+.fb-cell-name { font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.fb-anon { color: var(--muted); }
 
 .fb-form-actions { display: flex; justify-content: flex-end; margin-top: 24px; }
 .fb-btn-submit {

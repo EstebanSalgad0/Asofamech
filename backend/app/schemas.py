@@ -173,6 +173,7 @@ class FeedbackCreate(BaseModel):
     chatbot_utility: int      # 1-5
     sct_utility: int          # 1-5
     observations: Optional[str] = None
+    display_name: Optional[str] = None
 
 class FeedbackOut(BaseModel):
     id: int
@@ -184,6 +185,7 @@ class FeedbackOut(BaseModel):
     chatbot_utility: int
     sct_utility: int
     observations: Optional[str] = None
+    display_name: Optional[str] = None
     submitted_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -208,8 +210,16 @@ class FeedbackSummary(BaseModel):
     by_role: dict
     recent_observations: List[str]
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
 class FeedbackResponseItem(BaseModel):
     role: str
+    display_name: Optional[str] = None
     nav_clarity: int
     viewer_ease: int
     roi_ease: int

@@ -285,6 +285,86 @@ def send_account_approved_email(user: User, smtp_config: dict | None = None, db=
     return _send_smtp(user.email, subject, rendered_body, _resolve_smtp(smtp_config), html=html)
 
 
+def send_password_reset_email(user: User, reset_url: str, db) -> dict:
+    """Envía correo con enlace único para restablecer contraseña (válido 1 hora)."""
+    smtp = _smtp_cfg_from_db(db)
+    subject = "Recuperación de contraseña – ASOFAMECH"
+    body = (
+        f"Hola {user.name},\n\n"
+        "Recibimos una solicitud para restablecer la contraseña de tu cuenta ASOFAMECH.\n\n"
+        "Haz clic en el botón de abajo para crear una nueva contraseña.\n"
+        "El enlace es válido por 1 hora y solo puede usarse una vez.\n\n"
+        f"{reset_url}\n\n"
+        "Si no solicitaste este cambio, ignora este correo. Tu contraseña no cambiará.\n\n"
+        "Este es un correo automatico del prototipo educativo ASOFAMECH."
+    )
+    meta_key = "_password_reset"
+    accent = "#2563eb"
+    content_html = _body_to_html_content(body)
+    cta_html = f"""\
+        <div style="text-align:center;margin:30px 0 8px;">
+          <a href="{reset_url}"
+             style="display:inline-block;background:{accent};color:#ffffff;padding:14px 44px;
+                    border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;
+                    letter-spacing:0.3px;">
+            Restablecer contraseña
+          </a>
+        </div>
+        <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:18px;">
+          O copia este enlace en tu navegador:<br>
+          <span style="color:#2563eb;word-break:break-all;">{reset_url}</span>
+        </p>"""
+    year = datetime.now(UTC).year
+    html = f"""\
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ASOFAMECH – Recuperación de contraseña</title></head>
+<body style="margin:0;padding:0;background:#eef2f7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;padding:48px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+             style="max-width:560px;width:100%;border-radius:14px;overflow:hidden;
+                    box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+        <tr>
+          <td style="background:#1e3a5f;padding:32px 44px;text-align:center;">
+            <div style="color:#ffffff;font-size:26px;font-weight:800;letter-spacing:5px;text-transform:uppercase;">ASOFAMECH</div>
+            <div style="color:rgba(255,255,255,0.55);font-size:11px;margin-top:6px;letter-spacing:2px;text-transform:uppercase;">
+              Plataforma Educativa &middot; Histopatolog&iacute;a
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:{accent};padding:11px 44px;text-align:center;">
+            <span style="color:#ffffff;font-size:13px;font-weight:700;letter-spacing:0.6px;">&#128274; Recuperación de Contraseña</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#ffffff;padding:42px 44px 36px;">
+            {content_html}
+            {cta_html}
+          </td>
+        </tr>
+        <tr><td style="background:#ffffff;padding:0 44px;"><div style="border-top:1px solid #e2e8f0;"></div></td></tr>
+        <tr>
+          <td style="background:#f8fafc;padding:22px 44px;text-align:center;border-top:3px solid {accent};">
+            <p style="margin:0 0 6px;color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;">
+              ASOFAMECH &mdash; Sistema Educativo
+            </p>
+            <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.7;">
+              Este es un correo autom&aacute;tico. Por favor no respondas este mensaje.
+            </p>
+            <p style="margin:14px 0 0;color:#cbd5e1;font-size:10px;">&copy; {year} ASOFAMECH</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+    return _send_smtp(user.email, subject, body, _resolve_smtp(smtp), html=html)
+
+
 def send_test_email(user: User, smtp_config: dict | None = None) -> dict:
     subject = "Correo de prueba – ASOFAMECH"
     body = (

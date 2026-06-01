@@ -45,6 +45,7 @@ def _serialize(fb: UsabilityFeedback) -> dict:
         "chatbot_utility": fb.chatbot_utility,
         "sct_utility": fb.sct_utility,
         "observations": fb.observations,
+        "display_name": fb.display_name,
         "submitted_at": fb.submitted_at.isoformat() if fb.submitted_at else None,
         "updated_at": fb.updated_at.isoformat() if fb.updated_at else None,
     }
@@ -74,10 +75,13 @@ def submit_feedback(
         UsabilityFeedback.user_id == current_user.id
     ).first()
 
+    clean_name = data.display_name.strip() if data.display_name and data.display_name.strip() else None
+
     if existing:
         for dim in _DIMENSIONS:
             setattr(existing, dim, getattr(data, dim))
         existing.observations = data.observations
+        existing.display_name = clean_name
         existing.role_at_submission = user_role(current_user)
         existing.updated_at = now
         db.commit()
@@ -94,6 +98,7 @@ def submit_feedback(
         chatbot_utility=data.chatbot_utility,
         sct_utility=data.sct_utility,
         observations=data.observations,
+        display_name=clean_name,
         submitted_at=now,
         updated_at=now,
     )
@@ -175,6 +180,7 @@ def get_feedback_responses(
     return [
         {
             "role": r.role_at_submission,
+            "display_name": r.display_name,
             "nav_clarity": r.nav_clarity,
             "viewer_ease": r.viewer_ease,
             "roi_ease": r.roi_ease,
@@ -199,13 +205,14 @@ def export_feedback_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "rol",
+        "nombre", "rol",
         "claridad_navegacion", "facilidad_visor", "facilidad_roi",
         "claridad_ia", "utilidad_chatbot", "utilidad_sct",
         "observaciones", "fecha",
     ])
     for r in rows:
         writer.writerow([
+            r.display_name or "",
             r.role_at_submission,
             r.nav_clarity, r.viewer_ease, r.roi_ease,
             r.ai_clarity, r.chatbot_utility, r.sct_utility,

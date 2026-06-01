@@ -1,4 +1,4 @@
-import { authErrorMessage, authFetch } from "./authClient";
+import { API_BASE, authErrorMessage, authFetch } from "./authClient";
 
 export async function sendChatMessage(text) {
   const res = await authFetch("/api/chat", {
@@ -334,4 +334,26 @@ export async function downloadFeedbackCsv() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function requestPasswordReset(email) {
+  const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(payload?.detail || "Error al procesar la solicitud");
+  return payload;
+}
+
+export async function confirmPasswordReset(token, newPassword) {
+  const res = await fetch(`${API_BASE}/api/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(payload?.detail || "Error al restablecer la contraseña");
+  return payload;
 }

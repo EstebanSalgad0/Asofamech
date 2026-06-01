@@ -1,9 +1,12 @@
+import hashlib
+import os
+import secrets
 import time
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from datetime import datetime
 
 from ..auth import get_current_user, user_can_access_platform, user_to_public_payload
 from ..auth_security import (
@@ -15,8 +18,8 @@ from ..auth_security import (
     verify_password,
 )
 from ..db import get_db
-from ..email_service import send_template_email
-from ..models import User
+from ..email_service import send_password_reset_email, send_template_email
+from ..models import PasswordResetToken, User
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -35,6 +38,22 @@ IP_LOGIN_MAX_ATTEMPTS = 30         # 30 intentos fallidos por IP en total
 IP_REGISTER_ATTEMPTS: dict[str, list[float]] = {}
 REGISTER_WINDOW_SECONDS = 60 * 60  # ventana de 1 hora
 REGISTER_MAX_ATTEMPTS = 5          # 5 registros por IP por hora
+
+# --- Rate limiting: forgot-password por IP ---
+IP_RESET_ATTEMPTS: dict[str, list[float]] = {}
+RESET_WINDOW_SECONDS = 60 * 60    # ventana de 1 hora
+RESET_MAX_ATTEMPTS = 5             # 5 solicitudes por IP por hora
+
+TOKEN_EXPIRY_HOURS = 1
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8)
 
 
 class AuthLoginRequest(BaseModel):
@@ -233,6 +252,88 @@ def login(payload: AuthLoginRequest, request: Request, db: Session = Depends(get
         )
     _clear_failed_login(request, email)
     return _issue_session(user)
+
+
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    """Solicita recuperación de contraseña. Siempre responde igual para no enumerar cuentas."""
+    _GENERIC_OK = {"ok": True, "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."}
+
+    ip = _client_ip(request)
+    now = time.time()
+    attempts = _prune(IP_RESET_ATTEMPTS, ip, RESET_WINDOW_SECONDS, now)
+    if len(attempts) >= RESET_MAX_ATTEMPTS:
+        return _GENERIC_OK
+
+    attempts.append(now)
+    IP_RESET_ATTEMPTS[ip] = attempts
+
+    try:
+        email = normalize_email(payload.email)
+    except Exception:
+        return _GENERIC_OK
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        return _GENERIC_OK
+
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+    ).delete(synchronize_session=False)
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRY_HOURS)
+
+    db_token = PasswordResetToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        created_at=datetime.utcnow(),
+    )
+    db.add(db_token)
+    db.commit()
+
+    platform_url = os.getenv("ASOFAMECH_PLATFORM_URL", "http://localhost:3000")
+    reset_url = f"{platform_url}/auth/reset-password?token={raw_token}"
+    try:
+        send_password_reset_email(user, reset_url, db)
+    except Exception:
+        pass
+
+    return _GENERIC_OK
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Establece una nueva contraseña usando el token de recuperación."""
+    _validate_password_strength(payload.new_password)
+
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    now = datetime.utcnow()
+
+    db_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token_hash == token_hash,
+        PasswordResetToken.used_at.is_(None),
+        PasswordResetToken.expires_at > now,
+    ).first()
+
+    if not db_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El enlace de recuperación no es válido o ha expirado. Solicita uno nuevo.",
+        )
+
+    user = db.query(User).filter(User.id == db_token.user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuario no encontrado.")
+
+    user.password_hash = hash_password(payload.new_password)
+    db_token.used_at = now
+    db.commit()
+
+    return {"ok": True, "message": "Contraseña actualizada correctamente. Ya puedes iniciar sesión."}
 
 
 @router.get("/me")

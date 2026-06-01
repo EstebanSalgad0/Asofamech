@@ -9,6 +9,7 @@ import { ImagesPage } from "./pages/ImagesPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { CasesPage } from "./pages/CasesPage";
 import { FeedbackPage } from "./pages/FeedbackPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ThemeToggle } from "./components/ThemeToggle";
 
 function PublicThemeToggle() {
@@ -24,6 +25,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/dashboard/chat" element={<ChatbotPage />} />
         <Route path="/dashboard/sct" element={<SCTPage />} />
