@@ -198,6 +198,25 @@ npm run build
 # Artefactos generados en frontend/dist/
 ```
 
+### Rendimiento API - k6
+
+Prueba liviana de endpoints principales:
+
+```powershell
+.\scripts\run_k6_smoke.ps1 -Email "admin@correo.cl" -IncludeAdmin
+```
+
+Para incluir el chat con Ollama sin exigir umbral de tiempo estricto:
+
+```powershell
+.\scripts\run_k6_smoke.ps1 -Email "usuario@correo.cl" -Vus 2 -Iterations 2 -MaxDuration "5m" -IncludeChat
+```
+
+Si quieres exigir una meta al chat, agrega `-ChatP95Ms`, por ejemplo
+`-ChatP95Ms 120000`.
+
+Ver [docs/PERFORMANCE_TESTS.md](docs/PERFORMANCE_TESTS.md).
+
 ---
 
 ## Estructura del proyecto
