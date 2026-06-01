@@ -10,6 +10,31 @@ Docker mueve el software.
 El backup mueve los datos pesados, checkpoints propios y volumenes permitidos.
 ```
 
+Para actualizaciones normales entre equipos, Git mueve el codigo y Alembic
+mueve la estructura de la base de datos. Despues de un `git pull`, el backend
+ejecuta `alembic upgrade head` al iniciar el contenedor; asi se aplican cambios
+como nuevas tablas, por ejemplo `audit_logs`. Los datos reales siguen viajando
+por backup/restauracion o por seeders/migraciones de datos especificas.
+
+Flujo automatizado recomendado:
+
+| Necesidad | Script | Que mueve |
+|---|---|---|
+| Actualizacion normal | `scripts\update_from_git.ps1` | Codigo, frontend/backend reconstruidos y migraciones Alembic. |
+| Sincronizacion de datos | `scripts\migrate_export.ps1` + `scripts\start_presentation.ps1` | Base de datos, uploads, artifacts, laminas y volumenes permitidos. |
+| Modelos IA pesados | `scripts\prepare_histopathology_model.ps1` | Cache autorizado de CONCH en el equipo destino. |
+
+Uso normal en el equipo destino cuando solo cambiaron codigo, migraciones o
+frontend:
+
+```powershell
+.\scripts\update_from_git.ps1
+```
+
+Ese comando hace `git pull --ff-only`, reconstruye `backend` y `frontend`,
+espera el `health` del backend y abre el frontend. No reemplaza datos reales
+de la base; para eso se usa el backup.
+
 Las laminas histologicas grandes, por ejemplo archivos `.tif`, `.tiff` o `.svs`
 de varios GB, no se suben por navegador ni se guardan dentro de la imagen
 Docker. Se copian como archivos locales y Docker las monta en el backend.
@@ -538,6 +563,17 @@ En el equipo destino:
 ---
 
 ## 12. Resumen rapido
+
+Para una actualizacion normal desde GitHub, sin reemplazar datos:
+
+```powershell
+.\scripts\update_from_git.ps1
+```
+
+Esto actualiza codigo, reconstruye backend/frontend y aplica migraciones al
+arrancar el backend.
+
+Para copiar datos reales desde un equipo origen:
 
 En el equipo origen:
 

@@ -11,6 +11,7 @@ import {
   getAIConfig,
   getIntegrationStatus,
   getSCTTest,
+  listAuditLogs,
   listRagDocuments,
   listAdminUsers,
   listSCTTests,
@@ -151,6 +152,10 @@ export function ConfigPage() {
   const [newUserForm, setNewUserForm] = useState(DEFAULT_NEW_USER);
   const [userStatusFilter, setUserStatusFilter] = useState("");
   const [userSearch, setUserSearch] = useState("");
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
+  const [auditLogError, setAuditLogError] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState("");
 
   const [sctTests, setSctTests] = useState([]);
   const [loadingSCT, setLoadingSCT] = useState(false);
@@ -204,6 +209,8 @@ export function ConfigPage() {
     } else if (activeTab === "correo" && canManageAdminSettings(role)) {
       loadEmailConfig();
       loadEmailTemplates();
+    } else if (activeTab === "audit" && canManageAdminSettings(role)) {
+      loadAuditLogs();
     }
   }, [activeTab, role]);
 
@@ -311,6 +318,20 @@ export function ConfigPage() {
   const formatDateTime = (value) => {
     if (!value) return "Sin fecha";
     return new Date(value).toLocaleString("es-CL");
+  };
+
+  const formatAuditAction = (value) => {
+    const labels = {
+      "admin.user.create": "Usuario creado",
+      "admin.user.update": "Usuario actualizado",
+      "admin.user.approve": "Usuario aprobado",
+      "admin.user.reject": "Usuario rechazado",
+      "admin.user.delete": "Usuario eliminado",
+      "admin.ai_config.update": "Config IA actualizada",
+      "admin.email_config.update": "SMTP actualizado",
+      "admin.email_template.update": "Plantilla actualizada",
+    };
+    return labels[value] || value || "Evento";
   };
 
   const userInitials = (value) => {
@@ -567,6 +588,22 @@ export function ConfigPage() {
       setAdminUserError(error.message || "No se pudieron cargar los usuarios.");
     } finally {
       setLoadingAdminUsers(false);
+    }
+  };
+
+  const loadAuditLogs = async (overrides = {}) => {
+    if (!canManageAdminSettings(role)) return;
+    const action = overrides.action !== undefined ? overrides.action : auditActionFilter;
+    setLoadingAuditLogs(true);
+    setAuditLogError("");
+    try {
+      const payload = await listAuditLogs({ action, limit: 120 });
+      setAuditLogs(payload?.items || []);
+    } catch (error) {
+      console.warn("No se pudo cargar auditoria:", error);
+      setAuditLogError(error.message || "No se pudo cargar la auditoria.");
+    } finally {
+      setLoadingAuditLogs(false);
     }
   };
 
@@ -1030,6 +1067,7 @@ export function ConfigPage() {
       { id: "users", label: "Usuarios", icon: "USR" },
       { id: "ai", label: "Configuración IA", icon: "IA" },
       { id: "correo", label: "Gestión de Correo", icon: "✉" },
+      { id: "audit", label: "Auditoria", icon: "LOG" },
     ] : []),
   ];
 
@@ -2414,6 +2452,87 @@ export function ConfigPage() {
                     <span className="cfg-sct-footer-count">Mostrando {filtered.length} de {sctTests.length} tests</span>
                     <button className="cfg-action-btn" type="button" onClick={() => setShowGenerateModal(true)}>+ Crear test manual</button>
                   </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* -- AUDIT TAB -- */}
+          {activeTab === "audit" && role === "Administrador" && (() => {
+            const actionOptions = [
+              { value: "", label: "Todos los eventos" },
+              { value: "admin.user.create", label: "Usuario creado" },
+              { value: "admin.user.update", label: "Usuario actualizado" },
+              { value: "admin.user.approve", label: "Usuario aprobado" },
+              { value: "admin.user.reject", label: "Usuario rechazado" },
+              { value: "admin.user.delete", label: "Usuario eliminado" },
+              { value: "admin.ai_config.update", label: "Config IA" },
+              { value: "admin.email_config.update", label: "SMTP" },
+              { value: "admin.email_template.update", label: "Plantillas" },
+            ];
+
+            return (
+              <div className="cfg-email-layout">
+                <div className="cfg-email-card">
+                  <div className="cfg-email-card-head">
+                    <div>
+                      <div className="cfg-email-card-title">Auditoria administrativa</div>
+                      <div className="cfg-email-card-sub">Cambios sensibles registrados por usuario, fecha y recurso</div>
+                    </div>
+                    <div className="cfg-inline-actions">
+                      <select
+                        className="cfg-ai-select"
+                        value={auditActionFilter}
+                        onChange={(e) => {
+                          setAuditActionFilter(e.target.value);
+                          loadAuditLogs({ action: e.target.value });
+                        }}
+                      >
+                        {actionOptions.map((option) => (
+                          <option key={option.value || "all"} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      <button className="cfg-view-btn" type="button" onClick={() => loadAuditLogs()} disabled={loadingAuditLogs}>
+                        {loadingAuditLogs ? "Actualizando..." : "Actualizar"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {auditLogError && <div className="cfg-inline-error">{auditLogError}</div>}
+
+                  {loadingAuditLogs && auditLogs.length === 0 ? (
+                    <div className="cfg-loading">Cargando auditoria...</div>
+                  ) : auditLogs.length === 0 ? (
+                    <div className="cfg-empty compact">
+                      <div className="cfg-empty-title">Sin eventos para mostrar</div>
+                      <p className="cfg-empty-desc">Cuando el administrador realice cambios sensibles apareceran aqui.</p>
+                    </div>
+                  ) : (
+                    <div className="cfg-table-wrap">
+                      <table className="cfg-table">
+                        <thead>
+                          <tr>
+                            <th>FECHA</th>
+                            <th>EVENTO</th>
+                            <th>ACTOR</th>
+                            <th>RECURSO</th>
+                            <th>RESUMEN</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {auditLogs.map((log) => (
+                            <tr key={log.id}>
+                              <td>{formatDateTime(log.created_at)}</td>
+                              <td>{formatAuditAction(log.action)}</td>
+                              <td>{log.actor_email || "Sistema"}{log.actor_role ? ` · ${log.actor_role}` : ""}</td>
+                              <td>{log.target_type}{log.target_id ? ` #${log.target_id}` : ""}</td>
+                              <td>{log.summary || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             );

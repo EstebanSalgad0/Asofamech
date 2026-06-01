@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 
 from ..auth_security import display_role, hash_password, normalize_email, normalize_role_for_storage
 from ..auth import require_admin
+from ..audit import audit_log_to_payload, record_audit_log
 from ..db import get_db
 from ..email_service import send_template_email
-from ..models import AIConfiguration, Document, DocumentChunk, EmailTemplate, User
+from ..models import AIConfiguration, AuditLog, Document, DocumentChunk, EmailTemplate, User
 from ..rag_utils import EMBEDDING_DIMENSIONS
 
 
@@ -263,6 +264,17 @@ def _user_to_admin_payload(user: User, db: Session) -> dict:
     }
 
 
+def _user_audit_snapshot(user: User) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+        "is_active": bool(user.is_active),
+        "account_status": user.account_status or "pending",
+    }
+
+
 def _apply_user_status(user: User, status: str, current_user: User) -> None:
     user.account_status = status
     if status == "approved":
@@ -301,10 +313,20 @@ def update_ai_config(
     db: Session = Depends(get_db),
 ):
     allowed = set(DEFAULT_AI_CONFIG.keys())
+    changed_keys = []
     for item in payload.items:
         if item.key not in allowed:
             raise HTTPException(status_code=422, detail=f"Clave de configuracion no permitida: {item.key}")
         _upsert_config_item(db, item)
+        changed_keys.append(item.key)
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="admin.ai_config.update",
+        target_type="ai_configuration",
+        summary=f"Actualiza {len(changed_keys)} clave(s) de configuracion IA",
+        details={"keys": changed_keys},
+    )
     db.commit()
     return get_ai_config(current_user, db)
 
@@ -329,6 +351,29 @@ def list_users(
     return {"users": [_user_to_admin_payload(user, db) for user in users]}
 
 
+@router.get("/audit-logs")
+def list_audit_logs(
+    actor_id: int | None = Query(default=None),
+    action: str | None = Query(default=None),
+    target_type: str | None = Query(default=None),
+    target_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    _current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(AuditLog)
+    if actor_id is not None:
+        query = query.filter(AuditLog.actor_user_id == actor_id)
+    if action:
+        query = query.filter(AuditLog.action == action)
+    if target_type:
+        query = query.filter(AuditLog.target_type == target_type)
+    if target_id:
+        query = query.filter(AuditLog.target_id == str(target_id))
+    logs = query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit).all()
+    return {"count": len(logs), "items": [audit_log_to_payload(log) for log in logs]}
+
+
 @router.post("/users")
 def create_user(
     payload: AdminCreateUserRequest,
@@ -349,6 +394,15 @@ def create_user(
     db.add(user)
     db.flush()
     _apply_user_status(user, _safe_status(payload.account_status), current_user)
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="admin.user.create",
+        target_type="user",
+        target_id=user.id,
+        summary=f"Crea usuario {user.email}",
+        details={"user": _user_audit_snapshot(user), "notify_email": bool(payload.notify_email)},
+    )
     db.commit()
     db.refresh(user)
 
@@ -371,6 +425,7 @@ def update_user(
     if user.id == current_user.id and payload.account_status in {"pending", "rejected", "suspended"}:
         raise HTTPException(status_code=422, detail="No puedes deshabilitar tu propia cuenta")
 
+    before = _user_audit_snapshot(user)
     if payload.role is not None:
         user.role = normalize_role_for_storage(payload.role)
     if payload.account_status is not None:
@@ -384,6 +439,15 @@ def update_user(
         if not user.is_active and (user.account_status or "pending") == "approved":
             user.account_status = "suspended"
 
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="admin.user.update",
+        target_type="user",
+        target_id=user.id,
+        summary=f"Actualiza usuario {user.email}",
+        details={"before": before, "after": _user_audit_snapshot(user), "notify_email": bool(payload.notify_email)},
+    )
     db.commit()
     db.refresh(user)
     email_result = None
@@ -407,9 +471,19 @@ def approve_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    before = _user_audit_snapshot(user)
     if payload and payload.role:
         user.role = normalize_role_for_storage(payload.role)
     _apply_user_status(user, "approved", current_user)
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="admin.user.approve",
+        target_type="user",
+        target_id=user.id,
+        summary=f"Aprueba usuario {user.email}",
+        details={"before": before, "after": _user_audit_snapshot(user), "notify_email": payload.notify_email if payload else True},
+    )
     db.commit()
     db.refresh(user)
     email_result = send_template_email(user, "account_approved", db) if (payload is None or payload.notify_email) else None
@@ -430,6 +504,8 @@ def delete_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     if user.id == current_user.id:
         raise HTTPException(status_code=422, detail="No puedes eliminar tu propia cuenta")
+
+    deleted_user_snapshot = _user_audit_snapshot(user)
 
     # 1. Correcciones hechas por este docente
     db.query(HistopathologyCorrection).filter(
@@ -459,6 +535,21 @@ def delete_user(
         User.approved_by == user_id
     ).update({"approved_by": None}, synchronize_session=False)
 
+    # Mantener la trazabilidad historica sin bloquear la eliminacion del usuario.
+    db.query(AuditLog).filter(
+        AuditLog.actor_user_id == user_id
+    ).update({"actor_user_id": None}, synchronize_session=False)
+
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="admin.user.delete",
+        target_type="user",
+        target_id=user.id,
+        summary=f"Elimina usuario {user.email}",
+        details={"deleted_user": deleted_user_snapshot},
+    )
+
     try:
         db.delete(user)
         db.commit()
@@ -483,7 +574,17 @@ def reject_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     if user.id == current_user.id:
         raise HTTPException(status_code=422, detail="No puedes rechazar tu propia cuenta")
+    before = _user_audit_snapshot(user)
     _apply_user_status(user, "rejected", current_user)
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="admin.user.reject",
+        target_type="user",
+        target_id=user.id,
+        summary=f"Rechaza usuario {user.email}",
+        details={"before": before, "after": _user_audit_snapshot(user)},
+    )
     db.commit()
     db.refresh(user)
     send_template_email(user, "account_rejected", db)
@@ -590,10 +691,20 @@ def update_email_config(
     db: Session = Depends(get_db),
 ):
     allowed = set(DEFAULT_EMAIL_CONFIG.keys())
+    changed_keys = []
     for item in payload.items:
         if item.key not in allowed:
             raise HTTPException(status_code=422, detail=f"Clave no permitida: {item.key}")
         _upsert_config_item(db, item)
+        changed_keys.append(item.key)
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="admin.email_config.update",
+        target_type="email_configuration",
+        summary=f"Actualiza {len(changed_keys)} clave(s) SMTP",
+        details={"keys": changed_keys},
+    )
     db.commit()
     return get_email_config(current_user, db)
 
@@ -647,6 +758,15 @@ def update_email_template(
     else:
         t.subject = payload.subject
         t.body = payload.body
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="admin.email_template.update",
+        target_type="email_template",
+        target_id=key,
+        summary=f"Actualiza plantilla de correo {key}",
+        details={"key": key, "subject": payload.subject},
+    )
     db.commit()
     db.refresh(t)
     return {

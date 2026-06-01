@@ -140,6 +140,18 @@ export async function deleteAdminUser(userId) {
   return parseJsonResponse(res, "No se pudo eliminar el usuario");
 }
 
+export async function listAuditLogs(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.actor_id) params.set("actor_id", String(filters.actor_id));
+  if (filters.action) params.set("action", filters.action);
+  if (filters.target_type) params.set("target_type", filters.target_type);
+  if (filters.target_id) params.set("target_id", String(filters.target_id));
+  if (filters.limit) params.set("limit", String(filters.limit));
+  const query = params.toString();
+  const res = await authFetch(`/api/admin/audit-logs${query ? `?${query}` : ""}`);
+  return parseJsonResponse(res, "No se pudo cargar la auditoria");
+}
+
 export async function getDashboardStats() {
   const res = await authFetch("/api/dashboard/stats");
   return parseJsonResponse(res, "No se pudieron cargar las estadísticas");

@@ -230,6 +230,23 @@ class PasswordResetToken(Base):
     user = relationship("User")
 
 
+class AuditLog(Base):
+    """Trazabilidad de acciones administrativas y cambios sensibles."""
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    actor_email = Column(String(200), nullable=True)
+    actor_role = Column(String(50), nullable=True)
+    action = Column(String(120), nullable=False, index=True)
+    target_type = Column(String(80), nullable=False, index=True)
+    target_id = Column(String(120), nullable=True, index=True)
+    summary = Column(String(500), nullable=True)
+    details = Column(JSON, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    actor = relationship("User", foreign_keys=[actor_user_id])
+
+
 class HistopathologyCorrection(Base):
     """Corrección docente sobre una sesión de análisis ROI 2."""
     __tablename__ = "histopathology_corrections"
