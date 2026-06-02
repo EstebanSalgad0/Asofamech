@@ -15,6 +15,9 @@ param(
 $ErrorActionPreference = "Stop"
 $projectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $projectDir
+$conchCacheCheckpointRef = "/root/.cache/huggingface/conch/pytorch_model.bin"
+$preparePythonHostPath = Join-Path $projectDir "backend\app\.prepare_conch_cache.py"
+$preparePythonContainerPath = "/app/app/.prepare_conch_cache.py"
 
 function Write-Step($n, $total, $msg) {
     Write-Host "`n[$n/$total] $msg" -ForegroundColor Cyan
@@ -61,7 +64,10 @@ function Test-HistopathologyStatus($Url) {
 $preparePython = @'
 import os
 import shutil
+import sys
 from pathlib import Path
+
+sys.path.insert(0, "/app")
 
 target = Path("/root/.cache/huggingface/conch/pytorch_model.bin")
 snapshots = Path("/root/.cache/huggingface/hub/models--MahmoodLab--conch/snapshots")
@@ -119,7 +125,7 @@ try {
     exit 1
 }
 
-$checkpointPath = Join-Path $projectDir "backend\artifacts\histopathology\checkpoints\tri_head_camelyon17_stage15_heavy_neg_v1.pt"
+$checkpointPath = Join-Path $projectDir "backend\artifacts\histopathology\checkpoints\tri_head_camelyon17_stage16_sane_tuned_v1.pt"
 if (Test-Path -LiteralPath $checkpointPath) {
     Write-OK "Cabeza clasificadora encontrada: $checkpointPath"
 } else {
@@ -154,7 +160,12 @@ try {
         Write-Warn "No se recreara backend por -SkipBackendRecreate; se usara el backend actualmente activo."
     } else {
         Write-Host "  Se usara un contenedor temporal. El token no queda guardado en el repositorio." -ForegroundColor Yellow
-        docker compose run --rm --no-deps --entrypoint python -e HISTO_HF_TOKEN backend -c $preparePython | Out-Host
+        $preparePython | Set-Content -LiteralPath $preparePythonHostPath -Encoding utf8
+        docker compose run --rm --no-deps --entrypoint python `
+            -e HISTO_HF_TOKEN `
+            -e "HISTO_CONCH_CHECKPOINT_REF=$conchCacheCheckpointRef" `
+            -e PYTHONPATH=/app `
+            backend $preparePythonContainerPath | Out-Host
     }
 
     Write-Step 4 5 "Levantando backend sin token y validando estado"
@@ -162,6 +173,7 @@ try {
         if (Test-Path Env:\HISTO_HF_TOKEN) {
             Remove-Item Env:\HISTO_HF_TOKEN -ErrorAction SilentlyContinue
         }
+        $env:HISTO_CONCH_CHECKPOINT_REF = $conchCacheCheckpointRef
         docker compose up -d db | Out-Null
         docker compose up -d --force-recreate backend | Out-Null
     }
@@ -202,5 +214,8 @@ try {
 } finally {
     if (Test-Path Env:\HISTO_HF_TOKEN) {
         Remove-Item Env:\HISTO_HF_TOKEN -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $preparePythonHostPath) {
+        Remove-Item -LiteralPath $preparePythonHostPath -Force -ErrorAction SilentlyContinue
     }
 }

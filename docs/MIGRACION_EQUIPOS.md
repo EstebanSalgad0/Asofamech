@@ -242,6 +242,12 @@ docker info
 E:\asofamech_migration
 ```
 
+Si el equipo destino no tiene unidad `D:` o `E:`, se puede dejar el backup en:
+
+```text
+C:\asofamech_migration_lite
+```
+
 ---
 
 ## 6. Restaurar e iniciar en el equipo destino
@@ -250,6 +256,13 @@ Desde la raiz del proyecto:
 
 ```powershell
 .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
+```
+
+Si la carpeta esta en `C:\asofamech_migration_lite`, tambien se puede ejecutar
+sin parametros porque el script autodetecta esa ubicacion:
+
+```powershell
+.\scripts\start_presentation.ps1
 ```
 
 El script hace lo siguiente:
@@ -551,6 +564,12 @@ En el equipo destino:
 
 ```powershell
 .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
+```
+
+Si el backup liviano esta en `C:\asofamech_migration_lite`:
+
+```powershell
+.\scripts\start_presentation.ps1
 ```
 
 Preparar CONCH una vez, solo por el responsable:

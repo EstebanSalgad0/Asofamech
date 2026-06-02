@@ -1,13 +1,13 @@
 # start_presentation.ps1
 # Restaura un backup de ASOFAMECH y levanta el sistema con Docker Compose.
 # Uso:
-#   .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration"
+#   .\scripts\start_presentation.ps1
+#   .\scripts\start_presentation.ps1 -BackupPath "C:\asofamech_migration_lite"
 #   .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration" -SkipChecksum
 #   .\scripts\start_presentation.ps1 -BackupPath "E:\asofamech_migration_lite" -PullOllamaModel
 
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$BackupPath,
+    [string]$BackupPath = "",
 
     [string]$ProjectName = "asofamech",
 
@@ -27,6 +27,106 @@ function Write-Step($n, $total, $msg) {
 function Write-OK($msg)    { Write-Host "  OK  $msg" -ForegroundColor Green }
 function Write-Warn($msg)  { Write-Host "  AVISO: $msg" -ForegroundColor Yellow }
 function Write-Fail($msg)  { Write-Host "  ERROR: $msg" -ForegroundColor Red }
+
+function Invoke-DockerInfo {
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = docker info 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output = @($output)
+    }
+}
+
+function Ensure-DockerRunning {
+    $dockerInfo = Invoke-DockerInfo
+    if ($dockerInfo.ExitCode -eq 0) {
+        Write-OK "Docker en ejecucion"
+        return
+    }
+
+    $dockerDesktop = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    if (Test-Path -LiteralPath $dockerDesktop) {
+        Write-Warn "Docker Desktop no esta corriendo. Se intentara iniciar automaticamente."
+        Start-Process -FilePath $dockerDesktop -WindowStyle Hidden
+
+        for ($i = 1; $i -le 90; $i++) {
+            Start-Sleep -Seconds 2
+            $dockerInfo = Invoke-DockerInfo
+            if ($dockerInfo.ExitCode -eq 0) {
+                Write-OK "Docker Desktop iniciado"
+                return
+            }
+        }
+    }
+
+    Write-Fail "Docker no esta corriendo. Abre Docker Desktop y vuelve a ejecutar."
+    $dockerInfo.Output | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkYellow }
+    exit 1
+}
+
+function Test-BackupCandidate($Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        return $false
+    }
+
+    $manifest = Join-Path $Path "manifest.json"
+    $dbBackup = Join-Path $Path "volumes\db_backup.tar.gz"
+    return (Test-Path -LiteralPath $manifest) -or (Test-Path -LiteralPath $dbBackup)
+}
+
+function Resolve-MigrationBackupPath($ExplicitPath) {
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        $trimmedPath = $ExplicitPath.Trim()
+        if (-not (Test-Path -LiteralPath $trimmedPath -PathType Container)) {
+            Write-Fail "Ruta de backup no encontrada: $trimmedPath"
+            exit 1
+        }
+        return (Resolve-Path -LiteralPath $trimmedPath).Path
+    }
+
+    $driveRoots = @("C:\", "D:\", "E:\")
+    try {
+        $driveRoots += Get-PSDrive -PSProvider FileSystem |
+            Select-Object -ExpandProperty Root
+    } catch {}
+
+    $candidatePaths = @()
+    foreach ($root in ($driveRoots | Where-Object { $_ } | Sort-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+            continue
+        }
+        $candidatePaths += Join-Path $root "asofamech_migration_lite"
+        $candidatePaths += Join-Path $root "asofamech_migration"
+    }
+
+    $matches = @(
+        $candidatePaths |
+            Sort-Object -Unique |
+            Where-Object { Test-BackupCandidate $_ }
+    )
+
+    if ($matches.Count -eq 0) {
+        Write-Fail "No se encontro automaticamente un backup de migracion."
+        Write-Host "  Ubica la carpeta como C:\asofamech_migration_lite o pasa la ruta con -BackupPath." -ForegroundColor Yellow
+        Write-Host "  Ejemplo: .\scripts\start_presentation.ps1 -BackupPath `"C:\asofamech_migration_lite`"" -ForegroundColor Yellow
+        exit 1
+    }
+
+    if ($matches.Count -gt 1) {
+        Write-Warn "Se encontraron varios backups; se usara el primero: $($matches[0])"
+        Write-Host "  Para elegir otro, ejecuta el script con -BackupPath." -ForegroundColor Yellow
+    }
+
+    Write-OK "Backup autodetectado: $($matches[0])"
+    return (Resolve-Path -LiteralPath $matches[0]).Path
+}
 
 function Format-Bytes($bytes) {
     if ($null -eq $bytes) { return "0 B" }
@@ -197,13 +297,7 @@ Write-Host "  ASOFAMECH - Setup presentacion" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 
 Write-Step 1 8 "Verificando prerequisitos y backup"
-try {
-    docker info | Out-Null
-    Write-OK "Docker en ejecucion"
-} catch {
-    Write-Fail "Docker no esta corriendo. Abre Docker Desktop y vuelve a ejecutar."
-    exit 1
-}
+Ensure-DockerRunning
 
 $gpuOk = $false
 try {
@@ -217,12 +311,7 @@ if (-not $gpuOk) {
     Write-Warn "No se detecto GPU NVIDIA. Si Docker falla por GPU, usa un compose/override CPU."
 }
 
-if (-not (Test-Path -LiteralPath $BackupPath)) {
-    Write-Fail "Ruta de backup no encontrada: $BackupPath"
-    exit 1
-}
-
-$backupRoot = (Resolve-Path -LiteralPath $BackupPath).Path
+$backupRoot = Resolve-MigrationBackupPath $BackupPath
 $volumesDir = Join-Path $backupRoot "volumes"
 Write-OK "Backup encontrado en $backupRoot"
 
@@ -251,11 +340,11 @@ $newHistologySrc = Join-Path $backupRoot "histology_images\camelyon17\images"
 $legacyHistologySrc = Join-Path $backupRoot "camelyon17_imgs"
 $histologySrc = if (Test-Path -LiteralPath $newHistologySrc) { $newHistologySrc } else { $legacyHistologySrc }
 $histologyDst = Join-Path $projectDir "backend\data\camelyon17\images"
-Copy-DirectoryContents $histologySrc $histologyDst "Laminas histologicas"
+$null = Copy-DirectoryContents $histologySrc $histologyDst "Laminas histologicas"
 
 Write-Step 5 8 "Restaurando artifacts y uploads"
-Copy-DirectoryContents (Join-Path $backupRoot "artifacts") (Join-Path $projectDir "backend\artifacts") "artifacts"
-Copy-DirectoryContents (Join-Path $backupRoot "uploads") (Join-Path $projectDir "backend\uploads") "uploads"
+$null = Copy-DirectoryContents (Join-Path $backupRoot "artifacts") (Join-Path $projectDir "backend\artifacts") "artifacts"
+$null = Copy-DirectoryContents (Join-Path $backupRoot "uploads") (Join-Path $projectDir "backend\uploads") "uploads"
 
 Write-Step 6 8 "Restaurando volumenes de modelos"
 $hfRestored = Restore-DockerVolume "${ProjectName}_huggingface_cache" "hf_backup.tar.gz" "HuggingFace cache / CONCH"
