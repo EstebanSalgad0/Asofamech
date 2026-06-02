@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getStreakDisplay } from "../tracker";
 import { ThemeToggle, ThemeToggleHeader } from "./ThemeToggle";
+import { getChatGenerationState, subscribeChatGeneration } from "../chatBackground";
 
 const navItems = [
   { id: "dashboard", label: "Inicio", path: "/dashboard", icon: "home", group: "Navegación" },
@@ -89,11 +90,26 @@ function LogoutIcon() {
   );
 }
 
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 21h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function AppSidebar({ user, role, activeRoute, onLogout }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [chatGeneration, setChatGeneration] = useState(() => getChatGenerationState());
 
   const privileged = role === "Administrador" || role === "Profesor";
+  const chatPending = chatGeneration.status === "pending";
+  const chatReady =
+    activeRoute !== "chat" &&
+    (chatGeneration.status === "complete" || chatGeneration.status === "error") &&
+    chatGeneration.task?.saved;
   const { count: streakCount, weekBars } = getStreakDisplay();
   const visibleItems = navItems.filter((item) => !item.privileged || privileged);
   const filteredItems = useMemo(() => {
@@ -111,6 +127,10 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
     event.preventDefault();
     if (filteredItems.length > 0) navigate(filteredItems[0].path);
   };
+
+  useEffect(() => {
+    return subscribeChatGeneration(setChatGeneration);
+  }, []);
 
   if (!user) return null;
 
@@ -153,6 +173,32 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
               >
                 <Icon name={item.icon} />
                 <span>{item.label}</span>
+                {item.id === "chat" && chatPending && (
+                  <b
+                    className="app-nav-chat-pulse"
+                    title="MediChat generando respuesta"
+                    aria-label="MediChat generando respuesta"
+                  >
+                    ...
+                  </b>
+                )}
+                {item.id === "chat" && chatReady && (
+                  <b
+                    className={`app-nav-chat-ready ${chatGeneration.status === "error" ? "error" : ""}`}
+                    title={
+                      chatGeneration.status === "error"
+                        ? "MediChat termino con un aviso"
+                        : "Respuesta de MediChat lista"
+                    }
+                    aria-label={
+                      chatGeneration.status === "error"
+                        ? "MediChat termino con un aviso"
+                        : "Respuesta de MediChat lista"
+                    }
+                  >
+                    <BellIcon />
+                  </b>
+                )}
               </Link>
             ))}
           </div>

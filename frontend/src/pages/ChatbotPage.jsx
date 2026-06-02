@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { sendChatMessage } from "../api";
-import { startSession, flushSession, trackConsultation, pushActivity } from "../tracker";
+import { startSession, flushSession } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
 import { clearAuthSession, getStoredRole, userStorageKey } from "../authClient";
+import {
+  acknowledgeChatGeneration,
+  getChatGenerationState,
+  startChatGeneration,
+  subscribeChatGeneration,
+} from "../chatBackground";
 
 const STORAGE_KEY = "asofamech_chat_history";
 const NEW_CHAT_FLAG = "asofamech_new_chat_requested";
@@ -169,7 +174,7 @@ export function ChatbotPage() {
   const [conversations, setConversations] = useState([]);
   const [currentId, setCurrentId] = useState(null);
   const [inputText, setInputText] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [chatGeneration, setChatGeneration] = useState(() => getChatGenerationState());
   const [toast, setToast] = useState(null);
   const [convSearch, setConvSearch] = useState("");
   const [topicFilter, setTopicFilter] = useState(null);
@@ -209,6 +214,9 @@ export function ChatbotPage() {
   }, [navigate]);
 
   const current = conversations.find((c) => c.id === currentId) || null;
+  const isLoading = chatGeneration.status === "pending";
+  const isCurrentLoading =
+    isLoading && String(chatGeneration.task?.conversationId) === String(currentId);
 
   const persist = useCallback((updated) => {
     setConversations(updated);
@@ -216,8 +224,32 @@ export function ChatbotPage() {
   }, []);
 
   useEffect(() => {
+    return subscribeChatGeneration((nextState) => {
+      setChatGeneration(nextState);
+      if (nextState.status === "complete" || nextState.status === "error") {
+        const stored = loadConversations();
+        if (stored.length > 0) setConversations(stored);
+        acknowledgeChatGeneration(nextState.task?.id);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleChatHistoryUpdate = (event) => {
+      const expectedKey = userStorageKey(STORAGE_KEY);
+      if (event.detail?.storageKey && event.detail.storageKey !== expectedKey) return;
+      const stored = loadConversations();
+      if (stored.length > 0) setConversations(stored);
+    };
+    window.addEventListener("asofamech-chat-history-updated", handleChatHistoryUpdate);
+    return () => {
+      window.removeEventListener("asofamech-chat-history-updated", handleChatHistoryUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [current?.messages?.length, isLoading]);
+  }, [current?.messages?.length, isCurrentLoading]);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
@@ -307,45 +339,33 @@ export function ChatbotPage() {
     const updatedConv = { ...current, updatedAt: new Date().toISOString(), messages: trimmed };
     const updated = conversations.map((c) => (c.id === currentId ? updatedConv : c));
     persist(updated);
-    setIsLoading(true);
-    try {
-      const data = await sendChatMessage(userMsg.text);
-      const allBotTexts = (data.messages || []).map((m) => m.text || "").join("\n\n");
-      const ragSources = getResponseSources(data);
-      const botMsg = {
-        sender: "bot",
-        text: allBotTexts,
-        time: getTimestamp(),
-        ragSources,
-        usedRag: didUseRag(data, ragSources),
-        educationalWarning: data.warning || "",
-        hasRagMetadata: true,
-        msgType: getMsgType(data.message_type),
-      };
-      const withResponse = {
-        ...updatedConv,
-        updatedAt: new Date().toISOString(),
-        messages: [...trimmed, botMsg],
-      };
-      const updated2 = updated.map((c) => (c.id === currentId ? withResponse : c));
-      persist(updated2);
-    } catch {
-      showToast("Error al re-generar la respuesta", "error");
-    } finally {
-      setIsLoading(false);
+    const started = startChatGeneration({
+      storageKey: userStorageKey(STORAGE_KEY),
+      conversationId: currentId,
+      promptText: userMsg.text,
+      topic: current.topic,
+      previousTopic: current.topic,
+      activityTitle: current.title,
+      trackActivity: false,
+    });
+    if (started) {
+      showToast("MediChat esta regenerando en segundo plano", "info");
+    } else {
+      showToast("Ya hay una respuesta generandose", "error");
     }
   };
 
-  const handleSend = async () => {
-    if (!inputText.trim() || isLoading || !current) return;
-    const userMsg = { sender: "user", text: inputText, time: getTimestamp() };
+  const handleSend = () => {
+    const question = inputText.trim();
+    if (!question || isLoading || !current) return;
+    const userMsg = { sender: "user", text: question, time: getTimestamp() };
     const isFirstUserMessage = !current.messages.some((m) => m.sender === "user");
     const newTitle = isFirstUserMessage
-      ? inputText.length > 40
-        ? inputText.slice(0, 40) + "..."
-        : inputText
+      ? question.length > 40
+        ? question.slice(0, 40) + "..."
+        : question
       : current.title;
-    const newTopic = isFirstUserMessage ? detectTopic(inputText) : current.topic;
+    const newTopic = isFirstUserMessage ? detectTopic(question) : current.topic;
     const updatedConv = {
       ...current,
       title: newTitle,
@@ -356,47 +376,19 @@ export function ChatbotPage() {
     const updated = conversations.map((c) => (c.id === currentId ? updatedConv : c));
     persist(updated);
     setInputText("");
-    setIsLoading(true);
-    try {
-      const data = await sendChatMessage(inputText);
-      const allBotTexts = (data.messages || []).map((m) => m.text || "").join("\n\n");
-      const ragSources = getResponseSources(data);
-      const botMsg = {
-        sender: "bot",
-        text: allBotTexts,
-        time: getTimestamp(),
-        ragSources,
-        usedRag: didUseRag(data, ragSources),
-        educationalWarning: data.warning || "",
-        hasRagMetadata: true,
-        msgType: getMsgType(data.message_type),
-      };
-      trackConsultation();
-      pushActivity("chat", newTitle);
-      const withResponse = {
-        ...updatedConv,
-        topic: data.message_type === "out_of_scope" ? current.topic : newTopic,
-        updatedAt: new Date().toISOString(),
-        messages: [...updatedConv.messages, botMsg],
-      };
-      const updated2 = updated.map((c) => (c.id === currentId ? withResponse : c));
-      persist(updated2);
-    } catch {
-      const botMsg = {
-        sender: "bot",
-        text: "Lo siento, ha ocurrido un error al procesar tu consulta. Por favor, intenta nuevamente.",
-        time: getTimestamp(),
-        ragSources: [],
-        isWarning: false,
-      };
-      const withError = {
-        ...updatedConv,
-        messages: [...updatedConv.messages, botMsg],
-      };
-      const updated2 = updated.map((c) => (c.id === currentId ? withError : c));
-      persist(updated2);
-    } finally {
-      setIsLoading(false);
+    const started = startChatGeneration({
+      storageKey: userStorageKey(STORAGE_KEY),
+      conversationId: currentId,
+      promptText: question,
+      topic: newTopic,
+      previousTopic: current.topic,
+      activityTitle: newTitle,
+      trackActivity: true,
+    });
+    if (started) {
+      showToast("MediChat seguira generando aunque cambies de modulo", "info");
+    } else {
+      showToast("Ya hay una respuesta generandose", "error");
     }
   };
 
@@ -608,6 +600,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                       {" · "}RAG activado
                       {activeRagSources.length > 0 &&
                         ` · ${activeRagSources.length} fuentes en contexto`}
+                      {isCurrentLoading && " · Generando respuesta"}
                     </div>
                   </div>
                 </div>
@@ -730,7 +723,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                     );
                   })}
 
-                {isLoading && (
+                {isCurrentLoading && (
                   <div className="mc-msg bot">
                     <div className="mc-msg-av mc-av-bot">m</div>
                     <div className="mc-msg-bubble">
