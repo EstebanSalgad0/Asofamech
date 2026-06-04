@@ -20,7 +20,7 @@ import {
 
 const DIFFICULTIES = ["pregrado", "internado", "residente"];
 const STATUS_LABELS = { draft: "Borrador", published: "Publicado", archived: "Archivado" };
-const STATUS_COLORS = { draft: "#f59e0b", published: "#1ec99a", archived: "#94a3b8" };
+const STATUS_COLORS = { draft: "#f59e0b", published: "#C41E3A", archived: "#94a3b8" };
 
 const EMPTY_FORM = {
   title: "",

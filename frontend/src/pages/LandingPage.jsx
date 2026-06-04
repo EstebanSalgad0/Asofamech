@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { FontSizeControl } from "../components/FontSizeControl";
 
 const MARQUEE = [
   ["Razonamiento", "clínico"],
@@ -26,6 +27,7 @@ export function LandingPage() {
             <a href="#contacto">Contacto</a>
           </div>
           <div className="nav-actions">
+            <FontSizeControl />
             <Link to="/auth" className="btn btn-ghost">Ingresar</Link>
             <Link to="/auth?register=true" className="btn btn-primary">Crear cuenta →</Link>
           </div>
@@ -278,7 +280,7 @@ export function LandingPage() {
               <div className="quote-av"></div>
               <div>
                 <div className="quote-name">Dr. [Profesor guía]</div>
-                <div className="quote-role">Departamento de Educación Médica · Universidad de Chile</div>
+                <div className="quote-role">Departamento de Educación Médica · Universidad Autónoma de Chile</div>
               </div>
             </div>
           </div>
@@ -316,7 +318,7 @@ export function LandingPage() {
                 <span>ASOFAMECH</span>
               </div>
               <p className="footer-brand-title">Plataforma educativa para el razonamiento clínico.</p>
-              <p className="footer-brand-desc">Trabajo de Título · Esteban Salgado · Universidad de Chile · 2026.</p>
+              <p className="footer-brand-desc">Trabajo de Título · Esteban Salgado · Universidad Autónoma de Chile · 2026.</p>
             </div>
             <div>
               <h5 className="footer-col-title">Plataforma</h5>
@@ -347,7 +349,7 @@ export function LandingPage() {
             </div>
           </div>
           <div className="footer-bottom">
-            <span>© 2026 ASOFAMECH · Universidad de Chile</span>
+            <span>© 2026 ASOFAMECH · Universidad Autónoma de Chile</span>
             <span className="mono">VOL.I — EDICIÓN 2026</span>
           </div>
         </div>

@@ -48,7 +48,7 @@ function RatingRow({ label, hint, dimKey, value, onChange }) {
 
 function MiniBar({ value, max }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
-  const color = value >= 4 ? "#1ec99a" : value >= 3 ? "#f59e0b" : "#ff6b5c";
+  const color = value >= 4 ? "#D4A017" : value >= 3 ? "#f59e0b" : "#ff6b5c";
   return (
     <div className="fb-mini-bar-wrap">
       <div className="fb-mini-bar" style={{ width: `${pct}%`, background: color }} />
@@ -57,7 +57,7 @@ function MiniBar({ value, max }) {
 }
 
 function ScoreDot({ value }) {
-  const color = value >= 4 ? "#1ec99a" : value >= 3 ? "#f59e0b" : "#ff6b5c";
+  const color = value >= 4 ? "#D4A017" : value >= 3 ? "#f59e0b" : "#ff6b5c";
   return <span className="fb-score-dot" style={{ background: color }}>{value.toFixed(1)}</span>;
 }
 
@@ -387,10 +387,10 @@ export function FeedbackPage() {
                                     <span
                                       className="fb-rating-pill"
                                       style={{
-                                        background: r[d.key] >= 4 ? "rgba(30,201,154,0.12)" :
+                                        background: r[d.key] >= 4 ? "rgba(212,160,23,0.12)" :
                                                     r[d.key] >= 3 ? "rgba(245,158,11,0.12)" :
                                                     "rgba(255,107,92,0.12)",
-                                        color: r[d.key] >= 4 ? "#0d8c6a" :
+                                        color: r[d.key] >= 4 ? "#7A4F00" :
                                                r[d.key] >= 3 ? "#b45309" : "#c0392b",
                                       }}
                                     >

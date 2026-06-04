@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getStreakDisplay } from "../tracker";
 import { ThemeToggle, ThemeToggleHeader } from "./ThemeToggle";
+import { FontSizeControlSidebar } from "./FontSizeControl";
 import { getChatGenerationState, subscribeChatGeneration } from "../chatBackground";
 
 const navItems = [
@@ -230,6 +231,8 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
             ))}
           </div>
         </div>
+
+        <FontSizeControlSidebar />
 
         <div className="app-user-card" data-testid="app-user-card">
           <div className="app-user-avatar">{initials}</div>

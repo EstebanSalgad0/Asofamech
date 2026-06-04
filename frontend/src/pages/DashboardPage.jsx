@@ -276,7 +276,7 @@ export function DashboardPage() {
       label: "CONSULTAS IA",
       value: chatCount,
       sub: chatWeek > 0 ? `+${chatWeek} esta semana` : "sin consultas esta semana",
-      color: "#10b981",
+      color: "#C41E3A",
       daily: chatDaily,
     },
     {
@@ -284,7 +284,7 @@ export function DashboardPage() {
       label: "TIEMPO DE ESTUDIO",
       value: studyLabel,
       sub: metrics.studyMs > 0 ? "sesión activa" : "empieza a estudiar",
-      color: "#6366f1",
+      color: "#D4A017",
       daily: null,
     },
     {
@@ -292,7 +292,7 @@ export function DashboardPage() {
       label: "TESTS SCT",
       value: sctCount,
       sub: testsPassedPct !== null ? `último: ${testsPassedPct}%` : (sctWeek > 0 ? `+${sctWeek} esta semana` : "sin tests completados"),
-      color: "#f59e0b",
+      color: "#8B1520",
       daily: sctDaily,
     },
     {
@@ -300,7 +300,7 @@ export function DashboardPage() {
       label: "LÁMINAS VISTAS",
       value: histoCount,
       sub: histoWeek > 0 ? `${histoWeek} nuevas` : "sin láminas esta semana",
-      color: "#ef4444",
+      color: "#C41E3A",
       daily: histoDaily,
     },
   ];

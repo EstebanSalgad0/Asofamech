@@ -10,12 +10,12 @@ import { formatDisplayTitle } from "../displayText";
 const SCT_RESULTS_KEY = "asofamech_sct_result_log";
 
 const AREA_COLORS = {
-  "Cardiología":     "#1ec99a",
+  "Cardiología":     "#C41E3A",
   "Nefrología":      "#ff6b5c",
   "Endocrinología":  "#f59e0b",
   "Infectología":    "#5b6cf6",
   "Neurología":      "#a78bfa",
-  "Gastroenterología":"#34d399",
+  "Gastroenterología":"#D4A017",
   "Hematología":     "#f472b6",
   "Neumología":      "#60a5fa",
 };
@@ -78,7 +78,7 @@ function attemptAreaLabel(attempt) {
 }
 
 // Progress chart: Y axis is score percentage, X axis is recent SCT attempts.
-function Sparkline({ points = [], color = "#1ec99a" }) {
+function Sparkline({ points = [], color = "#C41E3A" }) {
   const w = 180, h = 58, padY = 4;
   if (points.length < 2) return null;
   const safePoints = points.map((v) => Math.max(0, Math.min(100, Number(v) || 0)));
@@ -769,7 +769,7 @@ export function SCTPage() {
                   <div className="sct3-progress-big">
                     {globalAverage}<span className="sct3-pct-sign">%</span>
                   </div>
-                  {sparkPoints.length >= 2 && <Sparkline points={sparkPoints} color="#1ec99a" />}
+                  {sparkPoints.length >= 2 && <Sparkline points={sparkPoints} color="#C41E3A" />}
                   {resultLog.length >= 2 && (
                     <div className="sct3-vs-prev">
                       {(() => {
