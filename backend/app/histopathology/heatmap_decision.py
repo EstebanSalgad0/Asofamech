@@ -117,6 +117,49 @@ def _decision(
     }
 
 
+def aggregate_tile_probability_summary(tile_results: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    evaluable = [
+        tile
+        for tile in tile_results
+        if tile.get("status") not in {"error", NOT_EVALUABLE_STATUS}
+        and isinstance(tile.get("probabilities"), dict)
+        and tile.get("probabilities")
+    ]
+    tumor_scores = sorted(
+        (_as_float(tile["probabilities"].get("metastasico")) for tile in evaluable),
+        reverse=True,
+    )
+    tile_threshold = _env_float("HISTO_HEATMAP_ROI_AGGREGATION_TILE_THRESHOLD", 0.50)
+    top_k = min(_env_int("HISTO_HEATMAP_ROI_AGGREGATION_TOP_K", 3), len(tumor_scores))
+    if not tumor_scores:
+        return {
+            "tile_count": 0,
+            "mean_tumor_probability": 0.0,
+            "max_tumor_probability": 0.0,
+            "top_k_mean_tumor_probability": 0.0,
+            "positive_tile_fraction": 0.0,
+            "top_k": 0,
+            "tile_threshold": tile_threshold,
+            "recommended_strategy": "top_k_mean",
+            "interpretation": "No hay tiles evaluables para agregar.",
+        }
+    return {
+        "tile_count": len(tumor_scores),
+        "mean_tumor_probability": sum(tumor_scores) / len(tumor_scores),
+        "max_tumor_probability": tumor_scores[0],
+        "top_k_mean_tumor_probability": sum(tumor_scores[:top_k]) / top_k,
+        "positive_tile_fraction": (
+            sum(score >= tile_threshold for score in tumor_scores) / len(tumor_scores)
+        ),
+        "top_k": top_k,
+        "tile_threshold": tile_threshold,
+        "recommended_strategy": "top_k_mean",
+        "interpretation": (
+            "Resumen de probabilidades por tiles. No es Grad-CAM ni una explicacion causal."
+        ),
+    }
+
+
 def aggregate_heatmap_roi_decision(tile_results: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     """Aggregate already-computed heatmap tiles into an educational ROI decision.
 
@@ -218,7 +261,7 @@ def aggregate_heatmap_roi_decision(tile_results: Iterable[Dict[str, Any]]) -> Di
     if max_cluster >= cluster_required:
         return _decision(
             status=POSITIVE_STATUS,
-            label="Metastasis probable",
+            label="Patron compatible con metastasis",
             summary=(
                 "Hay multiples tiles tumorales contiguos; la decision se apoya en "
                 "patron espacial, no en un tile aislado."
@@ -232,7 +275,7 @@ def aggregate_heatmap_roi_decision(tile_results: Iterable[Dict[str, Any]]) -> Di
     if len(strong_tumor_tiles) >= minimum_distributed_tiles:
         return _decision(
             status=POSITIVE_STATUS,
-            label="Metastasis probable",
+            label="Patron compatible con metastasis",
             summary="Hay varios tiles tumorales fuertes distribuidos en la ROI.",
             recommendation="Revise los tiles con mayor probabilidad metastasica antes de cerrar la interpretacion.",
             metrics=metrics,

@@ -33,6 +33,37 @@ def _float_env(name: str, default: float) -> float:
     return parsed
 
 
+def _positive_float_env(name: str, default: float, maximum: float = 10.0) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        parsed = float(value)
+    except ValueError:
+        return default
+    if parsed <= 0.0 or parsed > maximum:
+        return default
+    return parsed
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _optional_probability_env(name: str) -> float | None:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return None
+    try:
+        parsed = float(value)
+    except ValueError:
+        return None
+    return parsed if 0.0 < parsed <= 1.0 else None
+
+
 class HistopathologyInferenceService:
     def __init__(self):
         try:
@@ -82,6 +113,45 @@ class HistopathologyInferenceService:
             str(index): self.labels[str(index)] for index in range(self.num_classes)
         }
         self.confidence_threshold = _float_env("HISTO_CLASSIFIER_CONFIDENCE_THRESHOLD", 0.90)
+        calibration = checkpoint.get("calibration") or {}
+        checkpoint_temperature = float(calibration.get("temperature") or 1.0)
+        use_checkpoint_calibration = _bool_env(
+            "HISTO_USE_CHECKPOINT_CALIBRATION",
+            False,
+        )
+        default_temperature = checkpoint_temperature if use_checkpoint_calibration else 1.0
+        self.temperature = _positive_float_env(
+            "HISTO_CLASSIFIER_TEMPERATURE",
+            default_temperature,
+        )
+        self.calibration_method = (
+            str(calibration.get("method") or "temperature_scaling")
+            if self.temperature != 1.0
+            else "none"
+        )
+        self.operating_threshold = checkpoint.get("operating_threshold")
+        use_checkpoint_operating_threshold = _bool_env(
+            "HISTO_USE_CHECKPOINT_OPERATING_THRESHOLD",
+            False,
+        )
+        configured_tumor_threshold = _optional_probability_env(
+            "HISTO_TUMOR_OPERATING_THRESHOLD"
+        )
+        checkpoint_tumor_threshold = None
+        if isinstance(self.operating_threshold, dict):
+            try:
+                checkpoint_tumor_threshold = float(
+                    self.operating_threshold.get("threshold")
+                )
+            except (TypeError, ValueError):
+                checkpoint_tumor_threshold = None
+        self.tumor_operating_threshold = configured_tumor_threshold
+        if (
+            self.tumor_operating_threshold is None
+            and use_checkpoint_operating_threshold
+            and checkpoint_tumor_threshold is not None
+        ):
+            self.tumor_operating_threshold = checkpoint_tumor_threshold
         self.training_mode = checkpoint.get("training_mode", "unknown")
         self.validation = checkpoint.get("validation")
         self.created_at = checkpoint.get("created_at")
@@ -115,7 +185,7 @@ class HistopathologyInferenceService:
 
         with self.torch.inference_mode():
             logits = self.head(features)
-            probabilities = self.torch.softmax(logits, dim=1)[0]
+            probabilities = self.torch.softmax(logits / self.temperature, dim=1)[0]
 
         predicted_index = int(self.torch.argmax(probabilities).item())
         predicted_class = self.labels[str(predicted_index)]
@@ -134,6 +204,14 @@ class HistopathologyInferenceService:
             "num_classes": self.num_classes,
             "classifier_kind": self.classifier_kind,
             "decision_threshold": self.confidence_threshold,
+            "tumor_operating_threshold": self.tumor_operating_threshold,
+            "calibration": {
+                "method": self.calibration_method,
+                "temperature": self.temperature,
+                "configured": self.temperature != 1.0,
+                "checkpoint_temperature": checkpoint_temperature,
+                "checkpoint_calibration_enabled": use_checkpoint_calibration,
+            },
         }
 
 

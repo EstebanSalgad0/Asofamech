@@ -1,0 +1,1114 @@
+{
+  "variant": "D_patient_split_class_weights_augmentations",
+  "created_at": "2026-06-07T22:43:49.380079+00:00",
+  "manifest": "artifacts\\histopathology\\manifests\\camelyon17_manifest_stage17_patient_split_v1.csv",
+  "checkpoint": "artifacts\\histopathology\\checkpoints\\tri_head_stage17_variant_d_balanced_augmented.pt",
+  "data_distribution": {
+    "train": {
+      "no_metastasico": 7316,
+      "metastasico": 4856,
+      "estroma": 1564
+    },
+    "validation": {
+      "no_metastasico": 407,
+      "metastasico": 244,
+      "estroma": 90
+    },
+    "test": {
+      "no_metastasico": 397,
+      "metastasico": 244,
+      "estroma": 89
+    }
+  },
+  "embedding_metadata": {
+    "train": {
+      "split": "train",
+      "sample_count": 13736,
+      "feature_dim": 512,
+      "checkpoint_ref": "hf_hub:MahmoodLab/conch",
+      "manifest": "artifacts\\histopathology\\manifests\\camelyon17_manifest_stage17_patient_split_v1.csv",
+      "preprocess": "CONCH default image preprocess",
+      "augmentation_preset": "histo_moderate",
+      "augmented_train_views": 3,
+      "augmentation_config": {
+        "preset": "histo_moderate_v1",
+        "input_size": 448,
+        "rotations_by_view": [
+          90,
+          180,
+          270
+        ],
+        "horizontal_flip_probability": 0.5,
+        "vertical_flip_probability": 0.5,
+        "random_resized_crop_scale": [
+          0.9,
+          1.0
+        ],
+        "random_resized_crop_ratio": [
+          0.95,
+          1.05
+        ],
+        "color_jitter": {
+          "brightness": 0.08,
+          "contrast": 0.08,
+          "saturation": 0.06,
+          "hue": 0.02
+        },
+        "stain_normalization": {
+          "enabled": false,
+          "reason": "No validated reference slide or stain target is available."
+        }
+      },
+      "seed": 20260607
+    },
+    "validation": {
+      "split": "val",
+      "sample_count": 741,
+      "feature_dim": 512,
+      "source": "reused_existing_manifest_embeddings",
+      "target_manifest": "artifacts\\histopathology\\manifests\\camelyon17_manifest_stage17_patient_split_v1.csv",
+      "source_embeddings_dir": "artifacts\\histopathology\\embeddings-stage15-heavy-neg"
+    },
+    "test": {
+      "split": "test",
+      "sample_count": 730,
+      "feature_dim": 512,
+      "source": "reused_existing_manifest_embeddings",
+      "target_manifest": "artifacts\\histopathology\\manifests\\camelyon17_manifest_stage17_patient_split_v1.csv",
+      "source_embeddings_dir": "artifacts\\histopathology\\embeddings-stage15-heavy-neg"
+    }
+  },
+  "balance_strategy": "class_weights",
+  "class_weights": [
+    0.7036375403404236,
+    0.9568530917167664,
+    2.2380857467651367
+  ],
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.6007289403597144,
+      "val_loss": 0.5949989816276973,
+      "selection_score": 0.6505464480874317,
+      "val_macro_f1": 0.7714237138672168,
+      "val_tumor_recall": 0.7172131147540983,
+      "lr": 0.0009984740801978985
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.48515686411877046,
+      "val_loss": 0.6632312734117393,
+      "selection_score": 0.5779599271402549,
+      "val_macro_f1": 0.7388660349144045,
+      "val_tumor_recall": 0.6557377049180327,
+      "lr": 0.0009939057285945933
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.4442296430824382,
+      "val_loss": 0.640359501365708,
+      "selection_score": 0.642896174863388,
+      "val_macro_f1": 0.7464853509239623,
+      "val_tumor_recall": 0.6762295081967213,
+      "lr": 0.00098632311059685
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.41622998543304973,
+      "val_loss": 0.6737097249983455,
+      "selection_score": 0.6194899817850638,
+      "val_macro_f1": 0.7548432567354707,
+      "val_tumor_recall": 0.6639344262295082,
+      "lr": 0.0009757729755661011
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.3978855013500207,
+      "val_loss": 0.6673946379006472,
+      "selection_score": 0.6206739526411658,
+      "val_macro_f1": 0.7691038399651635,
+      "val_tumor_recall": 0.6762295081967213,
+      "lr": 0.000962320368593087
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.38462726529698493,
+      "val_loss": 0.7067336650029851,
+      "selection_score": 0.6036429872495447,
+      "val_macro_f1": 0.7493804750815989,
+      "val_tumor_recall": 0.6147540983606558,
+      "lr": 0.0009460482294732421
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.3684475968310357,
+      "val_loss": 0.6866669919487597,
+      "selection_score": 0.6183060109289618,
+      "val_macro_f1": 0.7637485155592451,
+      "val_tumor_recall": 0.6516393442622951,
+      "lr": 0.0009270568813552756
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.36129767619112446,
+      "val_loss": 0.7389784173765968,
+      "selection_score": 0.5978142076502733,
+      "val_macro_f1": 0.7452008281078077,
+      "val_tumor_recall": 0.6311475409836066,
+      "lr": 0.000905463412215599
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.35241407117804746,
+      "val_loss": 0.6928863864035097,
+      "selection_score": 0.640528233151184,
+      "val_macro_f1": 0.7605230065471966,
+      "val_tumor_recall": 0.6516393442622951,
+      "lr": 0.0008814009529720154
+    }
+  ],
+  "best_epoch": 1,
+  "temperature": 0.8249759674072266,
+  "operating_threshold_selected_on_validation": {
+    "threshold": 0.3,
+    "tp": 193,
+    "fp": 32,
+    "fn": 51,
+    "tn": 465,
+    "precision": 0.8577777777777778,
+    "sensitivity": 0.7909836065573771,
+    "specificity": 0.9356136820925554,
+    "f1": 0.8230277185501067,
+    "balanced_accuracy": 0.8632986443249662,
+    "abstention_rate": 0.0,
+    "selection_set": "precision_constraint",
+    "minimum_precision": 0.85,
+    "selected_on": "validation"
+  },
+  "validation": {
+    "classification": {
+      "sample_count": 741,
+      "accuracy": 0.8097165991902834,
+      "macro_f1": 0.7714237138672168,
+      "roc_auc_tumor_ovr": 0.9545881848467856,
+      "roc_auc_macro_ovr": 0.9478877501315707,
+      "confusion_matrix_3x3": [
+        [
+          352,
+          7,
+          48
+        ],
+        [
+          56,
+          175,
+          13
+        ],
+        [
+          11,
+          6,
+          73
+        ]
+      ],
+      "confusion_matrix_labels": [
+        "no_metastasico",
+        "metastasico",
+        "estroma"
+      ],
+      "per_class": {
+        "no_metastasico": {
+          "precision": 0.8400954653937948,
+          "recall": 0.8648648648648649,
+          "f1": 0.8523002421307506,
+          "support": 407
+        },
+        "metastasico": {
+          "precision": 0.9308510638297872,
+          "recall": 0.7172131147540983,
+          "f1": 0.8101851851851852,
+          "support": 244
+        },
+        "estroma": {
+          "precision": 0.5447761194029851,
+          "recall": 0.8111111111111111,
+          "f1": 0.6517857142857143,
+          "support": 90
+        }
+      }
+    },
+    "calibration_before": {
+      "multiclass_brier": 0.2478337985715716,
+      "tumor_ovr_brier": 0.08527946506746555,
+      "expected_calibration_error": 0.07049879118306132,
+      "negative_log_likelihood": 0.4574743737662225,
+      "reliability_bins": [
+        {
+          "lower": 0.0,
+          "upper": 0.1,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.1,
+          "upper": 0.2,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.2,
+          "upper": 0.30000000000000004,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.30000000000000004,
+          "upper": 0.4,
+          "count": 8,
+          "mean_confidence": 0.3850890403712476,
+          "accuracy": 0.5
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "count": 70,
+          "mean_confidence": 0.45944087532709527,
+          "accuracy": 0.3142857142857143
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6000000000000001,
+          "count": 90,
+          "mean_confidence": 0.5492652216292893,
+          "accuracy": 0.4666666666666667
+        },
+        {
+          "lower": 0.6000000000000001,
+          "upper": 0.7000000000000001,
+          "count": 70,
+          "mean_confidence": 0.6466868472021126,
+          "accuracy": 0.7142857142857143
+        },
+        {
+          "lower": 0.7000000000000001,
+          "upper": 0.8,
+          "count": 69,
+          "mean_confidence": 0.7468023671607958,
+          "accuracy": 0.7971014492753623
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 80,
+          "mean_confidence": 0.8574525472436045,
+          "accuracy": 0.95
+        },
+        {
+          "lower": 0.9,
+          "upper": 1.0,
+          "count": 354,
+          "mean_confidence": 0.9403411531417603,
+          "accuracy": 0.9915254237288136
+        }
+      ]
+    },
+    "calibration_after": {
+      "multiclass_brier": 0.24685289705018823,
+      "tumor_ovr_brier": 0.08393311618467077,
+      "expected_calibration_error": 0.047908516203422215,
+      "negative_log_likelihood": 0.44906022534280443,
+      "reliability_bins": [
+        {
+          "lower": 0.0,
+          "upper": 0.1,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.1,
+          "upper": 0.2,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.2,
+          "upper": 0.30000000000000004,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.30000000000000004,
+          "upper": 0.4,
+          "count": 3,
+          "mean_confidence": 0.3770411195378988,
+          "accuracy": 0.3333333333333333
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "count": 50,
+          "mean_confidence": 0.45681100750860615,
+          "accuracy": 0.3
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6000000000000001,
+          "count": 82,
+          "mean_confidence": 0.5499003836065892,
+          "accuracy": 0.4268292682926829
+        },
+        {
+          "lower": 0.6000000000000001,
+          "upper": 0.7000000000000001,
+          "count": 69,
+          "mean_confidence": 0.6478658160306979,
+          "accuracy": 0.5797101449275363
+        },
+        {
+          "lower": 0.7000000000000001,
+          "upper": 0.8,
+          "count": 67,
+          "mean_confidence": 0.7541689964455234,
+          "accuracy": 0.7910447761194029
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 64,
+          "mean_confidence": 0.8521091187943053,
+          "accuracy": 0.859375
+        },
+        {
+          "lower": 0.9,
+          "upper": 1.0,
+          "count": 406,
+          "mean_confidence": 0.9635510581883768,
+          "accuracy": 0.9876847290640394
+        }
+      ]
+    },
+    "threshold_sweep": [
+      {
+        "threshold": 0.05,
+        "tp": 236,
+        "fp": 156,
+        "fn": 8,
+        "tn": 341,
+        "precision": 0.6020408163265306,
+        "sensitivity": 0.9672131147540983,
+        "specificity": 0.6861167002012073,
+        "f1": 0.7421383647798743,
+        "balanced_accuracy": 0.8266649074776529,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.1,
+        "tp": 226,
+        "fp": 107,
+        "fn": 18,
+        "tn": 390,
+        "precision": 0.6786786786786787,
+        "sensitivity": 0.9262295081967213,
+        "specificity": 0.7847082494969819,
+        "f1": 0.7833622183708839,
+        "balanced_accuracy": 0.8554688788468516,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.15,
+        "tp": 213,
+        "fp": 74,
+        "fn": 31,
+        "tn": 423,
+        "precision": 0.7421602787456446,
+        "sensitivity": 0.8729508196721312,
+        "specificity": 0.8511066398390342,
+        "f1": 0.8022598870056497,
+        "balanced_accuracy": 0.8620287297555826,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "tp": 202,
+        "fp": 53,
+        "fn": 42,
+        "tn": 444,
+        "precision": 0.792156862745098,
+        "sensitivity": 0.8278688524590164,
+        "specificity": 0.8933601609657947,
+        "f1": 0.8096192384769539,
+        "balanced_accuracy": 0.8606145067124056,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "tp": 197,
+        "fp": 40,
+        "fn": 47,
+        "tn": 457,
+        "precision": 0.8312236286919831,
+        "sensitivity": 0.8073770491803278,
+        "specificity": 0.9195171026156942,
+        "f1": 0.819126819126819,
+        "balanced_accuracy": 0.8634470758980111,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "tp": 193,
+        "fp": 32,
+        "fn": 51,
+        "tn": 465,
+        "precision": 0.8577777777777778,
+        "sensitivity": 0.7909836065573771,
+        "specificity": 0.9356136820925554,
+        "f1": 0.8230277185501067,
+        "balanced_accuracy": 0.8632986443249662,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.35,
+        "tp": 182,
+        "fp": 26,
+        "fn": 62,
+        "tn": 471,
+        "precision": 0.875,
+        "sensitivity": 0.7459016393442623,
+        "specificity": 0.9476861167002012,
+        "f1": 0.8053097345132743,
+        "balanced_accuracy": 0.8467938780222317,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.4,
+        "tp": 175,
+        "fp": 18,
+        "fn": 69,
+        "tn": 479,
+        "precision": 0.9067357512953368,
+        "sensitivity": 0.7172131147540983,
+        "specificity": 0.9637826961770624,
+        "f1": 0.8009153318077802,
+        "balanced_accuracy": 0.8404979054655803,
+        "abstention_rate": 0.004048582995951417
+      },
+      {
+        "threshold": 0.45,
+        "tp": 174,
+        "fp": 12,
+        "fn": 70,
+        "tn": 485,
+        "precision": 0.9354838709677419,
+        "sensitivity": 0.7131147540983607,
+        "specificity": 0.9758551307847082,
+        "f1": 0.8093023255813954,
+        "balanced_accuracy": 0.8444849424415344,
+        "abstention_rate": 0.0310391363022942
+      },
+      {
+        "threshold": 0.5,
+        "tp": 171,
+        "fp": 8,
+        "fn": 73,
+        "tn": 489,
+        "precision": 0.9553072625698324,
+        "sensitivity": 0.7008196721311475,
+        "specificity": 0.9839034205231388,
+        "f1": 0.8085106382978723,
+        "balanced_accuracy": 0.8423615463271432,
+        "abstention_rate": 0.07152496626180836
+      },
+      {
+        "threshold": 0.55,
+        "tp": 165,
+        "fp": 3,
+        "fn": 79,
+        "tn": 494,
+        "precision": 0.9821428571428571,
+        "sensitivity": 0.6762295081967213,
+        "specificity": 0.993963782696177,
+        "f1": 0.8009708737864077,
+        "balanced_accuracy": 0.8350966454464492,
+        "abstention_rate": 0.12685560053981107
+      },
+      {
+        "threshold": 0.6,
+        "tp": 160,
+        "fp": 1,
+        "fn": 84,
+        "tn": 496,
+        "precision": 0.9937888198757764,
+        "sensitivity": 0.6557377049180327,
+        "specificity": 0.9979879275653923,
+        "f1": 0.7901234567901234,
+        "balanced_accuracy": 0.8268628162417125,
+        "abstention_rate": 0.18218623481781376
+      },
+      {
+        "threshold": 0.65,
+        "tp": 155,
+        "fp": 1,
+        "fn": 89,
+        "tn": 496,
+        "precision": 0.9935897435897436,
+        "sensitivity": 0.6352459016393442,
+        "specificity": 0.9979879275653923,
+        "f1": 0.775,
+        "balanced_accuracy": 0.8166169146023683,
+        "abstention_rate": 0.23481781376518218
+      },
+      {
+        "threshold": 0.7,
+        "tp": 145,
+        "fp": 1,
+        "fn": 99,
+        "tn": 496,
+        "precision": 0.9931506849315068,
+        "sensitivity": 0.5942622950819673,
+        "specificity": 0.9979879275653923,
+        "f1": 0.7435897435897437,
+        "balanced_accuracy": 0.7961251113236798,
+        "abstention_rate": 0.27530364372469635
+      },
+      {
+        "threshold": 0.75,
+        "tp": 139,
+        "fp": 1,
+        "fn": 105,
+        "tn": 496,
+        "precision": 0.9928571428571429,
+        "sensitivity": 0.569672131147541,
+        "specificity": 0.9979879275653923,
+        "f1": 0.7239583333333334,
+        "balanced_accuracy": 0.7838300293564666,
+        "abstention_rate": 0.31309041835357626
+      },
+      {
+        "threshold": 0.8,
+        "tp": 128,
+        "fp": 1,
+        "fn": 116,
+        "tn": 496,
+        "precision": 0.9922480620155039,
+        "sensitivity": 0.5245901639344263,
+        "specificity": 0.9979879275653923,
+        "f1": 0.6863270777479893,
+        "balanced_accuracy": 0.7612890457499093,
+        "abstention_rate": 0.3657219973009447
+      },
+      {
+        "threshold": 0.85,
+        "tp": 120,
+        "fp": 0,
+        "fn": 124,
+        "tn": 497,
+        "precision": 1.0,
+        "sensitivity": 0.4918032786885246,
+        "specificity": 1.0,
+        "f1": 0.6593406593406593,
+        "balanced_accuracy": 0.7459016393442623,
+        "abstention_rate": 0.407557354925776
+      },
+      {
+        "threshold": 0.9,
+        "tp": 107,
+        "fp": 0,
+        "fn": 137,
+        "tn": 497,
+        "precision": 1.0,
+        "sensitivity": 0.4385245901639344,
+        "specificity": 1.0,
+        "f1": 0.6096866096866097,
+        "balanced_accuracy": 0.7192622950819672,
+        "abstention_rate": 0.45209176788124156
+      },
+      {
+        "threshold": 0.95,
+        "tp": 70,
+        "fp": 0,
+        "fn": 174,
+        "tn": 497,
+        "precision": 1.0,
+        "sensitivity": 0.28688524590163933,
+        "specificity": 1.0,
+        "f1": 0.4458598726114649,
+        "balanced_accuracy": 0.6434426229508197,
+        "abstention_rate": 0.5371120107962213
+      }
+    ]
+  },
+  "test": {
+    "classification": {
+      "sample_count": 730,
+      "accuracy": 0.8315068493150685,
+      "macro_f1": 0.7718027296906466,
+      "roc_auc_tumor_ovr": 0.9592187816231533,
+      "roc_auc_macro_ovr": 0.9532605644204049,
+      "confusion_matrix_3x3": [
+        [
+          355,
+          12,
+          30
+        ],
+        [
+          11,
+          183,
+          50
+        ],
+        [
+          13,
+          7,
+          69
+        ]
+      ],
+      "confusion_matrix_labels": [
+        "no_metastasico",
+        "metastasico",
+        "estroma"
+      ],
+      "per_class": {
+        "no_metastasico": {
+          "precision": 0.9366754617414248,
+          "recall": 0.8942065491183879,
+          "f1": 0.9149484536082474,
+          "support": 397
+        },
+        "metastasico": {
+          "precision": 0.905940594059406,
+          "recall": 0.75,
+          "f1": 0.820627802690583,
+          "support": 244
+        },
+        "estroma": {
+          "precision": 0.46308724832214765,
+          "recall": 0.7752808988764045,
+          "f1": 0.5798319327731093,
+          "support": 89
+        }
+      }
+    },
+    "calibration_before": {
+      "multiclass_brier": 0.23277900104539836,
+      "tumor_ovr_brier": 0.08371464690642473,
+      "expected_calibration_error": 0.05534669508739791,
+      "negative_log_likelihood": 0.4354272804444799,
+      "reliability_bins": [
+        {
+          "lower": 0.0,
+          "upper": 0.1,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.1,
+          "upper": 0.2,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.2,
+          "upper": 0.30000000000000004,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.30000000000000004,
+          "upper": 0.4,
+          "count": 9,
+          "mean_confidence": 0.38021727290940355,
+          "accuracy": 0.2222222222222222
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "count": 61,
+          "mean_confidence": 0.46093300225327394,
+          "accuracy": 0.45901639344262296
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6000000000000001,
+          "count": 87,
+          "mean_confidence": 0.5473544958838336,
+          "accuracy": 0.5402298850574713
+        },
+        {
+          "lower": 0.6000000000000001,
+          "upper": 0.7000000000000001,
+          "count": 73,
+          "mean_confidence": 0.6501173480175095,
+          "accuracy": 0.726027397260274
+        },
+        {
+          "lower": 0.7000000000000001,
+          "upper": 0.8,
+          "count": 71,
+          "mean_confidence": 0.7519459838179741,
+          "accuracy": 0.8591549295774648
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 123,
+          "mean_confidence": 0.8560428903277802,
+          "accuracy": 0.9024390243902439
+        },
+        {
+          "lower": 0.9,
+          "upper": 1.0,
+          "count": 306,
+          "mean_confidence": 0.9333843645590068,
+          "accuracy": 0.9967320261437909
+        }
+      ]
+    },
+    "calibration_after": {
+      "multiclass_brier": 0.22833089175045326,
+      "tumor_ovr_brier": 0.08119111949599914,
+      "expected_calibration_error": 0.03279292796218937,
+      "negative_log_likelihood": 0.41888321463394673,
+      "reliability_bins": [
+        {
+          "lower": 0.0,
+          "upper": 0.1,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.1,
+          "upper": 0.2,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.2,
+          "upper": 0.30000000000000004,
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.30000000000000004,
+          "upper": 0.4,
+          "count": 6,
+          "mean_confidence": 0.38189013794491555,
+          "accuracy": 0.3333333333333333
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "count": 43,
+          "mean_confidence": 0.4607197163980366,
+          "accuracy": 0.37209302325581395
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6000000000000001,
+          "count": 81,
+          "mean_confidence": 0.5514923676046246,
+          "accuracy": 0.5185185185185185
+        },
+        {
+          "lower": 0.6000000000000001,
+          "upper": 0.7000000000000001,
+          "count": 64,
+          "mean_confidence": 0.6583632701540859,
+          "accuracy": 0.703125
+        },
+        {
+          "lower": 0.7000000000000001,
+          "upper": 0.8,
+          "count": 63,
+          "mean_confidence": 0.7482497505021624,
+          "accuracy": 0.7936507936507936
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 96,
+          "mean_confidence": 0.8582965531464929,
+          "accuracy": 0.84375
+        },
+        {
+          "lower": 0.9,
+          "upper": 1.0,
+          "count": 377,
+          "mean_confidence": 0.9574424894613449,
+          "accuracy": 0.9840848806366048
+        }
+      ]
+    },
+    "locked_threshold_metrics": {
+      "threshold": 0.3,
+      "tp": 202,
+      "fp": 32,
+      "fn": 42,
+      "tn": 454,
+      "precision": 0.8632478632478633,
+      "sensitivity": 0.8278688524590164,
+      "specificity": 0.934156378600823,
+      "f1": 0.8451882845188285,
+      "balanced_accuracy": 0.8810126155299197,
+      "abstention_rate": 0.0
+    },
+    "threshold_sweep_for_reporting_only": [
+      {
+        "threshold": 0.05,
+        "tp": 238,
+        "fp": 140,
+        "fn": 6,
+        "tn": 346,
+        "precision": 0.6296296296296297,
+        "sensitivity": 0.9754098360655737,
+        "specificity": 0.7119341563786008,
+        "f1": 0.7652733118971061,
+        "balanced_accuracy": 0.8436719962220873,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.1,
+        "tp": 234,
+        "fp": 87,
+        "fn": 10,
+        "tn": 399,
+        "precision": 0.7289719626168224,
+        "sensitivity": 0.9590163934426229,
+        "specificity": 0.8209876543209876,
+        "f1": 0.8283185840707964,
+        "balanced_accuracy": 0.8900020238818053,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.15,
+        "tp": 223,
+        "fp": 63,
+        "fn": 21,
+        "tn": 423,
+        "precision": 0.7797202797202797,
+        "sensitivity": 0.9139344262295082,
+        "specificity": 0.8703703703703703,
+        "f1": 0.8415094339622641,
+        "balanced_accuracy": 0.8921523982999393,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "tp": 219,
+        "fp": 48,
+        "fn": 25,
+        "tn": 438,
+        "precision": 0.8202247191011236,
+        "sensitivity": 0.8975409836065574,
+        "specificity": 0.9012345679012346,
+        "f1": 0.8571428571428573,
+        "balanced_accuracy": 0.899387775753896,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "tp": 208,
+        "fp": 39,
+        "fn": 36,
+        "tn": 447,
+        "precision": 0.8421052631578947,
+        "sensitivity": 0.8524590163934426,
+        "specificity": 0.9197530864197531,
+        "f1": 0.8472505091649694,
+        "balanced_accuracy": 0.8861060514065978,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "tp": 202,
+        "fp": 32,
+        "fn": 42,
+        "tn": 454,
+        "precision": 0.8632478632478633,
+        "sensitivity": 0.8278688524590164,
+        "specificity": 0.934156378600823,
+        "f1": 0.8451882845188285,
+        "balanced_accuracy": 0.8810126155299197,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.35,
+        "tp": 194,
+        "fp": 29,
+        "fn": 50,
+        "tn": 457,
+        "precision": 0.8699551569506726,
+        "sensitivity": 0.7950819672131147,
+        "specificity": 0.9403292181069959,
+        "f1": 0.8308351177730193,
+        "balanced_accuracy": 0.8677055926600553,
+        "abstention_rate": 0.0
+      },
+      {
+        "threshold": 0.4,
+        "tp": 189,
+        "fp": 19,
+        "fn": 55,
+        "tn": 467,
+        "precision": 0.9086538461538461,
+        "sensitivity": 0.7745901639344263,
+        "specificity": 0.9609053497942387,
+        "f1": 0.836283185840708,
+        "balanced_accuracy": 0.8677477568643325,
+        "abstention_rate": 0.00821917808219178
+      },
+      {
+        "threshold": 0.45,
+        "tp": 183,
+        "fp": 14,
+        "fn": 61,
+        "tn": 472,
+        "precision": 0.9289340101522843,
+        "sensitivity": 0.75,
+        "specificity": 0.9711934156378601,
+        "f1": 0.8299319727891157,
+        "balanced_accuracy": 0.86059670781893,
+        "abstention_rate": 0.028767123287671233
+      },
+      {
+        "threshold": 0.5,
+        "tp": 175,
+        "fp": 11,
+        "fn": 69,
+        "tn": 475,
+        "precision": 0.9408602150537635,
+        "sensitivity": 0.7172131147540983,
+        "specificity": 0.977366255144033,
+        "f1": 0.813953488372093,
+        "balanced_accuracy": 0.8472896849490656,
+        "abstention_rate": 0.06712328767123288
+      },
+      {
+        "threshold": 0.55,
+        "tp": 162,
+        "fp": 8,
+        "fn": 82,
+        "tn": 478,
+        "precision": 0.9529411764705882,
+        "sensitivity": 0.6639344262295082,
+        "specificity": 0.9835390946502057,
+        "f1": 0.7826086956521738,
+        "balanced_accuracy": 0.8237367604398569,
+        "abstention_rate": 0.1232876712328767
+      },
+      {
+        "threshold": 0.6,
+        "tp": 155,
+        "fp": 4,
+        "fn": 89,
+        "tn": 482,
+        "precision": 0.9748427672955975,
+        "sensitivity": 0.6352459016393442,
+        "specificity": 0.9917695473251029,
+        "f1": 0.7692307692307692,
+        "balanced_accuracy": 0.8135077244822235,
+        "abstention_rate": 0.1780821917808219
+      },
+      {
+        "threshold": 0.65,
+        "tp": 148,
+        "fp": 4,
+        "fn": 96,
+        "tn": 482,
+        "precision": 0.9736842105263158,
+        "sensitivity": 0.6065573770491803,
+        "specificity": 0.9917695473251029,
+        "f1": 0.7474747474747474,
+        "balanced_accuracy": 0.7991634621871416,
+        "abstention_rate": 0.2136986301369863
+      },
+      {
+        "threshold": 0.7,
+        "tp": 132,
+        "fp": 4,
+        "fn": 112,
+        "tn": 482,
+        "precision": 0.9705882352941176,
+        "sensitivity": 0.5409836065573771,
+        "specificity": 0.9917695473251029,
+        "f1": 0.6947368421052632,
+        "balanced_accuracy": 0.7663765769412401,
+        "abstention_rate": 0.26575342465753427
+      },
+      {
+        "threshold": 0.75,
+        "tp": 127,
+        "fp": 4,
+        "fn": 117,
+        "tn": 482,
+        "precision": 0.9694656488549618,
+        "sensitivity": 0.5204918032786885,
+        "specificity": 0.9917695473251029,
+        "f1": 0.6773333333333332,
+        "balanced_accuracy": 0.7561306753018957,
+        "abstention_rate": 0.30547945205479454
+      },
+      {
+        "threshold": 0.8,
+        "tp": 115,
+        "fp": 4,
+        "fn": 129,
+        "tn": 482,
+        "precision": 0.9663865546218487,
+        "sensitivity": 0.4713114754098361,
+        "specificity": 0.9917695473251029,
+        "f1": 0.6336088154269972,
+        "balanced_accuracy": 0.7315405113674696,
+        "abstention_rate": 0.35205479452054794
+      },
+      {
+        "threshold": 0.85,
+        "tp": 105,
+        "fp": 1,
+        "fn": 139,
+        "tn": 485,
+        "precision": 0.9905660377358491,
+        "sensitivity": 0.430327868852459,
+        "specificity": 0.9979423868312757,
+        "f1": 0.6000000000000001,
+        "balanced_accuracy": 0.7141351278418673,
+        "abstention_rate": 0.40273972602739727
+      },
+      {
+        "threshold": 0.9,
+        "tp": 77,
+        "fp": 1,
+        "fn": 167,
+        "tn": 485,
+        "precision": 0.9871794871794872,
+        "sensitivity": 0.3155737704918033,
+        "specificity": 0.9979423868312757,
+        "f1": 0.4782608695652174,
+        "balanced_accuracy": 0.6567580786615395,
+        "abstention_rate": 0.48356164383561645
+      },
+      {
+        "threshold": 0.95,
+        "tp": 38,
+        "fp": 0,
+        "fn": 206,
+        "tn": 486,
+        "precision": 1.0,
+        "sensitivity": 0.1557377049180328,
+        "specificity": 1.0,
+        "f1": 0.2695035460992908,
+        "balanced_accuracy": 0.5778688524590164,
+        "abstention_rate": 0.6205479452054794
+      }
+    ]
+  },
+  "methodological_scope": "Internal technical evaluation on a patient-grouped split. Not clinical, diagnostic, prospective, external, or regulatory validation."
+}

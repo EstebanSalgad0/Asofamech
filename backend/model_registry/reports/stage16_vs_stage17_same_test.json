@@ -1,0 +1,984 @@
+{
+  "scope": "Internal technical comparison on identical images. The test is independent for Stage 17, but not for Stage 16 because the historical training split contains some of the same patients, slides, and patches.",
+  "stage16_historical_split": {
+    "splits": {
+      "train": {
+        "patches": 3023,
+        "patients": 30,
+        "slides": 47
+      },
+      "val": {
+        "patches": 1160,
+        "patients": 11,
+        "slides": 12
+      },
+      "test": {
+        "patches": 722,
+        "patients": 11,
+        "slides": 11
+      }
+    },
+    "overlaps": {
+      "train_vs_val": {
+        "patients": 9,
+        "slides": 7
+      },
+      "train_vs_test": {
+        "patients": 8,
+        "slides": 4
+      },
+      "val_vs_test": {
+        "patients": 4,
+        "slides": 1
+      }
+    }
+  },
+  "stage17_grouped_split": {
+    "source_manifest": "artifacts\\histopathology\\manifests\\camelyon17_manifest_stage15_heavy_neg.csv",
+    "seed": 20260607,
+    "ratios": {
+      "train": 0.7,
+      "val": 0.15,
+      "test": 0.15000000000000005
+    },
+    "grouping_priority": [
+      "patient",
+      "slide"
+    ],
+    "fallback_slide_groups": [],
+    "splits": {
+      "train": {
+        "patches": 3434,
+        "slides": 41,
+        "patients": 24,
+        "class_counts": {
+          "estroma": 391,
+          "metastasico": 1214,
+          "no_metastasico": 1829
+        }
+      },
+      "val": {
+        "patches": 741,
+        "slides": 9,
+        "patients": 5,
+        "class_counts": {
+          "estroma": 90,
+          "metastasico": 244,
+          "no_metastasico": 407
+        }
+      },
+      "test": {
+        "patches": 730,
+        "slides": 8,
+        "patients": 5,
+        "class_counts": {
+          "estroma": 89,
+          "metastasico": 244,
+          "no_metastasico": 397
+        }
+      }
+    },
+    "overlap_validation": {
+      "valid": true,
+      "overlaps": {
+        "train_vs_val": {
+          "patches": [],
+          "slides": [],
+          "patients": []
+        },
+        "train_vs_test": {
+          "patches": [],
+          "slides": [],
+          "patients": []
+        },
+        "val_vs_test": {
+          "patches": [],
+          "slides": [],
+          "patients": []
+        }
+      }
+    },
+    "limitations": "This is an internal grouped split of the available CAMELYON17-derived patches. It is not an external, prospective, diagnostic, or clinical validation."
+  },
+  "common_test_stage16_provenance": {
+    "rows_by_original_stage16_split": {
+      "train": 333,
+      "val": 220,
+      "test": 177
+    },
+    "test_patients": 5,
+    "patients_seen_in_stage16_train": 4,
+    "test_slides": 8,
+    "slides_seen_in_stage16_train": 4
+  },
+  "historical_reports": {
+    "stage16": {
+      "accuracy": 0.814404432132964,
+      "macro_f1": 0.7377986342703866,
+      "roc_auc_tumor_ovr": 0.9488905274710199,
+      "per_class": {
+        "no_metastasico": {
+          "precision": 0.9368421052631579,
+          "recall": 0.8416075650118203,
+          "f1": 0.8866749688667497
+        },
+        "metastasico": {
+          "precision": 0.914572864321608,
+          "recall": 0.7459016393442623,
+          "f1": 0.8216704288939052
+        },
+        "estroma": {
+          "precision": 0.34965034965034963,
+          "recall": 0.9090909090909091,
+          "f1": 0.5050505050505051
+        }
+      },
+      "stroma_tumor_confusion": {
+        "total_stroma_samples": 55,
+        "stroma_predicted_as_tumor": 3,
+        "stroma_predicted_as_negative": 2,
+        "stroma_predicted_correctly": 50,
+        "stroma_as_tumor_rate": 0.05454545454545454
+      },
+      "tumor_threshold_sweep": [
+        {
+          "threshold": 0.1,
+          "tumor_precision": 0.6805970149253732,
+          "tumor_sensitivity": 0.9344262295081968,
+          "tumor_specificity": 0.7761506276150628,
+          "tumor_tp": 228,
+          "tumor_fp": 107,
+          "tumor_fn": 16,
+          "tumor_tn": 371,
+          "stroma_predicted_as_tumor": 25,
+          "total_stroma_samples": 55,
+          "stroma_as_tumor_rate": 0.45454545454545453
+        },
+        {
+          "threshold": 0.2,
+          "tumor_precision": 0.7969348659003831,
+          "tumor_sensitivity": 0.8524590163934426,
+          "tumor_specificity": 0.8891213389121339,
+          "tumor_tp": 208,
+          "tumor_fp": 53,
+          "tumor_fn": 36,
+          "tumor_tn": 425,
+          "stroma_predicted_as_tumor": 7,
+          "total_stroma_samples": 55,
+          "stroma_as_tumor_rate": 0.12727272727272726
+        },
+        {
+          "threshold": 0.3,
+          "tumor_precision": 0.8761467889908257,
+          "tumor_sensitivity": 0.7827868852459017,
+          "tumor_specificity": 0.9435146443514645,
+          "tumor_tp": 191,
+          "tumor_fp": 27,
+          "tumor_fn": 53,
+          "tumor_tn": 451,
+          "stroma_predicted_as_tumor": 4,
+          "total_stroma_samples": 55,
+          "stroma_as_tumor_rate": 0.07272727272727272
+        },
+        {
+          "threshold": 0.4,
+          "tumor_precision": 0.9108910891089109,
+          "tumor_sensitivity": 0.7540983606557377,
+          "tumor_specificity": 0.9623430962343096,
+          "tumor_tp": 184,
+          "tumor_fp": 18,
+          "tumor_fn": 60,
+          "tumor_tn": 460,
+          "stroma_predicted_as_tumor": 4,
+          "total_stroma_samples": 55,
+          "stroma_as_tumor_rate": 0.07272727272727272
+        },
+        {
+          "threshold": 0.5,
+          "tumor_precision": 0.9560439560439561,
+          "tumor_sensitivity": 0.7131147540983607,
+          "tumor_specificity": 0.9832635983263598,
+          "tumor_tp": 174,
+          "tumor_fp": 8,
+          "tumor_fn": 70,
+          "tumor_tn": 470,
+          "stroma_predicted_as_tumor": 0,
+          "total_stroma_samples": 55,
+          "stroma_as_tumor_rate": 0.0
+        },
+        {
+          "threshold": 0.6,
+          "tumor_precision": 0.9818181818181818,
+          "tumor_sensitivity": 0.6639344262295082,
+          "tumor_specificity": 0.9937238493723849,
+          "tumor_tp": 162,
+          "tumor_fp": 3,
+          "tumor_fn": 82,
+          "tumor_tn": 475,
+          "stroma_predicted_as_tumor": 0,
+          "total_stroma_samples": 55,
+          "stroma_as_tumor_rate": 0.0
+        },
+        {
+          "threshold": 0.7,
+          "tumor_precision": 0.9864864864864865,
+          "tumor_sensitivity": 0.5983606557377049,
+          "tumor_specificity": 0.99581589958159,
+          "tumor_tp": 146,
+          "tumor_fp": 2,
+          "tumor_fn": 98,
+          "tumor_tn": 476,
+          "stroma_predicted_as_tumor": 0,
+          "total_stroma_samples": 55,
+          "stroma_as_tumor_rate": 0.0
+        },
+        {
+          "threshold": 0.8,
+          "tumor_precision": 0.991869918699187,
+          "tumor_sensitivity": 0.5,
+          "tumor_specificity": 0.997907949790795,
+          "tumor_tp": 122,
+          "tumor_fp": 1,
+          "tumor_fn": 122,
+          "tumor_tn": 477,
+          "stroma_predicted_as_tumor": 0,
+          "total_stroma_samples": 55,
+          "stroma_as_tumor_rate": 0.0
+        },
+        {
+          "threshold": 0.9,
+          "tumor_precision": 1.0,
+          "tumor_sensitivity": 0.36065573770491804,
+          "tumor_specificity": 1.0,
+          "tumor_tp": 88,
+          "tumor_fp": 0,
+          "tumor_fn": 156,
+          "tumor_tn": 478,
+          "stroma_predicted_as_tumor": 0,
+          "total_stroma_samples": 55,
+          "stroma_as_tumor_rate": 0.0
+        }
+      ],
+      "confusion_matrix_3x3": [
+        [
+          356,
+          14,
+          53
+        ],
+        [
+          22,
+          182,
+          40
+        ],
+        [
+          2,
+          3,
+          50
+        ]
+      ],
+      "confusion_matrix_labels": [
+        "no_metastasico",
+        "metastasico",
+        "estroma"
+      ],
+      "sample_count": 722
+    },
+    "stage17": {
+      "classification": {
+        "sample_count": 730,
+        "accuracy": 0.8561643835616438,
+        "macro_f1": 0.7931450321522266,
+        "roc_auc_tumor_ovr": 0.9661084126020374,
+        "roc_auc_macro_ovr": 0.9572618769831617,
+        "confusion_matrix_3x3": [
+          [
+            370,
+            14,
+            13
+          ],
+          [
+            22,
+            200,
+            22
+          ],
+          [
+            24,
+            10,
+            55
+          ]
+        ],
+        "confusion_matrix_labels": [
+          "no_metastasico",
+          "metastasico",
+          "estroma"
+        ],
+        "per_class": {
+          "no_metastasico": {
+            "precision": 0.8894230769230769,
+            "recall": 0.9319899244332494,
+            "f1": 0.9102091020910209,
+            "support": 397
+          },
+          "metastasico": {
+            "precision": 0.8928571428571429,
+            "recall": 0.819672131147541,
+            "f1": 0.8547008547008547,
+            "support": 244
+          },
+          "estroma": {
+            "precision": 0.6111111111111112,
+            "recall": 0.6179775280898876,
+            "f1": 0.6145251396648045,
+            "support": 89
+          }
+        }
+      },
+      "calibration_before": {
+        "multiclass_brier": 0.20803787958083347,
+        "tumor_ovr_brier": 0.07585117257194131,
+        "expected_calibration_error": 0.03759447764388539,
+        "negative_log_likelihood": 0.38629953000476863,
+        "reliability_bins": [
+          {
+            "lower": 0.0,
+            "upper": 0.1,
+            "count": 0,
+            "mean_confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.1,
+            "upper": 0.2,
+            "count": 0,
+            "mean_confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.2,
+            "upper": 0.30000000000000004,
+            "count": 0,
+            "mean_confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.30000000000000004,
+            "upper": 0.4,
+            "count": 10,
+            "mean_confidence": 0.3760265770183737,
+            "accuracy": 0.6
+          },
+          {
+            "lower": 0.4,
+            "upper": 0.5,
+            "count": 45,
+            "mean_confidence": 0.46017946301142565,
+            "accuracy": 0.5333333333333333
+          },
+          {
+            "lower": 0.5,
+            "upper": 0.6000000000000001,
+            "count": 64,
+            "mean_confidence": 0.546524802104077,
+            "accuracy": 0.5
+          },
+          {
+            "lower": 0.6000000000000001,
+            "upper": 0.7000000000000001,
+            "count": 58,
+            "mean_confidence": 0.6503340397271761,
+            "accuracy": 0.7068965517241379
+          },
+          {
+            "lower": 0.7000000000000001,
+            "upper": 0.8,
+            "count": 69,
+            "mean_confidence": 0.7506147809327458,
+            "accuracy": 0.7681159420289855
+          },
+          {
+            "lower": 0.8,
+            "upper": 0.9,
+            "count": 102,
+            "mean_confidence": 0.8548373466586989,
+            "accuracy": 0.8921568627450981
+          },
+          {
+            "lower": 0.9,
+            "upper": 1.0,
+            "count": 382,
+            "mean_confidence": 0.9616755850816852,
+            "accuracy": 0.9895287958115183
+          }
+        ]
+      },
+      "calibration_after": {
+        "multiclass_brier": 0.21036970350868456,
+        "tumor_ovr_brier": 0.07751669621805538,
+        "expected_calibration_error": 0.04702133500982687,
+        "negative_log_likelihood": 0.3939874882837542,
+        "reliability_bins": [
+          {
+            "lower": 0.0,
+            "upper": 0.1,
+            "count": 0,
+            "mean_confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.1,
+            "upper": 0.2,
+            "count": 0,
+            "mean_confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.2,
+            "upper": 0.30000000000000004,
+            "count": 0,
+            "mean_confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.30000000000000004,
+            "upper": 0.4,
+            "count": 12,
+            "mean_confidence": 0.3766517245108736,
+            "accuracy": 0.6666666666666666
+          },
+          {
+            "lower": 0.4,
+            "upper": 0.5,
+            "count": 56,
+            "mean_confidence": 0.4628051027506261,
+            "accuracy": 0.4642857142857143
+          },
+          {
+            "lower": 0.5,
+            "upper": 0.6000000000000001,
+            "count": 62,
+            "mean_confidence": 0.548977970089528,
+            "accuracy": 0.5483870967741935
+          },
+          {
+            "lower": 0.6000000000000001,
+            "upper": 0.7000000000000001,
+            "count": 68,
+            "mean_confidence": 0.653040489300119,
+            "accuracy": 0.75
+          },
+          {
+            "lower": 0.7000000000000001,
+            "upper": 0.8,
+            "count": 69,
+            "mean_confidence": 0.7533370266239762,
+            "accuracy": 0.8115942028985508
+          },
+          {
+            "lower": 0.8,
+            "upper": 0.9,
+            "count": 107,
+            "mean_confidence": 0.8501256631887385,
+            "accuracy": 0.9158878504672897
+          },
+          {
+            "lower": 0.9,
+            "upper": 1.0,
+            "count": 356,
+            "mean_confidence": 0.9520328625549273,
+            "accuracy": 0.9887640449438202
+          }
+        ]
+      },
+      "locked_threshold_metrics": {
+        "threshold": 0.35,
+        "tp": 209,
+        "fp": 29,
+        "fn": 35,
+        "tn": 457,
+        "precision": 0.8781512605042017,
+        "sensitivity": 0.8565573770491803,
+        "specificity": 0.9403292181069959,
+        "f1": 0.867219917012448,
+        "balanced_accuracy": 0.898443297578088,
+        "abstention_rate": 0.0027397260273972603
+      },
+      "threshold_sweep_for_reporting_only": [
+        {
+          "threshold": 0.05,
+          "tp": 239,
+          "fp": 132,
+          "fn": 5,
+          "tn": 354,
+          "precision": 0.6442048517520216,
+          "sensitivity": 0.9795081967213115,
+          "specificity": 0.7283950617283951,
+          "f1": 0.7772357723577236,
+          "balanced_accuracy": 0.8539516292248532,
+          "abstention_rate": 0.0
+        },
+        {
+          "threshold": 0.1,
+          "tp": 237,
+          "fp": 92,
+          "fn": 7,
+          "tn": 394,
+          "precision": 0.7203647416413373,
+          "sensitivity": 0.9713114754098361,
+          "specificity": 0.8106995884773662,
+          "f1": 0.8272251308900525,
+          "balanced_accuracy": 0.8910055319436012,
+          "abstention_rate": 0.0
+        },
+        {
+          "threshold": 0.15,
+          "tp": 230,
+          "fp": 69,
+          "fn": 14,
+          "tn": 417,
+          "precision": 0.7692307692307693,
+          "sensitivity": 0.9426229508196722,
+          "specificity": 0.8580246913580247,
+          "f1": 0.847145488029466,
+          "balanced_accuracy": 0.9003238210888485,
+          "abstention_rate": 0.0
+        },
+        {
+          "threshold": 0.2,
+          "tp": 219,
+          "fp": 57,
+          "fn": 25,
+          "tn": 429,
+          "precision": 0.7934782608695652,
+          "sensitivity": 0.8975409836065574,
+          "specificity": 0.8827160493827161,
+          "f1": 0.8423076923076922,
+          "balanced_accuracy": 0.8901285164946368,
+          "abstention_rate": 0.0
+        },
+        {
+          "threshold": 0.25,
+          "tp": 214,
+          "fp": 45,
+          "fn": 30,
+          "tn": 441,
+          "precision": 0.8262548262548263,
+          "sensitivity": 0.8770491803278688,
+          "specificity": 0.9074074074074074,
+          "f1": 0.8508946322067595,
+          "balanced_accuracy": 0.8922282938676381,
+          "abstention_rate": 0.0
+        },
+        {
+          "threshold": 0.3,
+          "tp": 213,
+          "fp": 37,
+          "fn": 31,
+          "tn": 449,
+          "precision": 0.852,
+          "sensitivity": 0.8729508196721312,
+          "specificity": 0.9238683127572016,
+          "f1": 0.8623481781376517,
+          "balanced_accuracy": 0.8984095662146664,
+          "abstention_rate": 0.0
+        },
+        {
+          "threshold": 0.35,
+          "tp": 209,
+          "fp": 29,
+          "fn": 35,
+          "tn": 457,
+          "precision": 0.8781512605042017,
+          "sensitivity": 0.8565573770491803,
+          "specificity": 0.9403292181069959,
+          "f1": 0.867219917012448,
+          "balanced_accuracy": 0.898443297578088,
+          "abstention_rate": 0.0027397260273972603
+        },
+        {
+          "threshold": 0.4,
+          "tp": 199,
+          "fp": 24,
+          "fn": 45,
+          "tn": 462,
+          "precision": 0.8923766816143498,
+          "sensitivity": 0.8155737704918032,
+          "specificity": 0.9506172839506173,
+          "f1": 0.8522483940042827,
+          "balanced_accuracy": 0.8830955272212102,
+          "abstention_rate": 0.01643835616438356
+        },
+        {
+          "threshold": 0.45,
+          "tp": 192,
+          "fp": 15,
+          "fn": 52,
+          "tn": 471,
+          "precision": 0.927536231884058,
+          "sensitivity": 0.7868852459016393,
+          "specificity": 0.9691358024691358,
+          "f1": 0.8514412416851441,
+          "balanced_accuracy": 0.8780105241853875,
+          "abstention_rate": 0.0410958904109589
+        },
+        {
+          "threshold": 0.5,
+          "tp": 182,
+          "fp": 13,
+          "fn": 62,
+          "tn": 473,
+          "precision": 0.9333333333333333,
+          "sensitivity": 0.7459016393442623,
+          "specificity": 0.9732510288065843,
+          "f1": 0.8291571753986333,
+          "balanced_accuracy": 0.8595763340754233,
+          "abstention_rate": 0.09315068493150686
+        },
+        {
+          "threshold": 0.55,
+          "tp": 171,
+          "fp": 8,
+          "fn": 73,
+          "tn": 478,
+          "precision": 0.9553072625698324,
+          "sensitivity": 0.7008196721311475,
+          "specificity": 0.9835390946502057,
+          "f1": 0.8085106382978723,
+          "balanced_accuracy": 0.8421793833906766,
+          "abstention_rate": 0.13972602739726028
+        },
+        {
+          "threshold": 0.6,
+          "tp": 163,
+          "fp": 6,
+          "fn": 81,
+          "tn": 480,
+          "precision": 0.9644970414201184,
+          "sensitivity": 0.6680327868852459,
+          "specificity": 0.9876543209876543,
+          "f1": 0.7893462469733656,
+          "balanced_accuracy": 0.8278435539364501,
+          "abstention_rate": 0.1780821917808219
+        },
+        {
+          "threshold": 0.65,
+          "tp": 145,
+          "fp": 6,
+          "fn": 99,
+          "tn": 480,
+          "precision": 0.9602649006622517,
+          "sensitivity": 0.5942622950819673,
+          "specificity": 0.9876543209876543,
+          "f1": 0.7341772151898736,
+          "balanced_accuracy": 0.7909583080348108,
+          "abstention_rate": 0.2219178082191781
+        },
+        {
+          "threshold": 0.7,
+          "tp": 134,
+          "fp": 4,
+          "fn": 110,
+          "tn": 482,
+          "precision": 0.9710144927536232,
+          "sensitivity": 0.5491803278688525,
+          "specificity": 0.9917695473251029,
+          "f1": 0.7015706806282723,
+          "balanced_accuracy": 0.7704749375969777,
+          "abstention_rate": 0.27123287671232876
+        },
+        {
+          "threshold": 0.75,
+          "tp": 118,
+          "fp": 3,
+          "fn": 126,
+          "tn": 483,
+          "precision": 0.9752066115702479,
+          "sensitivity": 0.48360655737704916,
+          "specificity": 0.9938271604938271,
+          "f1": 0.6465753424657533,
+          "balanced_accuracy": 0.7387168589354381,
+          "abstention_rate": 0.31917808219178084
+        },
+        {
+          "threshold": 0.8,
+          "tp": 101,
+          "fp": 3,
+          "fn": 143,
+          "tn": 483,
+          "precision": 0.9711538461538461,
+          "sensitivity": 0.4139344262295082,
+          "specificity": 0.9938271604938271,
+          "f1": 0.5804597701149425,
+          "balanced_accuracy": 0.7038807933616676,
+          "abstention_rate": 0.36575342465753424
+        },
+        {
+          "threshold": 0.85,
+          "tp": 75,
+          "fp": 3,
+          "fn": 169,
+          "tn": 483,
+          "precision": 0.9615384615384616,
+          "sensitivity": 0.3073770491803279,
+          "specificity": 0.9938271604938271,
+          "f1": 0.46583850931677023,
+          "balanced_accuracy": 0.6506021048370775,
+          "abstention_rate": 0.4397260273972603
+        },
+        {
+          "threshold": 0.9,
+          "tp": 45,
+          "fp": 2,
+          "fn": 199,
+          "tn": 484,
+          "precision": 0.9574468085106383,
+          "sensitivity": 0.18442622950819673,
+          "specificity": 0.9958847736625515,
+          "f1": 0.30927835051546393,
+          "balanced_accuracy": 0.5901555015853741,
+          "abstention_rate": 0.5123287671232877
+        },
+        {
+          "threshold": 0.95,
+          "tp": 16,
+          "fp": 0,
+          "fn": 228,
+          "tn": 486,
+          "precision": 1.0,
+          "sensitivity": 0.06557377049180328,
+          "specificity": 1.0,
+          "f1": 0.12307692307692307,
+          "balanced_accuracy": 0.5327868852459017,
+          "abstention_rate": 0.6410958904109589
+        }
+      ]
+    }
+  },
+  "same_grouped_test_comparison": {
+    "test_samples": 730,
+    "stage16_threshold_0_90": {
+      "temperature": 1.0,
+      "classification": {
+        "sample_count": 730,
+        "accuracy": 0.8410958904109589,
+        "macro_f1": 0.7933540073424417,
+        "roc_auc_tumor_ovr": 0.9658807258989408,
+        "roc_auc_macro_ovr": 0.9601780720551293,
+        "confusion_matrix_3x3": [
+          [
+            347,
+            7,
+            43
+          ],
+          [
+            9,
+            186,
+            49
+          ],
+          [
+            6,
+            2,
+            81
+          ]
+        ],
+        "confusion_matrix_labels": [
+          "no_metastasico",
+          "metastasico",
+          "estroma"
+        ],
+        "per_class": {
+          "no_metastasico": {
+            "precision": 0.9585635359116023,
+            "recall": 0.8740554156171285,
+            "f1": 0.9143610013175231,
+            "support": 397
+          },
+          "metastasico": {
+            "precision": 0.9538461538461539,
+            "recall": 0.7622950819672131,
+            "f1": 0.8473804100227791,
+            "support": 244
+          },
+          "estroma": {
+            "precision": 0.4682080924855491,
+            "recall": 0.9101123595505618,
+            "f1": 0.6183206106870229,
+            "support": 89
+          }
+        }
+      },
+      "operating_threshold": {
+        "threshold": 0.9,
+        "tp": 84,
+        "fp": 1,
+        "fn": 160,
+        "tn": 485,
+        "precision": 0.9882352941176471,
+        "sensitivity": 0.3442622950819672,
+        "specificity": 0.9979423868312757,
+        "f1": 0.5106382978723405,
+        "balanced_accuracy": 0.6711023409566215,
+        "abstention_rate": 0.4712328767123288,
+        "false_positive_breakdown": {
+          "no_metastasico_as_tumor": 1,
+          "estroma_as_tumor": 0,
+          "no_metastasico_count": 397,
+          "estroma_count": 89,
+          "no_metastasico_false_positive_rate": 0.0025188916876574307,
+          "estroma_false_positive_rate": 0.0
+        }
+      }
+    },
+    "stage17_threshold_0_35_uncalibrated": {
+      "temperature": 1.0,
+      "classification": {
+        "sample_count": 730,
+        "accuracy": 0.8561643835616438,
+        "macro_f1": 0.7931450321522266,
+        "roc_auc_tumor_ovr": 0.9663951291911219,
+        "roc_auc_macro_ovr": 0.9572557190511993,
+        "confusion_matrix_3x3": [
+          [
+            370,
+            14,
+            13
+          ],
+          [
+            22,
+            200,
+            22
+          ],
+          [
+            24,
+            10,
+            55
+          ]
+        ],
+        "confusion_matrix_labels": [
+          "no_metastasico",
+          "metastasico",
+          "estroma"
+        ],
+        "per_class": {
+          "no_metastasico": {
+            "precision": 0.8894230769230769,
+            "recall": 0.9319899244332494,
+            "f1": 0.9102091020910209,
+            "support": 397
+          },
+          "metastasico": {
+            "precision": 0.8928571428571429,
+            "recall": 0.819672131147541,
+            "f1": 0.8547008547008547,
+            "support": 244
+          },
+          "estroma": {
+            "precision": 0.6111111111111112,
+            "recall": 0.6179775280898876,
+            "f1": 0.6145251396648045,
+            "support": 89
+          }
+        }
+      },
+      "operating_threshold": {
+        "threshold": 0.35,
+        "tp": 208,
+        "fp": 28,
+        "fn": 36,
+        "tn": 458,
+        "precision": 0.8813559322033898,
+        "sensitivity": 0.8524590163934426,
+        "specificity": 0.9423868312757202,
+        "f1": 0.8666666666666666,
+        "balanced_accuracy": 0.8974229238345814,
+        "abstention_rate": 0.0027397260273972603,
+        "false_positive_breakdown": {
+          "no_metastasico_as_tumor": 18,
+          "estroma_as_tumor": 10,
+          "no_metastasico_count": 397,
+          "estroma_count": 89,
+          "no_metastasico_false_positive_rate": 0.04534005037783375,
+          "estroma_false_positive_rate": 0.11235955056179775
+        }
+      }
+    },
+    "stage17_threshold_0_35_temperature_scaled": {
+      "temperature": 1.096672773361206,
+      "classification": {
+        "sample_count": 730,
+        "accuracy": 0.8561643835616438,
+        "macro_f1": 0.7931450321522266,
+        "roc_auc_tumor_ovr": 0.9661084126020374,
+        "roc_auc_macro_ovr": 0.9572618769831617,
+        "confusion_matrix_3x3": [
+          [
+            370,
+            14,
+            13
+          ],
+          [
+            22,
+            200,
+            22
+          ],
+          [
+            24,
+            10,
+            55
+          ]
+        ],
+        "confusion_matrix_labels": [
+          "no_metastasico",
+          "metastasico",
+          "estroma"
+        ],
+        "per_class": {
+          "no_metastasico": {
+            "precision": 0.8894230769230769,
+            "recall": 0.9319899244332494,
+            "f1": 0.9102091020910209,
+            "support": 397
+          },
+          "metastasico": {
+            "precision": 0.8928571428571429,
+            "recall": 0.819672131147541,
+            "f1": 0.8547008547008547,
+            "support": 244
+          },
+          "estroma": {
+            "precision": 0.6111111111111112,
+            "recall": 0.6179775280898876,
+            "f1": 0.6145251396648045,
+            "support": 89
+          }
+        }
+      },
+      "operating_threshold": {
+        "threshold": 0.35,
+        "tp": 209,
+        "fp": 29,
+        "fn": 35,
+        "tn": 457,
+        "precision": 0.8781512605042017,
+        "sensitivity": 0.8565573770491803,
+        "specificity": 0.9403292181069959,
+        "f1": 0.867219917012448,
+        "balanced_accuracy": 0.898443297578088,
+        "abstention_rate": 0.0027397260273972603,
+        "false_positive_breakdown": {
+          "no_metastasico_as_tumor": 19,
+          "estroma_as_tumor": 10,
+          "no_metastasico_count": 397,
+          "estroma_count": 89,
+          "no_metastasico_false_positive_rate": 0.04785894206549118,
+          "estroma_false_positive_rate": 0.11235955056179775
+        }
+      }
+    }
+  },
+  "notes": [
+    "Stage 16 historical metrics and its common-test reference are leakage-affected.",
+    "Stage 17 threshold 0.35 was selected on validation with temperature scaling.",
+    "The uncalibrated Stage 17 result is included because production calibration is opt-in.",
+    "No result is a clinical, diagnostic, prospective, external, or regulatory validation."
+  ]
+}

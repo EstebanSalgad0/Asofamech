@@ -1,0 +1,67 @@
+{
+  "source_manifest": "artifacts\\histopathology\\manifests\\camelyon17_manifest_stage15_heavy_neg.csv",
+  "seed": 20260607,
+  "ratios": {
+    "train": 0.7,
+    "val": 0.15,
+    "test": 0.15000000000000005
+  },
+  "grouping_priority": [
+    "patient",
+    "slide"
+  ],
+  "fallback_slide_groups": [],
+  "splits": {
+    "train": {
+      "patches": 3434,
+      "slides": 41,
+      "patients": 24,
+      "class_counts": {
+        "estroma": 391,
+        "metastasico": 1214,
+        "no_metastasico": 1829
+      }
+    },
+    "val": {
+      "patches": 741,
+      "slides": 9,
+      "patients": 5,
+      "class_counts": {
+        "estroma": 90,
+        "metastasico": 244,
+        "no_metastasico": 407
+      }
+    },
+    "test": {
+      "patches": 730,
+      "slides": 8,
+      "patients": 5,
+      "class_counts": {
+        "estroma": 89,
+        "metastasico": 244,
+        "no_metastasico": 397
+      }
+    }
+  },
+  "overlap_validation": {
+    "valid": true,
+    "overlaps": {
+      "train_vs_val": {
+        "patches": [],
+        "slides": [],
+        "patients": []
+      },
+      "train_vs_test": {
+        "patches": [],
+        "slides": [],
+        "patients": []
+      },
+      "val_vs_test": {
+        "patches": [],
+        "slides": [],
+        "patients": []
+      }
+    }
+  },
+  "limitations": "This is an internal grouped split of the available CAMELYON17-derived patches. It is not an external, prospective, diagnostic, or clinical validation."
+}

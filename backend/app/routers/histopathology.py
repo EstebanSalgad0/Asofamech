@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..histopathology.audit_log import append_audit_event, get_audit_log_path
 from ..histopathology.debug_patches import save_patch_debug_images
-from ..histopathology.heatmap_decision import aggregate_heatmap_roi_decision
+from ..histopathology.heatmap_decision import (
+    aggregate_heatmap_roi_decision,
+    aggregate_tile_probability_summary,
+)
 from ..histopathology.heatmap_access import (
     check_heatmap_rate_limit,
     heatmap_rate_limit_key,
@@ -219,13 +222,57 @@ def _is_low_suspicion_non_metastatic(raw_prediction: dict) -> bool:
     )
 
 
-def _decision_from_prediction(raw_prediction: dict, confidence_threshold: float) -> dict:
+def _decision_from_prediction(
+    raw_prediction: dict,
+    confidence_threshold: float,
+    tumor_operating_threshold: float | None = None,
+) -> dict:
     model_predicted_class = raw_prediction["predicted_class"]
     status = "clasificado"
     predicted_class = model_predicted_class
     reason = None
     recommendation = None
     prediction = raw_prediction
+    probabilities = raw_prediction.get("probabilities") or {}
+    tumor_score = float(probabilities.get("metastasico", 0.0) or 0.0)
+
+    if tumor_operating_threshold is not None and tumor_score >= tumor_operating_threshold:
+        return {
+            "status": "clasificado",
+            "predicted_class": "metastasico",
+            "reason": (
+                "La probabilidad tumoral supera el umbral operativo configurado "
+                f"({tumor_operating_threshold:.2f})."
+            ),
+            "recommendation": (
+                "Interprete esta salida solo como apoyo educativo y revise el patron "
+                "morfologico y la distribucion espacial de tiles."
+            ),
+            "prediction": {
+                **raw_prediction,
+                "predicted_class": "metastasico",
+                "model_predicted_class": model_predicted_class,
+                "confidence": tumor_score,
+            },
+        }
+
+    if tumor_operating_threshold is not None and model_predicted_class == "metastasico":
+        return {
+            "status": "resultado_incierto",
+            "predicted_class": "incierto",
+            "reason": (
+                "La clase de mayor probabilidad es metastasica, pero P(tumor) no "
+                f"alcanza el umbral operativo ({tumor_operating_threshold:.2f})."
+            ),
+            "recommendation": (
+                "Revise otra ROI o la agregacion de tiles antes de interpretar el resultado."
+            ),
+            "prediction": {
+                **raw_prediction,
+                "predicted_class": "incierto",
+                "model_predicted_class": model_predicted_class,
+            },
+        }
 
     if model_predicted_class == "estroma":
         if _is_low_suspicion_non_metastatic(raw_prediction):
@@ -439,6 +486,12 @@ def _model_metadata(inference_service) -> dict:
         "labels": inference_service.labels,
         "class_mapping": inference_service.class_mapping,
         "confidence_threshold": inference_service.confidence_threshold,
+        "tumor_operating_threshold": inference_service.tumor_operating_threshold,
+        "calibration": {
+            "method": inference_service.calibration_method,
+            "temperature": inference_service.temperature,
+            "enabled": inference_service.temperature != 1.0,
+        },
         "low_suspicion_no_metastatic_min": _configured_low_suspicion_no_metastatic_min(),
         "low_suspicion_tumor_max": _configured_low_suspicion_tumor_max(),
         "training_mode": inference_service.training_mode,
@@ -456,6 +509,8 @@ def _heatmap_model_signature(inference_service) -> str:
             str(inference_service.checkpoint_ref),
             str(inference_service.num_classes),
             str(inference_service.confidence_threshold),
+            str(inference_service.tumor_operating_threshold),
+            str(inference_service.temperature),
             str(_configured_low_suspicion_no_metastatic_min()),
             str(_configured_low_suspicion_tumor_max()),
         ]
@@ -586,7 +641,11 @@ def _execute_heatmap_scan(
             continue
 
         raw_prediction = inference_service.predict_patch(patch_rgb)
-        decision = _decision_from_prediction(raw_prediction, inference_service.confidence_threshold)
+        decision = _decision_from_prediction(
+            raw_prediction,
+            inference_service.confidence_threshold,
+            inference_service.tumor_operating_threshold,
+        )
         status = decision["status"]
         predicted_class = decision["predicted_class"]
         reason = decision["reason"]
@@ -635,6 +694,7 @@ def _execute_heatmap_scan(
         if tile.get("status") == "resultado_incierto" and tile.get("tumor_score", 0.0) >= 0.50
     ]
     roi_decision = aggregate_heatmap_roi_decision(tile_results)
+    probability_aggregation = aggregate_tile_probability_summary(tile_results)
 
     response_payload = {
         "trace_id": trace_id,
@@ -656,6 +716,7 @@ def _execute_heatmap_scan(
             "best_tile": best_tile,
             "max_tumor_score": best_tile.get("tumor_score", 0.0) if best_tile else 0.0,
             "roi_decision": roi_decision,
+            "probability_aggregation": probability_aggregation,
             "cache_hits": cache_hits,
             "cache_misses": cache_misses,
             "cache_hit_rate": cache_hits / total_tiles if total_tiles else 0.0,
@@ -797,6 +858,12 @@ async def histopathology_status():
             "labels": inference_service.labels,
             "class_mapping": inference_service.class_mapping,
             "confidence_threshold": inference_service.confidence_threshold,
+            "tumor_operating_threshold": inference_service.tumor_operating_threshold,
+            "calibration": {
+                "method": inference_service.calibration_method,
+                "temperature": inference_service.temperature,
+                "enabled": inference_service.temperature != 1.0,
+            },
             "low_suspicion_no_metastatic_min": _configured_low_suspicion_no_metastatic_min(),
             "low_suspicion_tumor_max": _configured_low_suspicion_tumor_max(),
             "roi_quality_thresholds": get_quality_thresholds().__dict__,
@@ -806,7 +873,7 @@ async def histopathology_status():
             "head_type": inference_service.head_type,
             "model_version": inference_service.model_version,
             "audit_log_path": str(get_audit_log_path()),
-            "model_input": "CONCH preprocess target, typically 224x224",
+            "model_input": "CONCH preprocess target 448x448 RGB",
             "warning": EDUCATIONAL_WARNING,
         }
     except ModelUnavailableError as exc:
@@ -1035,7 +1102,11 @@ async def analyze_roi2(
         return response_payload
 
     raw_prediction = inference_service.predict_patch(patch_rgb)
-    decision = _decision_from_prediction(raw_prediction, inference_service.confidence_threshold)
+    decision = _decision_from_prediction(
+        raw_prediction,
+        inference_service.confidence_threshold,
+        inference_service.tumor_operating_threshold,
+    )
     status = decision["status"]
     predicted_class = decision["predicted_class"]
     reason = decision["reason"]

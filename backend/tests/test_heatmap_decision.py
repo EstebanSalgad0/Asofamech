@@ -5,6 +5,7 @@ from app.histopathology.heatmap_decision import (
     POSITIVE_STATUS,
     SANE_STATUS,
     aggregate_heatmap_roi_decision,
+    aggregate_tile_probability_summary,
 )
 
 
@@ -86,3 +87,22 @@ def test_intermediate_tumor_scores_are_mixed_or_uncertain():
 
     assert decision["status"] == MIXED_STATUS
     assert decision["metrics"]["suspicious_tiles"] == 1
+
+
+def test_probability_summary_is_explicitly_tile_based():
+    tiles = [
+        {
+            **_tile(0, 0, 0, klass="metastasico", score=0.8),
+            "probabilities": {"no_metastasico": 0.1, "metastasico": 0.8, "estroma": 0.1},
+        },
+        {
+            **_tile(1, 512, 0, score=0.2),
+            "probabilities": {"no_metastasico": 0.7, "metastasico": 0.2, "estroma": 0.1},
+        },
+    ]
+    summary = aggregate_tile_probability_summary(tiles)
+
+    assert summary["mean_tumor_probability"] == 0.5
+    assert summary["max_tumor_probability"] == 0.8
+    assert summary["recommended_strategy"] == "top_k_mean"
+    assert "No es Grad-CAM" in summary["interpretation"]
