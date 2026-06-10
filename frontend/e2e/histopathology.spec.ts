@@ -57,7 +57,7 @@ test.describe("Visor histopatologico", () => {
     await openViewer(page);
     await page.getByTestId("osd-mode-roi1").click();
 
-    await expect(page.getByTestId("heatmap-summary")).toContainText(/Mapa ROI 1/i);
+    await expect(page.getByTestId("heatmap-summary")).toContainText(/Mapa de probabilidades por tiles/i);
     await expect(page.getByTestId("heatmap-tile").first()).toBeVisible();
   });
 

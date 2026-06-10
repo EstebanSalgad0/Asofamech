@@ -28,6 +28,69 @@ function Write-OK($msg)    { Write-Host "  OK  $msg" -ForegroundColor Green }
 function Write-Warn($msg)  { Write-Host "  AVISO: $msg" -ForegroundColor Yellow }
 function Write-Fail($msg)  { Write-Host "  ERROR: $msg" -ForegroundColor Red }
 
+function New-SecureHexSecret {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    } finally {
+        $rng.Dispose()
+    }
+    return -join ($bytes | ForEach-Object { $_.ToString("x2") })
+}
+
+function Set-EnvSetting {
+    param(
+        [System.Collections.Generic.List[string]]$Lines,
+        [string]$Key,
+        [string]$Value
+    )
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -match "^$([regex]::Escape($Key))=") {
+            $Lines[$i] = "$Key=$Value"
+            return
+        }
+    }
+    $Lines.Add("$Key=$Value")
+}
+
+function Initialize-PresentationEnvironment {
+    $envPath = Join-Path $projectDir ".env"
+    $examplePath = Join-Path $projectDir ".env.example"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+
+    if (Test-Path -LiteralPath $envPath) {
+        $lines = [System.Collections.Generic.List[string]]::new()
+        [System.IO.File]::ReadAllLines($envPath) | ForEach-Object { $lines.Add($_) }
+    } elseif (Test-Path -LiteralPath $examplePath) {
+        $lines = [System.Collections.Generic.List[string]]::new()
+        [System.IO.File]::ReadAllLines($examplePath) | ForEach-Object { $lines.Add($_) }
+        Write-Warn ".env no existia; se creo desde .env.example."
+    } else {
+        $lines = [System.Collections.Generic.List[string]]::new()
+        Write-Warn ".env y .env.example no existen; se creara configuracion minima."
+    }
+
+    $currentSecret = ""
+    foreach ($line in $lines) {
+        if ($line -match "^ASOFAMECH_JWT_SECRET=(.*)$") {
+            $currentSecret = $Matches[1].Trim()
+        }
+    }
+    if ($currentSecret.Length -lt 32 -or $currentSecret -match "cambia|change|secret") {
+        Set-EnvSetting $lines "ASOFAMECH_JWT_SECRET" (New-SecureHexSecret)
+        Write-OK "Se genero un secreto JWT local seguro."
+    }
+
+    Set-EnvSetting $lines "APP_ENV" "production"
+    Set-EnvSetting $lines "ASOFAMECH_ACCESS_TOKEN_EXPIRE_MINUTES" "720"
+    Set-EnvSetting $lines "FRONTEND_API_BASE" ""
+    Set-EnvSetting $lines "ASOFAMECH_PLATFORM_URL" "http://localhost:3000/auth"
+
+    [System.IO.File]::WriteAllLines($envPath, $lines, $utf8NoBom)
+    Write-OK "Entorno local de presentacion preparado."
+}
+
 function Format-Bytes($bytes) {
     if ($null -eq $bytes) { return "0 B" }
     if ($bytes -ge 1GB) { return "$([math]::Round($bytes / 1GB, 2)) GB" }
@@ -61,6 +124,14 @@ function Copy-DirectoryContents($Source, $Destination, $Label) {
         return @{ files = 0; bytes = 0 }
     }
 
+    $projectRoot = [System.IO.Path]::GetFullPath($projectDir).TrimEnd("\")
+    $destinationFull = [System.IO.Path]::GetFullPath($Destination).TrimEnd("\")
+    if (-not $destinationFull.StartsWith("$projectRoot\", [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Destino fuera del proyecto; no se reemplaza por seguridad: $destinationFull"
+    }
+    Get-ChildItem -LiteralPath $destinationFull -Force -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force
+
     foreach ($item in $items) {
         Copy-Item -LiteralPath $item.FullName -Destination $Destination -Recurse -Force
     }
@@ -79,14 +150,14 @@ function Restore-DockerVolume($VolumeName, $BackupFileName, $Label) {
 
     docker volume inspect $VolumeName *> $null
     if ($LASTEXITCODE -eq 0) {
-        Write-Warn "El volumen $VolumeName ya existe; se restaurara encima. Para restauracion limpia, usa 'docker compose down -v' antes."
+        Write-Warn "El volumen $VolumeName ya existe y sera reemplazado por el snapshot."
     }
 
     docker volume create $VolumeName | Out-Null
     docker run --rm `
         -v "${VolumeName}:/data" `
         -v "${volumesDir}:/backup:ro" `
-        alpine sh -c "cd /data && tar xzf /backup/$BackupFileName"
+        alpine sh -c "find /data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && tar xzf /backup/$BackupFileName -C /data"
 
     Write-OK "$Label restaurado desde $BackupFileName"
     return $true
@@ -197,6 +268,7 @@ Write-Host "  ASOFAMECH - Setup presentacion" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 
 Write-Step 1 8 "Verificando prerequisitos y backup"
+Initialize-PresentationEnvironment
 try {
     docker info | Out-Null
     Write-OK "Docker en ejecucion"

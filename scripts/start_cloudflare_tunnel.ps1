@@ -1,7 +1,7 @@
 # scripts/start_cloudflare_tunnel.ps1
 # Publica ASOFAMECH usando Cloudflare Tunnel (cloudflared).
-# Detecta la URL del tunel, actualiza CORS_ORIGINS en .env y reinicia
-# el backend automaticamente para que los usuarios externos puedan iniciar sesion.
+# Detecta la URL del tunel, actualiza la configuracion publica en .env y
+# recrea backend/frontend para que los usuarios externos puedan usar la API.
 #
 # Prerequisito: instalar cloudflared
 #   winget install Cloudflare.cloudflared
@@ -123,32 +123,50 @@ function Get-TunnelUrl {
     return ""
 }
 
-function Update-EnvCors {
+function Update-EnvPublicSettings {
     param([string]$TunnelUrl)
     $envPath      = Join-Path $projectDir ".env"
     $localOrigins = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
     $corsValue    = "$localOrigins,$TunnelUrl"
+    $platformUrl  = "$TunnelUrl/auth"
     $utf8NoBom    = New-Object System.Text.UTF8Encoding $false
     try {
         if (Test-Path -LiteralPath $envPath) {
             $lines  = [System.IO.File]::ReadAllLines($envPath)
-            $found  = $false
+            $foundCors = $false
+            $foundPlatform = $false
+            $foundFrontend = $false
             $result = [System.Collections.Generic.List[string]]::new()
             foreach ($line in $lines) {
                 if ($line -match '^CORS_ORIGINS=') {
                     $result.Add("CORS_ORIGINS=$corsValue")
-                    $found = $true
+                    $foundCors = $true
+                } elseif ($line -match '^ASOFAMECH_PLATFORM_URL=') {
+                    $result.Add("ASOFAMECH_PLATFORM_URL=$platformUrl")
+                    $foundPlatform = $true
+                } elseif ($line -match '^FRONTEND_API_BASE=') {
+                    $result.Add("FRONTEND_API_BASE=")
+                    $foundFrontend = $true
                 } else {
                     $result.Add($line)
                 }
             }
-            if (-not $found) { $result.Add("CORS_ORIGINS=$corsValue") }
+            if (-not $foundCors) { $result.Add("CORS_ORIGINS=$corsValue") }
+            if (-not $foundPlatform) { $result.Add("ASOFAMECH_PLATFORM_URL=$platformUrl") }
+            if (-not $foundFrontend) { $result.Add("FRONTEND_API_BASE=") }
             [System.IO.File]::WriteAllLines($envPath, $result, $utf8NoBom)
         } else {
-            [System.IO.File]::WriteAllText($envPath, "CORS_ORIGINS=$corsValue`n", $utf8NoBom)
+            $content = @(
+                "CORS_ORIGINS=$corsValue"
+                "ASOFAMECH_PLATFORM_URL=$platformUrl"
+                "FRONTEND_API_BASE="
+            ) -join "`n"
+            [System.IO.File]::WriteAllText($envPath, "$content`n", $utf8NoBom)
         }
-        Append-Log "CORS_ORIGINS actualizado en .env"
-        Append-Log "  -> $corsValue"
+        Append-Log "Configuracion publica actualizada en .env"
+        Append-Log "  CORS -> $corsValue"
+        Append-Log "  Plataforma -> $platformUrl"
+        Append-Log "  API frontend -> mismo origen (/api)"
         return $true
     } catch {
         Append-Log "ERROR actualizando .env: $($_.Exception.Message)"
@@ -156,14 +174,14 @@ function Update-EnvCors {
     }
 }
 
-function Restart-BackendWithNewCors {
-    Append-Log "Reiniciando backend para aplicar CORS (puede tardar ~15s)..."
-    $r = Invoke-CommandText "docker compose up -d --no-deps --force-recreate backend"
+function Restart-ServicesWithPublicSettings {
+    Append-Log "Recreando backend y frontend con la URL publica (puede tardar ~20s)..."
+    $r = Invoke-CommandText "docker compose up -d --no-deps --force-recreate backend frontend"
     if ($r.ExitCode -eq 0) {
-        Append-Log "Backend reiniciado. CORS activo para el tunel."
+        Append-Log "Backend y frontend recreados para el tunel."
     } else {
-        Append-Log "ADVERTENCIA: No se pudo reiniciar el backend automaticamente."
-        Append-Log "  Ejecuta manualmente: docker compose up -d --no-deps --force-recreate backend"
+        Append-Log "ADVERTENCIA: No se pudieron recrear los servicios automaticamente."
+        Append-Log "  Ejecuta: docker compose up -d --no-deps --force-recreate backend frontend"
     }
 }
 
@@ -408,8 +426,8 @@ $cfTimer.Add_Tick({
             $publicText.Text  = $url
             Append-Log "Tunel Cloudflare activo: $url"
 
-            $ok = Update-EnvCors -TunnelUrl $url
-            if ($ok) { Restart-BackendWithNewCors }
+            $ok = Update-EnvPublicSettings -TunnelUrl $url
+            if ($ok) { Restart-ServicesWithPublicSettings }
             Refresh-Status
 
             try {

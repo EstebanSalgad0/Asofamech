@@ -6,8 +6,6 @@ services:
       - POSTGRES_DB=app_db
       - POSTGRES_USER=app_user
       - POSTGRES_PASSWORD=app_pass
-    ports:
-      - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -55,6 +53,8 @@ services:
       - RAG_MIN_LOCAL_SCORE=${RAG_MIN_LOCAL_SCORE:-0.12}
       - HF_HOME=/root/.cache/huggingface
       - ASOFAMECH_JWT_SECRET=${ASOFAMECH_JWT_SECRET:-}
+      - ASOFAMECH_ACCESS_TOKEN_EXPIRE_MINUTES=${ASOFAMECH_ACCESS_TOKEN_EXPIRE_MINUTES:-720}
+      - APP_ENV=${APP_ENV:-development}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}
       - ASOFAMECH_PLATFORM_URL=${ASOFAMECH_PLATFORM_URL:-http://localhost:3000/auth}
       - ASOFAMECH_EMAIL_OUTBOX_PATH=/app/artifacts/email_outbox.jsonl
@@ -67,7 +67,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     gpus: all
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
@@ -78,7 +78,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: ["--reload", "--reload-dir", "/app/app"]
     volumes:
       - ./backend/app:/app/app
       - ./backend/artifacts:/app/artifacts
@@ -101,7 +100,7 @@ services:
     environment:
       - API_BASE=${FRONTEND_API_BASE:-}
     ports:
-      - "3000:80"
+      - "127.0.0.1:3000:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -111,7 +110,7 @@ services:
     container_name: asofamech_ollama
     restart: unless-stopped
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     deploy:

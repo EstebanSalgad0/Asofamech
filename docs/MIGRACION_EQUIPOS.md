@@ -16,6 +16,14 @@ ejecuta `alembic upgrade head` al iniciar el contenedor; asi se aplican cambios
 como nuevas tablas, por ejemplo `audit_logs`. Los datos reales siguen viajando
 por backup/restauracion o por seeders/migraciones de datos especificas.
 
+Git tampoco mueve `.env`, secretos ni configuracion local. El restaurador crea
+un `.env` de presentacion con un secreto JWT nuevo cuando no existe. Las
+credenciales SMTP y cualquier token autorizado de HuggingFace deben configurarse
+por separado en cada equipo.
+
+Los equipos no sincronizan sus bases en vivo. Para una defensa con PC principal
+y notebook de respaldo, ver `docs/DEFENSA_DOS_EQUIPOS.md`.
+
 Flujo automatizado recomendado:
 
 | Necesidad | Script | Que mueve |
@@ -34,6 +42,10 @@ frontend:
 Ese comando hace `git pull --ff-only`, reconstruye `backend` y `frontend`,
 espera el `health` del backend y abre el frontend. No reemplaza datos reales
 de la base; para eso se usa el backup.
+
+El pull actua sobre la rama activa. Verificar que origen y destino usen la misma
+rama y commit; los commits de una rama `feat/...` no llegan a un equipo que
+permanece en `main`.
 
 Las laminas histologicas grandes, por ejemplo archivos `.tif`, `.tiff` o `.svs`
 de varios GB, no se suben por navegador ni se guardan dentro de la imagen
@@ -282,14 +294,14 @@ El script hace lo siguiente:
 1. Verifica Docker.
 2. Verifica `checksums.sha256`.
 3. Detiene un stack activo de ASOFAMECH.
-4. Restaura la base de datos.
+4. Reemplaza el volumen de base de datos por el snapshot respaldado.
 5. Copia laminas a:
 
 ```text
 backend/data/camelyon17/images/
 ```
 
-6. Copia `artifacts/` y `uploads/`.
+6. Reemplaza `artifacts/` y `uploads/` por el contenido del backup.
 7. Restaura Ollama y HuggingFace/CONCH solo si ese cache venia incluido.
 8. Carga imagenes Docker desde `compose_images.tar`, si existe.
 9. Levanta:
