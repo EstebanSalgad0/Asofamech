@@ -79,17 +79,47 @@ function attemptAreaLabel(attempt) {
 
 // Progress chart: Y axis is score percentage, X axis is recent SCT attempts.
 function Sparkline({ points = [], color = "#C41E3A" }) {
-  const w = 180, h = 58, padY = 4;
+  const chartRef = useRef(null);
+  const [chartWidth, setChartWidth] = useState(360);
+
+  useEffect(() => {
+    const node = chartRef.current;
+    if (!node) return undefined;
+
+    const updateWidth = () => {
+      setChartWidth(Math.max(180, Math.round(node.clientWidth)));
+    };
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const w = chartWidth, h = 76, padX = 5, padY = 6;
   if (points.length < 2) return null;
   const safePoints = points.map((v) => Math.max(0, Math.min(100, Number(v) || 0)));
-  const xs = points.map((_, i) => (i / (points.length - 1)) * w);
+  const xs = points.map((_, i) => padX + (i / (points.length - 1)) * (w - padX * 2));
   const yFor = (value) => h - padY - (value / 100) * (h - padY * 2);
   const ys = safePoints.map(yFor);
-  const path = xs.map((x, i) => `${i === 0 ? "M" : "L"}${x},${ys[i]}`).join(" ");
-  const area =
-    `M${xs[0]},${h} ` +
-    xs.map((x, i) => `L${x},${ys[i]}`).join(" ") +
-    ` L${xs[xs.length - 1]},${h} Z`;
+  const chartPoints = xs.map((x, i) => ({ x, y: ys[i] }));
+  const clampY = (value) => Math.max(padY, Math.min(h - padY, value));
+  const curvePath = chartPoints.slice(0, -1).reduce((result, point, i) => {
+    const previous = chartPoints[i - 1] || point;
+    const next = chartPoints[i + 1];
+    const following = chartPoints[i + 2] || next;
+    const control1 = {
+      x: point.x + (next.x - previous.x) / 6,
+      y: clampY(point.y + (next.y - previous.y) / 6),
+    };
+    const control2 = {
+      x: next.x - (following.x - point.x) / 6,
+      y: clampY(next.y - (following.y - point.y) / 6),
+    };
+    return `${result} C${control1.x},${control1.y} ${control2.x},${control2.y} ${next.x},${next.y}`;
+  }, `M${chartPoints[0].x},${chartPoints[0].y}`);
+  const area = `${curvePath} L${chartPoints.at(-1).x},${h} L${chartPoints[0].x},${h} Z`;
   const ticks = [100, 50, 0];
   return (
     <div className="sct-sparkline-chart" role="img" aria-label="Tendencia SCT: eje Y puntaje porcentual y eje X tests recientes">
@@ -97,7 +127,7 @@ function Sparkline({ points = [], color = "#C41E3A" }) {
       <div className="sct-sparkline-y" aria-hidden="true">
         {ticks.map((tick) => <span key={tick}>{tick}%</span>)}
       </div>
-      <div className="sct-sparkline-main">
+      <div className="sct-sparkline-main" ref={chartRef}>
         <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="sct-sparkline" aria-hidden="true">
           <defs>
             <linearGradient id="sp-fill" x1="0" y1="0" x2="0" y2="1">
@@ -111,7 +141,16 @@ function Sparkline({ points = [], color = "#C41E3A" }) {
           <line className="sct-sparkline-axis" x1="0" x2="0" y1={padY} y2={h - padY} />
           <line className="sct-sparkline-axis" x1="0" x2={w} y1={h - padY} y2={h - padY} />
           <path d={area} fill="url(#sp-fill)" />
-          <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={curvePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          {chartPoints.map((point, index) => (
+            <circle
+              key={`${point.x}-${point.y}`}
+              className={index === chartPoints.length - 1 ? "sct-sparkline-point latest" : "sct-sparkline-point"}
+              cx={point.x}
+              cy={point.y}
+              r={index === chartPoints.length - 1 ? 3.5 : 3}
+            />
+          ))}
         </svg>
         <div className="sct-sparkline-x" aria-hidden="true">
           <span>Antiguo</span>
