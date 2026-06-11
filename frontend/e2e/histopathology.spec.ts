@@ -26,6 +26,25 @@ async function selectRois(page) {
 }
 
 test.describe("Visor histopatologico", () => {
+  test("estudiante solo puede seleccionar imagenes de la biblioteca", async ({ page }) => {
+    await mockAllApis(page);
+    await signInAs(page, "student", "/dashboard/images");
+
+    await expect(page.getByTestId("image-upload-section")).toHaveCount(0);
+    await expect(page.getByTestId("histopathology-empty-viewer")).toContainText(
+      /Selecciona una imagen disponible de la biblioteca/i,
+    );
+  });
+
+  test("docente ve la carga directa y la advertencia para WSI grandes", async ({ page }) => {
+    await mockAllApis(page);
+    await signInAs(page, "teacher", "/dashboard/images");
+
+    await expect(page.getByTestId("image-upload-section")).toBeVisible();
+    await expect(page.getByTestId("image-upload-warning")).toContainText(/puede tardar mucho más/i);
+    await expect(page.getByTestId("image-upload-warning")).toContainText(/Configuración → Imágenes/i);
+  });
+
   test("E2E-04 Apertura de imagen DZI y carga del visor", async ({ page }) => {
     await openViewer(page);
 

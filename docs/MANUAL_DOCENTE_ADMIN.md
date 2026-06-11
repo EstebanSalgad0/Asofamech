@@ -69,6 +69,8 @@ Requiere permiso `manage_images` (Docente o Admin).
 
 El backend convierte automaticamente el archivo a tiles DZI para el visor OpenSeadragon.
 
+Para laminas WSI grandes que ya estan copiadas en el servidor, usar **Configuracion > Imagenes > Importar CAMELYON17 local**. Esta ruta registra el archivo sin volver a transferirlo por el navegador y normalmente es mucho mas rapida que la carga directa desde **Imagenes IA**.
+
 ### Administrar imagenes existentes
 
 El panel de gestion permite:

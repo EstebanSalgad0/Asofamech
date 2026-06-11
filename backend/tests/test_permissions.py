@@ -100,13 +100,22 @@ def test_student_is_blocked_from_sensitive_routes(permission_client):
     responses = [
         client.post("/api/cases", json={"title": "Caso", "description": "Desc", "body": "Body"}),
         client.delete("/api/sct/1"),
+        client.post(
+            "/api/medical-images/upload",
+            data={"title": "Carga no autorizada"},
+            files={"file": ("slide.png", b"not-an-image", "image/png")},
+        ),
+        client.post(
+            "/api/medical-images/import-local/camelyon17",
+            data={"filename": "patient_001_node_1.tif"},
+        ),
         client.delete("/api/medical-images/1"),
         client.get("/api/medical-images/local/camelyon17"),
         client.get("/api/admin/users"),
         client.get("/api/admin/ai-config"),
     ]
 
-    assert [response.status_code for response in responses] == [403, 403, 403, 403, 403, 403]
+    assert [response.status_code for response in responses] == [403, 403, 403, 403, 403, 403, 403, 403]
 
 
 def test_teacher_can_manage_educational_content_but_not_admin_users(permission_client):

@@ -1156,7 +1156,8 @@ export function ConfigPage() {
                     <div>
                       <div className="cfg-camelyon-title">Importar CAMELYON17 local</div>
                       <div className="cfg-camelyon-desc">
-                        Registra una lámina ya descargada en el servidor sin subir GB por navegador.
+                        Ruta recomendada para WSI grandes: registra una lámina ya copiada en el servidor sin volver a
+                        subir GB por el navegador. Suele ser mucho más rápida que la carga directa desde Imágenes IA.
                       </div>
                     </div>
                   </div>
