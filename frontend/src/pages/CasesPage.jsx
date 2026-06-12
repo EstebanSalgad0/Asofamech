@@ -465,7 +465,11 @@ export function CasesPage() {
       {/* Create/Edit form modal */}
       {showForm && (
         <div className="cases-modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="cases-modal cases-form-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="cases-modal cases-form-modal"
+            data-testid="case-form-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button className="cases-modal-close" onClick={() => setShowForm(false)}>✕</button>
             <h2 className="cases-modal-title">{editingCase ? "Editar caso" : "Nuevo caso clínico"}</h2>
 
@@ -562,6 +566,7 @@ export function CasesPage() {
                 <div className="cases-form-row">
                   <label>Test SCT asociado</label>
                   <select
+                    data-testid="case-sct-select"
                     value={form.sct_test_id}
                     onChange={(e) => setForm((f) => ({ ...f, sct_test_id: e.target.value }))}
                   >

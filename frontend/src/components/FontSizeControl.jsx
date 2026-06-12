@@ -1,23 +1,27 @@
 import React, { useEffect, useState } from "react";
 
-const SIZES = ["normal", "large", "xl"];
-const LABELS = { normal: "Normal", large: "Grande", xl: "Máx" };
-const SCALES = { normal: "", large: "large", xl: "xl" };
+const SIZES = ["small", "normal", "large", "xl"];
+const LABELS = { small: "Pequeño", normal: "Normal", large: "Grande", xl: "Máx" };
 const STORAGE_KEY = "asofamech-fontsize";
 
 function getStored() {
-  try { return localStorage.getItem(STORAGE_KEY) || "normal"; } catch { return "normal"; }
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return SIZES.includes(stored) ? stored : "normal";
+  } catch {
+    return "normal";
+  }
 }
 
 function applySize(key) {
-  const attr = SCALES[key] || "";
-  if (attr) {
-    document.documentElement.setAttribute("data-fontsize", attr);
+  const size = SIZES.includes(key) ? key : "normal";
+  if (size !== "normal") {
+    document.documentElement.setAttribute("data-fontsize", size);
   } else {
     document.documentElement.removeAttribute("data-fontsize");
   }
-  document.documentElement.style.fontSize = key === "large" ? "112.5%" : key === "xl" ? "125%" : "";
-  try { localStorage.setItem(STORAGE_KEY, key); } catch {}
+  document.documentElement.style.removeProperty("font-size");
+  try { localStorage.setItem(STORAGE_KEY, size); } catch {}
 }
 
 export function FontSizeControl() {

@@ -438,6 +438,12 @@ a { color: inherit; text-decoration: none; }
 .btn-logout { width: 100%; padding: 10px 12px; background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #94a3b8; font-weight: 500; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; }
 .btn-logout:hover { background: rgba(255,255,255,0.05); color: #e2e8f0; border-color: rgba(255,255,255,0.2); }
 .dashboard-main { flex: 1; padding: 40px; overflow-y: auto; background: #f8fafc; }
+.dashboard-layout { min-height: 100vh; }
+.dashboard-layout > .dashboard-main {
+  margin-left: 260px;
+  min-width: 0;
+  padding: 0;
+}
 .dashboard-header { margin-bottom: 32px; }
 .dashboard-welcome { font-size: 32px; font-weight: 700; margin-bottom: 8px; color: #1a202c; }
 .dashboard-subtitle { font-size: 15px; color: #64748b; }
@@ -2591,6 +2597,7 @@ a { color: inherit; text-decoration: none; }
   height: 100vh;
   overflow-y: auto;
   background: #f4f5f2;
+  container-type: inline-size;
 }
 .page-fixed {
   margin-left: 260px;
@@ -3038,6 +3045,7 @@ a { color: inherit; text-decoration: none; }
   min-height: 100vh;
   background: var(--bg-body);
   color: var(--text-primary);
+  container-type: inline-size;
 }
 .home-v3-hero {
   min-height: 184px;
@@ -3188,6 +3196,18 @@ a { color: inherit; text-decoration: none; }
 }
 @media (max-width: 600px) {
   .home-v3-stats-row { grid-template-columns: 1fr; }
+}
+
+@container (max-width: 900px) {
+  .home-v3-stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 600px) {
+  .home-v3-stats-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .home-v3-section,
@@ -3652,6 +3672,7 @@ a { color: inherit; text-decoration: none; }
   .app-sidebar {
     display: none;
   }
+  .dashboard-layout > .dashboard-main,
   .home-v3-shell,
   .page-scroll,
   .page-fixed,
@@ -4299,7 +4320,7 @@ a { color: inherit; text-decoration: none; }
 /* ─── ROI session history panel ─── */
 .roi-hist-wrapper { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; padding: 28px 32px 24px; overflow-y: auto; box-sizing: border-box; }
 .roi-hist-empty-top { display: flex; flex-direction: column; align-items: center; margin-bottom: 24px; }
-.roi-hist-panel { width: 100%; max-width: 900px; }
+.roi-hist-panel { width: 100%; max-width: 900px; container-type: inline-size; }
 .roi-hist-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .roi-hist-title { font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.6); letter-spacing: 0.5px; }
 .roi-hist-count { font-size: 11px; color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.06); border-radius: 20px; padding: 2px 10px; }
@@ -4327,6 +4348,47 @@ a { color: inherit; text-decoration: none; }
 .roi-hist-delete-btn:hover { background: rgba(239,68,68,0.18); color: #f87171; }
 .roi-hist-delete-btn:disabled { opacity: 0.4; cursor: default; }
 .roi-hist-row-deleting { opacity: 0.4; pointer-events: none; }
+
+@container (max-width: 700px) {
+  .roi-hist-thead {
+    display: none;
+  }
+  .roi-hist-table,
+  .roi-hist-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .roi-hist-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+    padding: 12px 0;
+  }
+  .roi-hist-td {
+    display: block;
+    min-width: 0;
+    padding: 2px 0;
+  }
+  .roi-hist-td-result,
+  .roi-hist-td-name,
+  .roi-hist-td-date {
+    grid-column: 1;
+  }
+  .roi-hist-td-name {
+    max-width: none;
+  }
+  .roi-hist-td-conf {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+  }
+  .roi-hist-td-action {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    align-self: center;
+  }
+}
+
 .roi-hist-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .roi-hist-modal { background: #fff; border-radius: 16px; padding: 24px; width: 100%; max-width: 440px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
 .roi-hist-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
@@ -4639,6 +4701,7 @@ a { color: inherit; text-decoration: none; }
 /* Tabs inside hero */
 .cfg-tabs {
   display: flex; gap: 2px;
+  flex-wrap: wrap;
   border-bottom: none;
 }
 .cfg-tab {
@@ -6239,6 +6302,20 @@ a { color: inherit; text-decoration: none; }
   }
 }
 
+@container (max-width: 980px) {
+  .cfg-heatmap-grid,
+  .cfg-import-controls,
+  .cfg-two-col {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .cfg-import-local,
+  .cfg-heatmap-head {
+    flex-direction: column;
+  }
+}
+
 @media (max-width: 640px) {
   .cfg-heatmap-fields,
   .cfg-heatmap-options,
@@ -6269,6 +6346,7 @@ a { color: inherit; text-decoration: none; }
   height: 100vh;
   overflow: hidden;
   min-width: 0;
+  container-type: inline-size;
 }
 
 /* ── Page header ── */
@@ -7012,6 +7090,92 @@ a { color: inherit; text-decoration: none; }
   background: var(--bg-2);
   border-color: var(--accent);
   color: var(--accent-deep);
+}
+
+@container (max-width: 900px) {
+  .mc-page-header {
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 22px 24px 18px;
+  }
+  .mc-page-header-right {
+    margin-left: 0;
+    margin-top: 0;
+    flex-wrap: wrap;
+  }
+  .mc-panels {
+    display: grid;
+    grid-template-columns: minmax(190px, 0.65fr) minmax(300px, 1.35fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .mc-conversations {
+    width: auto;
+    min-width: 0;
+  }
+  .mc-chat-main {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .mc-chat-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .mc-chat-badges {
+    flex-wrap: wrap;
+  }
+  .mc-rag-panel {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: auto;
+    max-height: 180px;
+    flex-direction: row;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    overflow-x: auto;
+  }
+  .mc-rag-section,
+  .mc-thread-section {
+    flex: 1 0 240px;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+  }
+}
+
+@container (max-width: 560px) {
+  .mc-page-header {
+    padding: 18px;
+  }
+  .mc-page-header-right {
+    width: 100%;
+  }
+  .mc-panels {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 210px minmax(520px, 1fr) auto;
+    overflow-y: auto;
+  }
+  .mc-conversations,
+  .mc-chat-main,
+  .mc-rag-panel {
+    grid-column: 1;
+  }
+  .mc-conversations {
+    grid-row: 1;
+  }
+  .mc-chat-main {
+    grid-row: 2;
+  }
+  .mc-rag-panel {
+    grid-row: 3;
+    max-height: none;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+  .mc-rag-section,
+  .mc-thread-section {
+    flex-basis: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
 }
 
 /* Streak fire emoji */
@@ -8172,7 +8336,7 @@ a { color: inherit; text-decoration: none; }
   max-width: 680px; width: 100%; max-height: 85vh; overflow-y: auto;
   position: relative; box-shadow: 0 20px 60px rgba(11,20,16,0.25);
 }
-.cases-form-modal { max-width: 760px; }
+.cases-form-modal { max-width: 760px; overflow-x: hidden; }
 .cases-modal-close {
   position: absolute; top: 16px; right: 16px;
   background: var(--bg-2); border: none; border-radius: 8px;
@@ -8200,19 +8364,25 @@ a { color: inherit; text-decoration: none; }
 .cases-modal-mgmt { display: flex; gap: 10px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
 
 /* Cases form */
-.cases-form { display: flex; flex-direction: column; gap: 18px; margin-top: 20px; }
-.cases-form-row { display: flex; flex-direction: column; gap: 6px; }
+.cases-form { display: flex; flex-direction: column; gap: 18px; margin-top: 20px; min-width: 0; }
+.cases-form-row { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .cases-form-row label { font-size: 12px; font-weight: 700; color: var(--ink-2); letter-spacing: 0.04em; }
 .cases-form-hint { font-weight: 400; color: var(--muted); }
 .cases-form-row input, .cases-form-row select, .cases-form-row textarea {
   padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 8px;
   font-size: 14px; font-family: inherit; color: var(--ink); background: white;
   outline: none; transition: border-color 0.15s; resize: vertical;
+  width: 100%; max-width: 100%; min-width: 0;
 }
 .cases-form-row input:focus, .cases-form-row select:focus, .cases-form-row textarea:focus {
   border-color: var(--accent);
 }
-.cases-form-row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cases-form-row-2col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
 .cases-form-error { font-size: 13px; color: var(--coral); margin: 0; }
 .cases-form-actions { display: flex; gap: 12px; justify-content: flex-end; padding-top: 8px; }
 .cases-form-btn-cancel {
@@ -8228,6 +8398,12 @@ a { color: inherit; text-decoration: none; }
 }
 .cases-form-btn-save:hover { background: var(--accent-deep); }
 .cases-form-btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+
+@media (max-width: 640px) {
+  .cases-modal-overlay { padding: 12px; }
+  .cases-form-modal { padding: 24px 20px; }
+  .cases-form-row-2col { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ── Feedback / Usability Page ── */
 .fb-page {
@@ -9030,8 +9206,40 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ─── Font Size Accessibility Control ─── */
-html[data-fontsize="large"]  { font-size: 112.5%; }
-html[data-fontsize="xl"]     { font-size: 125%; }
+html {
+  --font-ui-scale: 1;
+  --font-ui-scale-inverse: 1;
+}
+html[data-fontsize="small"] {
+  --font-ui-scale: 0.9;
+  --font-ui-scale-inverse: 1.111111;
+}
+html[data-fontsize="large"] {
+  --font-ui-scale: 1.1;
+  --font-ui-scale-inverse: 0.909091;
+}
+html[data-fontsize="xl"] {
+  --font-ui-scale: 1.2;
+  --font-ui-scale-inverse: 0.833333;
+}
+
+/*
+ * La interfaz historica usa muchos tamanos en px, por lo que cambiar solo el
+ * font-size raiz no los afecta. `zoom` escala tambien esos textos y conserva
+ * el reflow del documento, a diferencia de transform: scale().
+ */
+body { zoom: var(--font-ui-scale); }
+
+/* Mantiene los paneles de viewport dentro de la pantalla al aplicar zoom. */
+.app-sidebar,
+.page-scroll,
+.page-fixed,
+.page-fixed-col,
+.chat-main,
+.mc-wrapper {
+  height: calc(100vh * var(--font-ui-scale-inverse));
+  max-height: calc(100vh * var(--font-ui-scale-inverse));
+}
 
 .fontsize-control {
   display: inline-flex; align-items: center; gap: 2px;
@@ -9073,5 +9281,5 @@ html[data-fontsize="xl"]     { font-size: 125%; }
   background: var(--accent); color: white;
 }
 .fontsize-control-sidebar .fontsize-sep {
-  color: rgba(255,255,255,0.35); min-width: 38px; font-size: 9px;
+  color: rgba(255,255,255,0.35); min-width: 48px; font-size: 9px;
 }
