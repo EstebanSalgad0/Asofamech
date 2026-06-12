@@ -20,31 +20,47 @@ function Write-Log {
     Add-Content -LiteralPath $logFile -Value $line -Encoding UTF8
 }
 
-function Update-EnvCors {
+function Update-EnvPublicSettings {
     param([string]$TunnelUrl)
     $envPath      = Join-Path $projectDir ".env"
     $localOrigins = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
     $corsValue    = "$localOrigins,$TunnelUrl"
+    $platformUrl  = "$TunnelUrl/auth"
     $utf8NoBom    = New-Object System.Text.UTF8Encoding $false
     try {
         if (Test-Path -LiteralPath $envPath) {
             $lines  = [System.IO.File]::ReadAllLines($envPath)
-            $found  = $false
+            $foundCors = $false
+            $foundPlatform = $false
+            $foundFrontend = $false
             $result = [System.Collections.Generic.List[string]]::new()
             foreach ($line in $lines) {
                 if ($line -match '^CORS_ORIGINS=') {
                     $result.Add("CORS_ORIGINS=$corsValue")
-                    $found = $true
+                    $foundCors = $true
+                } elseif ($line -match '^ASOFAMECH_PLATFORM_URL=') {
+                    $result.Add("ASOFAMECH_PLATFORM_URL=$platformUrl")
+                    $foundPlatform = $true
+                } elseif ($line -match '^FRONTEND_API_BASE=') {
+                    $result.Add("FRONTEND_API_BASE=")
+                    $foundFrontend = $true
                 } else {
                     $result.Add($line)
                 }
             }
-            if (-not $found) { $result.Add("CORS_ORIGINS=$corsValue") }
+            if (-not $foundCors) { $result.Add("CORS_ORIGINS=$corsValue") }
+            if (-not $foundPlatform) { $result.Add("ASOFAMECH_PLATFORM_URL=$platformUrl") }
+            if (-not $foundFrontend) { $result.Add("FRONTEND_API_BASE=") }
             [System.IO.File]::WriteAllLines($envPath, $result, $utf8NoBom)
         } else {
-            [System.IO.File]::WriteAllText($envPath, "CORS_ORIGINS=$corsValue`n", $utf8NoBom)
+            $content = @(
+                "CORS_ORIGINS=$corsValue"
+                "ASOFAMECH_PLATFORM_URL=$platformUrl"
+                "FRONTEND_API_BASE="
+            ) -join "`n"
+            [System.IO.File]::WriteAllText($envPath, "$content`n", $utf8NoBom)
         }
-        Write-Log "CORS_ORIGINS actualizado: $corsValue"
+        Write-Log "Configuracion publica actualizada: CORS=$corsValue; plataforma=$platformUrl; API frontend=mismo origen"
         return $true
     } catch {
         Write-Log "ERROR actualizando .env: $($_.Exception.Message)"
@@ -145,11 +161,17 @@ if ($existing) {
     Write-Log "cloudflared ya esta corriendo (PID $($existing.Id)). Salteando."
 } else {
     Write-Log "Iniciando cloudflared quick tunnel..."
-    $cfExePath = $cfExe
-    $cfJob = Start-Job -ScriptBlock {
-        param($exe)
-        & $exe tunnel --url http://localhost:3000 --no-autoupdate --loglevel info 2>&1
-    } -ArgumentList $cfExePath
+    $cfStdout = Join-Path $logDir "cloudflared.stdout.log"
+    $cfStderr = Join-Path $logDir "cloudflared.stderr.log"
+    Remove-Item -LiteralPath $cfStdout, $cfStderr -Force -ErrorAction SilentlyContinue
+    $cfProcess = Start-Process `
+        -FilePath $cfExe `
+        -ArgumentList @("tunnel", "--url", "http://localhost:3000", "--no-autoupdate", "--loglevel", "info") `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $cfStdout `
+        -RedirectStandardError $cfStderr `
+        -PassThru
+    Write-Log "cloudflared iniciado como proceso persistente (PID $($cfProcess.Id))."
 
     # ── Paso 6: Esperar URL del tunel (hasta 90 segundos) ──────────────────
 
@@ -158,12 +180,10 @@ if ($existing) {
     $deadline3 = (Get-Date).AddSeconds(90)
     while ((Get-Date) -lt $deadline3) {
         Start-Sleep -Seconds 3
-        $newLines = @(Receive-Job -Job $cfJob 2>&1)
-        foreach ($line in $newLines) {
-            $str = [string]$line
-            if ($str.Trim()) {
-                Write-Log "  cf> $str"
-                $cfOutput += "$str`n"
+        $cfOutput = ""
+        foreach ($path in @($cfStdout, $cfStderr)) {
+            if (Test-Path -LiteralPath $path) {
+                $cfOutput += [System.IO.File]::ReadAllText($path)
             }
         }
         if ($cfOutput -match 'https://[a-zA-Z0-9\-]+\.(trycloudflare|cfargotunnel)\.com') {
@@ -171,7 +191,7 @@ if ($existing) {
             Write-Log "URL del tunel obtenida: $tunnelUrl"
             break
         }
-        if ($cfJob.State -in @("Failed","Completed","Stopped")) {
+        if ($cfProcess.HasExited) {
             Write-Log "ERROR: cloudflared termino sin entregar URL."
             break
         }
@@ -184,12 +204,12 @@ if ($existing) {
 
     # ── Paso 7: Actualizar CORS y reiniciar backend ────────────────────────
 
-    $ok = Update-EnvCors -TunnelUrl $tunnelUrl
+    $ok = Update-EnvPublicSettings -TunnelUrl $tunnelUrl
     if ($ok) {
-        Write-Log "Reiniciando backend para aplicar CORS..."
-        $r = & docker compose up -d --no-deps --force-recreate backend 2>&1 | Out-String
+        Write-Log "Recreando backend y frontend para aplicar la configuracion publica..."
+        $r = & docker compose up -d --no-deps --force-recreate backend frontend 2>&1 | Out-String
         Write-Log $r.Trim()
-        Write-Log "Backend reiniciado con CORS actualizado."
+        Write-Log "Backend y frontend recreados con configuracion publica."
     }
 
     Write-Log "=========================================="

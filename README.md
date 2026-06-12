@@ -95,7 +95,7 @@ El primer usuario registrado se convierte automáticamente en administrador.
 
 ---
 
-## Publicacion temporal con ngrok
+## Publicacion temporal con Cloudflare Tunnel
 
 Para exponer la plataforma desde este equipo con una URL publica temporal:
 
@@ -103,9 +103,16 @@ Para exponer la plataforma desde este equipo con una URL publica temporal:
 .\abrir_publicador.cmd
 ```
 
-El publicador levanta Docker Compose, abre un tunel ngrok hacia `http://localhost:3000`,
-muestra la URL publica y permite copiarla o detener el tunel desde una ventana simple.
+El publicador levanta Docker Compose, abre un tunel Cloudflare hacia
+`http://localhost:3000`, configura el acceso publico por mismo origen, muestra
+la URL y permite copiarla o detener el tunel desde una ventana simple.
 Los scripts PowerShell de administracion estan en `scripts/`.
+
+La URL `*.trycloudflare.com` cambia en cada sesion. Para la defensa, mantener
+abierta la ventana del publicador mientras se use el acceso remoto.
+
+Ver [docs/DEFENSA_DOS_EQUIPOS.md](docs/DEFENSA_DOS_EQUIPOS.md) para distinguir
+lo que viaja por Git de lo que requiere backup y para el checklist de failover.
 
 ---
 

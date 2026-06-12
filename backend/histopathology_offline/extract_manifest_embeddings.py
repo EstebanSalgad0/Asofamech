@@ -9,6 +9,10 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from histopathology_offline.manifest_dataset import ManifestPatchDataset
+from histopathology_offline.histology_augmentations import (
+    AUGMENTATION_CONFIG,
+    AugmentedManifestPatchDataset,
+)
 
 
 def parse_args():
@@ -21,6 +25,19 @@ def parse_args():
     parser.add_argument("--splits", default="train,val,test")
     parser.add_argument("--log-every", type=int, default=25)
     parser.add_argument("--skip-existing", action="store_true")
+    parser.add_argument(
+        "--augmentation-preset",
+        default="none",
+        choices=["none", "histo_moderate"],
+        help="Augment only the training split; validation and test remain deterministic.",
+    )
+    parser.add_argument(
+        "--augmented-train-views",
+        type=int,
+        default=3,
+        help="Additional deterministic augmented views per training patch.",
+    )
+    parser.add_argument("--seed", type=int, default=20260607)
     return parser.parse_args()
 
 
@@ -78,7 +95,9 @@ def extract_split(torch, model, loader, device: str, split: str, log_every: int)
             )
             features.append(embeddings.cpu())
             labels.append(torch.tensor(batch_labels, dtype=torch.long))
-            records.extend([row.to_dict() for row in batch_rows])
+            records.extend(
+                [row if isinstance(row, dict) else row.to_dict() for row in batch_rows]
+            )
             processed += len(batch_labels)
 
             if log_every > 0 and (batch_index == 1 or batch_index % log_every == 0 or batch_index == total_batches):
@@ -105,6 +124,8 @@ def main():
         raise SystemExit("--batch-size must be greater than zero")
     if args.log_every < 0:
         raise SystemExit("--log-every must be zero or greater")
+    if args.augmented_train_views < 0:
+        raise SystemExit("--augmented-train-views must be zero or greater")
 
     torch, DataLoader, create_model_from_pretrained = load_runtime_dependencies()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -132,7 +153,17 @@ def main():
             print(f"[histopathology] Skipping {split}: {output_path} already exists", flush=True)
             continue
 
-        dataset = ManifestPatchDataset(args.manifest, split=split, transform=preprocess)
+        if args.augmentation_preset == "histo_moderate" and split == "train":
+            dataset = AugmentedManifestPatchDataset(
+                torch,
+                args.manifest,
+                split=split,
+                preprocess=preprocess,
+                augmented_views=args.augmented_train_views,
+                seed=args.seed,
+            )
+        else:
+            dataset = ManifestPatchDataset(args.manifest, split=split, transform=preprocess)
         if len(dataset) == 0:
             print(f"[histopathology] split={split} has no rows; skipping", flush=True)
             continue
@@ -162,6 +193,20 @@ def main():
                     "checkpoint_ref": args.checkpoint_ref,
                     "manifest": str(args.manifest),
                     "preprocess": "CONCH default image preprocess",
+                    "augmentation_preset": (
+                        args.augmentation_preset if split == "train" else "none"
+                    ),
+                    "augmented_train_views": (
+                        args.augmented_train_views
+                        if split == "train" and args.augmentation_preset != "none"
+                        else 0
+                    ),
+                    "augmentation_config": (
+                        AUGMENTATION_CONFIG
+                        if split == "train" and args.augmentation_preset == "histo_moderate"
+                        else None
+                    ),
+                    "seed": args.seed,
                 },
             },
             output_path,

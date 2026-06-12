@@ -27,6 +27,7 @@ RUN if [ "$INSTALL_RAG_NEURAL" = "true" ]; then \
 
 COPY app ./app
 COPY histopathology_offline ./histopathology_offline
+COPY model_registry ./model_registry
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY tests ./tests

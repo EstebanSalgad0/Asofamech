@@ -7,6 +7,7 @@ h5py
 gdown
 scikit-learn
 numpy
+matplotlib
 Pillow
 openslide-bin; platform_system == "Windows"
 git+https://github.com/Mahmoodlab/CONCH.git

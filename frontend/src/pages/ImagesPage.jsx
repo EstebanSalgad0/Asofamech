@@ -236,8 +236,8 @@ export function ImagesPage() {
 
             <div className="images-v2-sidebar-content">
               {canUploadImages && (
-                <div className="images-v2-sidebar-section">
-                  <div className="images-v2-sidebar-title">Cargar imagen</div>
+                <div className="images-v2-sidebar-section" data-testid="image-upload-section">
+                  <div className="images-v2-sidebar-title">Carga directa · Docente/Admin</div>
                   <div className="images-v2-upload-zone">
                     <span className="images-v2-upload-icon">📤</span>
                     <div className="images-v2-upload-text">Arrastra o selecciona</div>
@@ -248,6 +248,11 @@ export function ImagesPage() {
                       onChange={handleFileUpload}
                       className="images-v2-upload-input"
                     />
+                  </div>
+                  <div className="images-v2-upload-warning" data-testid="image-upload-warning">
+                    <strong>WSI grandes:</strong> esta opción sube el archivo completo por el navegador y puede tardar
+                    mucho más. Si la lámina ya está copiada en el servidor, impórtala desde
+                    <span> Configuración → Imágenes</span>.
                   </div>
                 </div>
               )}
@@ -309,7 +314,9 @@ export function ImagesPage() {
                   <span className="images-v2-empty-icon">🔬</span>
                   <div className="images-v2-empty-title">Ninguna imagen seleccionada</div>
                   <p className="images-v2-empty-text">
-                    Selecciona una imagen de la biblioteca o carga una desde tu dispositivo
+                    {canUploadImages
+                      ? "Selecciona una imagen de la biblioteca o carga una desde tu dispositivo"
+                      : "Selecciona una imagen disponible de la biblioteca para comenzar"}
                   </p>
                 </div>
 

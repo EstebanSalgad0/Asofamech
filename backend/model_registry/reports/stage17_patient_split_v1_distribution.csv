@@ -1,0 +1,4 @@
+split,patches,slides,patients,no_metastasico,metastasico,estroma
+train,3434,41,24,1829,1214,391
+val,741,9,5,407,244,90
+test,730,8,5,397,244,89

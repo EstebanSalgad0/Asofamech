@@ -23,7 +23,7 @@ export function LandingPage() {
           <div className="nav-links">
             <a href="#modulos">Módulos</a>
             <a href="#proceso">Cómo funciona</a>
-            <a href="#aval">Aval académico</a>
+            <a href="#aval">Fundamento SCT</a>
             <a href="#contacto">Contacto</a>
           </div>
           <div className="nav-actions">
@@ -60,11 +60,11 @@ export function LandingPage() {
                 <span className="stat-lbl">Módulos<br />integrados</span>
               </div>
               <div className="hero-stat-item">
-                <span className="stat-num">42<sup style={{ fontSize: "14px" }}>+</sup></span>
-                <span className="stat-lbl">Láminas<br />histológicas</span>
+                <span className="stat-num">DZI</span>
+                <span className="stat-lbl">Visor<br />histológico</span>
               </div>
               <div className="hero-stat-item">
-                <span className="stat-num">∞</span>
+                <span className="stat-num">IA</span>
                 <span className="stat-lbl">Casos SCT<br />generables</span>
               </div>
             </div>
@@ -106,7 +106,7 @@ export function LandingPage() {
               <div className="sct-bar-row">
                 <span className="sct-pct">72%</span>
                 <div className="sct-bar"><div className="sct-fill"></div></div>
-                <span className="sct-panel">panel</span>
+                <span className="sct-panel">referencia</span>
               </div>
             </div>
 
@@ -114,9 +114,9 @@ export function LandingPage() {
             <div className="float-card fc-histo">
               <div className="histo-mock"></div>
               <div className="histo-tags">
-                <span className="htag htag-hi">Hepatocito</span>
-                <span className="htag">Necrosis</span>
-                <span className="htag">40×</span>
+                <span className="htag htag-hi">Metastásico</span>
+                <span className="htag">Estroma</span>
+                <span className="htag">ROI</span>
               </div>
             </div>
           </div>
@@ -182,7 +182,7 @@ export function LandingPage() {
                   Test de<br />Concordancia.
                 </h3>
                 <p className="bento-desc">
-                  Compara tu razonamiento con un panel de expertos. Generación con IA, escala Likert, explicación post-ítem.
+                  Contrasta tu razonamiento con una respuesta de referencia. Generación con IA, escala Likert y explicación post-ítem.
                 </p>
                 <div className="mini-scale">
                   <div className="ms-opt">−2</div>
@@ -203,7 +203,7 @@ export function LandingPage() {
                   Histopatología<br />asistida.
                 </h3>
                 <p className="bento-desc">
-                  Visor con zoom DZI hasta 40× y anotaciones IA sobre estructuras detectadas.
+                  Visor DZI con selección de ROI y clasificación educativa de tejido ganglionar asistida por IA.
                 </p>
               </div>
               <div className="histo-thumb"></div>
@@ -214,13 +214,13 @@ export function LandingPage() {
             <article className="bento-card bc-light">
               <div className="stat-col">
                 <div className="bento-num">/ ALCANCE</div>
-                <div className="stat-big"><em className="serif">3</em> universidades</div>
-                <div className="stat-sub">en el piloto académico 2026</div>
+                <div className="stat-big"><em className="serif">1</em> plataforma</div>
+                <div className="stat-sub">para formación médica de pregrado</div>
               </div>
               <div className="stat-col stat-col-border">
                 <div className="bento-num">/ COBERTURA</div>
-                <div className="stat-big">12 <em className="serif">áreas</em></div>
-                <div className="stat-sub">cardio · hepato · neuro · más</div>
+                <div className="stat-big">3 <em className="serif">módulos</em></div>
+                <div className="stat-sub">chat · SCT · histopatología</div>
               </div>
             </article>
           </div>
@@ -260,7 +260,7 @@ export function LandingPage() {
               <span className="step-tag">Avanza</span>
               <div>
                 <h4 className="step-title">Recibes feedback razonado.</h4>
-                <p className="step-desc">Cada ítem trae explicación post-test, comparación con panel experto y ruta sugerida para reforzar áreas débiles.</p>
+                <p className="step-desc">Cada ítem trae explicación post-test, comparación con una respuesta de referencia y una ruta sugerida para reforzar áreas débiles.</p>
               </div>
             </div>
           </div>
@@ -279,8 +279,8 @@ export function LandingPage() {
             <div className="quote-source">
               <div className="quote-av"></div>
               <div>
-                <div className="quote-name">Dr. [Profesor guía]</div>
-                <div className="quote-role">Departamento de Educación Médica · Universidad Autónoma de Chile</div>
+                <div className="quote-name">Fundamento pedagógico del módulo</div>
+                <div className="quote-role">Test de Concordancia de Scripts · ASOFAMECH</div>
               </div>
             </div>
           </div>
@@ -297,7 +297,7 @@ export function LandingPage() {
             </h2>
             <div>
               <p className="cta-desc">
-                Acceso libre para estudiantes de pregrado de Medicina con correo institucional verificado.
+                Acceso para estudiantes de pregrado de Medicina mediante una cuenta aprobada por la administración de la plataforma.
               </p>
               <div className="cta-buttons">
                 <Link to="/auth?register=true" className="btn btn-primary btn-lg">Crear cuenta →</Link>
@@ -325,26 +325,26 @@ export function LandingPage() {
               <ul className="footer-links">
                 <li>Módulos</li>
                 <li>Cómo funciona</li>
-                <li>Estado del sistema</li>
-                <li>Roadmap</li>
+                <li>Fundamento SCT</li>
+                <li>Acceso por roles</li>
               </ul>
             </div>
             <div>
               <h5 className="footer-col-title">Recursos</h5>
               <ul className="footer-links">
-                <li>Documentación</li>
-                <li>Bibliografía</li>
-                <li>FAQ</li>
-                <li>Contacto</li>
+                <li>Asistente IA</li>
+                <li>Tests SCT</li>
+                <li>Visor histopatológico</li>
+                <li>Casos clínicos</li>
               </ul>
             </div>
             <div>
               <h5 className="footer-col-title">Institucional</h5>
               <ul className="footer-links">
-                <li>Aval académico</li>
-                <li>Términos</li>
-                <li>Privacidad</li>
-                <li>Acceso</li>
+                <li>Trabajo de título</li>
+                <li>Uso educativo</li>
+                <li>Universidad Autónoma de Chile</li>
+                <li>Edición 2026</li>
               </ul>
             </div>
           </div>

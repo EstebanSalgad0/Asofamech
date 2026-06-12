@@ -7,7 +7,22 @@ $projectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pat
 $script:currentJob = $null
 $script:currentJobName = ""
 $script:publicUrl = ""
-$script:ngrokProcess = $null
+$script:cfProcess = $null
+$script:cfLogFile = "$env:TEMP\cf_tunnel.log"
+$script:cfExe = "cloudflared"
+
+foreach ($candidate in @(
+    "C:\Program Files\cloudflared\cloudflared.exe",
+    "C:\Program Files\cloudflare\cloudflared\cloudflared.exe",
+    "C:\Program Files\Cloudflare\cloudflared.exe",
+    "C:\Program Files\Cloudflare\cloudflared\cloudflared.exe",
+    "C:\Program Files (x86)\cloudflared\cloudflared.exe"
+)) {
+    if (Test-Path -LiteralPath $candidate) {
+        $script:cfExe = $candidate
+        break
+    }
+}
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -62,14 +77,66 @@ function Test-CommandAvailable {
     return $result.ExitCode -eq 0
 }
 
-function Get-NgrokUrl {
-    try {
-        $payload = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -TimeoutSec 2
-        $tunnel = $payload.tunnels | Where-Object { $_.proto -eq "https" } | Select-Object -First 1
-        if ($tunnel.public_url) { return [string]$tunnel.public_url }
-    } catch {
-        return ""
+function Test-CloudflaredAvailable {
+    if ($script:cfExe -ne "cloudflared") { return $true }
+    return Test-CommandAvailable "cloudflared"
+}
+
+function Update-EnvPublicSettings {
+    param([string]$TunnelUrl)
+    $envPath = Join-Path $projectDir ".env"
+    $localOrigins = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+    $settings = [ordered]@{
+        CORS_ORIGINS = "$localOrigins,$TunnelUrl"
+        ASOFAMECH_PLATFORM_URL = "$TunnelUrl/auth"
+        FRONTEND_API_BASE = ""
     }
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    try {
+        $lines = if (Test-Path -LiteralPath $envPath) {
+            [System.IO.File]::ReadAllLines($envPath)
+        } else {
+            @()
+        }
+        $seen = @{}
+        $result = [System.Collections.Generic.List[string]]::new()
+        foreach ($line in $lines) {
+            $matched = $false
+            foreach ($key in $settings.Keys) {
+                if ($line -match "^$key=") {
+                    $result.Add("$key=$($settings[$key])")
+                    $seen[$key] = $true
+                    $matched = $true
+                    break
+                }
+            }
+            if (-not $matched) { $result.Add($line) }
+        }
+        foreach ($key in $settings.Keys) {
+            if (-not $seen.ContainsKey($key)) {
+                $result.Add("$key=$($settings[$key])")
+            }
+        }
+        [System.IO.File]::WriteAllLines($envPath, $result, $utf8NoBom)
+        Append-Log "Configuracion publica aplicada: API por mismo origen y enlaces en $TunnelUrl"
+        return $true
+    } catch {
+        Append-Log "No se pudo actualizar .env: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Get-CloudflaredUrl {
+    if ($script:publicUrl) { return $script:publicUrl }
+    if (-not (Test-Path $script:cfLogFile)) { return "" }
+    try {
+        $lines = Get-Content $script:cfLogFile -ErrorAction SilentlyContinue
+        foreach ($line in $lines) {
+            if ($line -match "https://[a-z0-9\-]+\.trycloudflare\.com") {
+                return $Matches[0]
+            }
+        }
+    } catch {}
     return ""
 }
 
@@ -80,7 +147,7 @@ function Refresh-Status {
         $running = @($compose.StdOut -split "`r?`n" | Where-Object { $_.Trim() -ne "" })
     }
 
-    $url = Get-NgrokUrl
+    $url = Get-CloudflaredUrl
     if ($url) {
         $script:publicUrl = $url
         $publicText.Text = $url
@@ -141,7 +208,7 @@ $title.Size = New-Object System.Drawing.Size(520, 36)
 $form.Controls.Add($title)
 
 $subtitle = New-Object System.Windows.Forms.Label
-$subtitle.Text = "Levanta Docker Compose y publica el puerto 3000 con ngrok."
+$subtitle.Text = "Levanta Docker Compose y publica el puerto 3000 con Cloudflare."
 $subtitle.Font = New-Object System.Drawing.Font("Segoe UI", 10)
 $subtitle.ForeColor = [System.Drawing.Color]::FromArgb(91, 99, 112)
 $subtitle.Location = New-Object System.Drawing.Point(27, 56)
@@ -213,7 +280,7 @@ $btnStart.Size = New-Object System.Drawing.Size(150, 34)
 $form.Controls.Add($btnStart)
 
 $btnPublish = New-Object System.Windows.Forms.Button
-$btnPublish.Text = "Publicar con ngrok"
+$btnPublish.Text = "Publicar con Cloudflare"
 $btnPublish.Location = New-Object System.Drawing.Point(184, 256)
 $btnPublish.Size = New-Object System.Drawing.Size(150, 34)
 $form.Controls.Add($btnPublish)
@@ -237,7 +304,7 @@ $btnOpenPublic.Size = New-Object System.Drawing.Size(110, 34)
 $form.Controls.Add($btnOpenPublic)
 
 $btnStopNgrok = New-Object System.Windows.Forms.Button
-$btnStopNgrok.Text = "Detener ngrok"
+$btnStopNgrok.Text = "Detener tunel"
 $btnStopNgrok.Location = New-Object System.Drawing.Point(694, 256)
 $btnStopNgrok.Size = New-Object System.Drawing.Size(120, 34)
 $form.Controls.Add($btnStopNgrok)
@@ -317,29 +384,54 @@ $btnStart.Add_Click({
 })
 
 $btnPublish.Add_Click({
-    if (-not (Test-CommandAvailable "ngrok")) {
-        Append-Log "ngrok no esta disponible en PATH."
+    if (-not (Test-CloudflaredAvailable)) {
+        Append-Log "cloudflared no esta disponible en PATH."
         return
     }
-    $existing = Get-NgrokUrl
+    $existing = Get-CloudflaredUrl
     if ($existing) {
         $script:publicUrl = $existing
         $publicText.Text = $existing
         Append-Log "Ya existe un tunel activo: $existing"
+        if (Update-EnvPublicSettings -TunnelUrl $existing) {
+            Invoke-CommandText "docker compose up -d --no-deps --force-recreate backend frontend" | Out-Null
+        }
         Refresh-Status
         return
     }
-    Append-Log "Iniciando ngrok hacia http://localhost:3000"
+    Append-Log "Iniciando cloudflared tunnel hacia http://localhost:3000"
+    if (Test-Path $script:cfLogFile) { Remove-Item $script:cfLogFile -Force }
     try {
-        $script:ngrokProcess = Start-Process -FilePath "ngrok" -ArgumentList "http 3000 --log=stdout" -WindowStyle Hidden -PassThru
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $script:cfExe
+        $psi.Arguments = "tunnel --url http://localhost:3000 --no-autoupdate"
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+        $script:cfProcess = New-Object System.Diagnostics.Process
+        $script:cfProcess.StartInfo = $psi
+        $outputSb = [System.Text.StringBuilder]::new()
+        $script:cfProcess.add_OutputDataReceived({
+            param($s, $e)
+            if ($e.Data) { [void]$outputSb.AppendLine($e.Data); [System.IO.File]::AppendAllText($script:cfLogFile, $e.Data + "`n") }
+        })
+        $script:cfProcess.add_ErrorDataReceived({
+            param($s, $e)
+            if ($e.Data) { [void]$outputSb.AppendLine($e.Data); [System.IO.File]::AppendAllText($script:cfLogFile, $e.Data + "`n") }
+        })
+        [void]$script:cfProcess.Start()
+        $script:cfProcess.BeginOutputReadLine()
+        $script:cfProcess.BeginErrorReadLine()
     } catch {
-        Append-Log "No se pudo iniciar ngrok: $($_.Exception.Message)"
+        Append-Log "No se pudo iniciar cloudflared: $($_.Exception.Message)"
         return
     }
-    $deadline = (Get-Date).AddSeconds(35)
+    $deadline = (Get-Date).AddSeconds(40)
+    $url = ""
     do {
-        Start-Sleep -Seconds 1
-        $url = Get-NgrokUrl
+        Start-Sleep -Milliseconds 800
+        $url = Get-CloudflaredUrl
         if ($url) { break }
         [System.Windows.Forms.Application]::DoEvents()
     } while ((Get-Date) -lt $deadline)
@@ -347,20 +439,28 @@ $btnPublish.Add_Click({
         $script:publicUrl = $url
         $publicText.Text = $url
         Append-Log "Tunel publico activo: $url"
+        if (Update-EnvPublicSettings -TunnelUrl $url) {
+            $restart = Invoke-CommandText "docker compose up -d --no-deps --force-recreate backend frontend"
+            if ($restart.ExitCode -eq 0) {
+                Append-Log "Backend y frontend recreados con la configuracion publica."
+            } else {
+                Append-Log "ADVERTENCIA: no se pudieron recrear backend/frontend automaticamente."
+            }
+        }
         try {
-            $health = Invoke-RestMethod -Uri "$url/health" -Headers @{ "ngrok-skip-browser-warning" = "1" } -TimeoutSec 10
+            $health = Invoke-RestMethod -Uri "$url/health" -TimeoutSec 10
             Append-Log "Health publico: $($health.status)"
         } catch {
-            Append-Log "Tunel creado, pero health publico no respondio aun: $($_.Exception.Message)"
+            Append-Log "Tunel creado. Health publico no respondio aun (normal al inicio)."
         }
     } else {
-        Append-Log "ngrok no entrego URL. Revisa si tu cuenta/token de ngrok esta configurado."
+        Append-Log "cloudflared no entrego URL en el tiempo esperado. Revisa que el puerto 3000 este activo."
     }
     Refresh-Status
 })
 
 $btnCopy.Add_Click({
-    $url = if ($script:publicUrl) { $script:publicUrl } else { Get-NgrokUrl }
+    $url = if ($script:publicUrl) { $script:publicUrl } else { Get-CloudflaredUrl }
     if (-not $url) {
         Append-Log "No hay URL publica para copiar."
         return
@@ -374,7 +474,7 @@ $btnOpenLocal.Add_Click({
 })
 
 $btnOpenPublic.Add_Click({
-    $url = if ($script:publicUrl) { $script:publicUrl } else { Get-NgrokUrl }
+    $url = if ($script:publicUrl) { $script:publicUrl } else { Get-CloudflaredUrl }
     if (-not $url) {
         Append-Log "No hay URL publica activa."
         return
@@ -383,8 +483,13 @@ $btnOpenPublic.Add_Click({
 })
 
 $btnStopNgrok.Add_Click({
-    Append-Log "Deteniendo procesos ngrok..."
-    Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Append-Log "Deteniendo tunel cloudflared..."
+    if ($script:cfProcess -and -not $script:cfProcess.HasExited) {
+        $script:cfProcess.Kill()
+        $script:cfProcess = $null
+    }
+    Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    if (Test-Path $script:cfLogFile) { Remove-Item $script:cfLogFile -Force -ErrorAction SilentlyContinue }
     $script:publicUrl = ""
     $publicText.Text = "Sin tunel activo"
     Refresh-Status
@@ -397,8 +502,18 @@ $btnRefresh.Add_Click({
 
 $form.Add_Shown({
     Append-Log "Directorio del proyecto: $projectDir"
-    Append-Log "Orden sugerido: 1) Levantar / reconstruir, 2) Publicar con ngrok, 3) Copiar URL."
+    Append-Log "Orden sugerido: 1) Levantar / reconstruir, 2) Publicar con Cloudflare, 3) Copiar URL."
     Refresh-Status
+})
+
+$form.Add_FormClosing({
+    if ($script:cfProcess -and -not $script:cfProcess.HasExited) {
+        try { $script:cfProcess.Kill() } catch { }
+    }
+    Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    if (Test-Path $script:cfLogFile) {
+        Remove-Item $script:cfLogFile -Force -ErrorAction SilentlyContinue
+    }
 })
 
 [void]$form.ShowDialog()

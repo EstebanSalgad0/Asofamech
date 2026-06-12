@@ -948,7 +948,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
             </span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', color: '#94a3b8', flexShrink: 0, userSelect: 'none' }}>
               <input type="checkbox" checked={showHeatmapOverlay} onChange={(e) => setShowHeatmapOverlay(e.target.checked)} style={{ accentColor: '#38bdf8' }} aria-label="Mostrar heatmap" data-testid="heatmap-toggle" />
-              <span>Mostrar heatmap</span>
+              <span>Mostrar mapa por tiles</span>
             </label>
           </div>
         )}
@@ -1164,7 +1164,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
               {heatmap && !scanningHeatmap && (
                 <div style={{ border: '1px solid #bfdbfe', borderRadius: 10, padding: 12, background: '#eff6ff' }} data-testid="heatmap-summary">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={{ fontWeight: 700, color: '#1e40af', fontSize: 12 }}>Mapa ROI 1</div>
+                    <div style={{ fontWeight: 700, color: '#1e40af', fontSize: 12 }}>Mapa de probabilidades por tiles</div>
                     <span style={{ fontSize: 10, color: '#6b7280' }}>{heatmapSource === 'prepared' ? 'preparado' : heatmapSource === 'saved' ? 'guardado' : 'sesión'}</span>
                   </div>
                   {heatmap.educational?.label && (
@@ -1185,6 +1185,11 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                     <div>Tiles: {heatmap.tile_count} · tamaño {heatmap.tile_size}px</div>
                     <div>Metastásicos: {heatmap.summary?.classified_metastatic_tiles ?? 0}</div>
                     <div>P(met.) máx: {formatPercent(heatmap.summary?.max_tumor_score)}</div>
+                    {heatmap.summary?.probability_aggregation && (
+                      <div>
+                        P(met.) top-{heatmap.summary.probability_aggregation.top_k}: {formatPercent(heatmap.summary.probability_aggregation.top_k_mean_tumor_probability)}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
                     <button onClick={focusBestHeatmapTile} disabled={!heatmap.summary?.best_tile?.roi} style={{ border: '1px solid #bfdbfe', background: '#fff', color: '#1e40af', borderRadius: 7, padding: '6px 0', cursor: heatmap.summary?.best_tile?.roi ? 'pointer' : 'not-allowed', fontSize: 11, fontWeight: 700 }}>
@@ -1203,6 +1208,9 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                         <span style={{ width: 8, height: 8, background: c, borderRadius: 2, display: 'inline-block' }} />{l}
                       </span>
                     ))}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#6b7280', marginTop: 8, lineHeight: 1.35 }}>
+                    Grilla de probabilidades por tiles para apoyo educativo. No es Grad-CAM, no explica causalmente la predicción y no constituye diagnóstico.
                   </div>
                 </div>
               )}

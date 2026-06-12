@@ -1,0 +1,25 @@
+{
+  "active_default": {
+    "name": "tri_head_camelyon17_stage16_sane_tuned_v1",
+    "path": "/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage16_sane_tuned_v1.pt",
+    "status": "baseline_productive"
+  },
+  "candidate": {
+    "name": "tri_head_stage17_variant_c_augmented",
+    "path": "/app/model_registry/checkpoints/tri_head_stage17_variant_c_augmented.pt",
+    "status": "technical_candidate_not_activated",
+    "sha256": "1984A6A5EAAB068166098BEF5CC4833F0355C7B2C4ED9986F2B9DBF26B931080",
+    "bytes": 533055,
+    "architecture": "CONCH conch_ViT-B-16 frozen visual encoder plus MLP 512-256-3",
+    "classes": [
+      "no_metastasico",
+      "metastasico",
+      "estroma"
+    ],
+    "split": "patient-grouped 70/15/15, seed 20260607",
+    "recommended_tumor_operating_threshold": 0.35,
+    "checkpoint_temperature": 1.096672773361206,
+    "enable_checkpoint_calibration_by_default": false,
+    "scope": "experimental educational support; not clinical validation"
+  }
+}

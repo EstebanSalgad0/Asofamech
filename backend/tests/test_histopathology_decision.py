@@ -109,6 +109,45 @@ class HistopathologyDecisionTestCase(unittest.TestCase):
         self.assertEqual(decision["status"], "roi_no_evaluable")
         self.assertEqual(decision["predicted_class"], "roi_no_evaluable")
 
+    def test_tumor_operating_threshold_can_override_multiclass_argmax(self):
+        raw = prediction(
+            "no_metastasico",
+            {
+                "no_metastasico": 0.40,
+                "metastasico": 0.36,
+                "estroma": 0.24,
+            },
+        )
+
+        decision = _decision_from_prediction(
+            raw,
+            confidence_threshold=0.90,
+            tumor_operating_threshold=0.35,
+        )
+
+        self.assertEqual(decision["status"], "clasificado")
+        self.assertEqual(decision["predicted_class"], "metastasico")
+        self.assertEqual(decision["prediction"]["model_predicted_class"], "no_metastasico")
+
+    def test_argmax_tumor_below_operating_threshold_abstains(self):
+        raw = prediction(
+            "metastasico",
+            {
+                "no_metastasico": 0.33,
+                "metastasico": 0.34,
+                "estroma": 0.33,
+            },
+        )
+
+        decision = _decision_from_prediction(
+            raw,
+            confidence_threshold=0.90,
+            tumor_operating_threshold=0.35,
+        )
+
+        self.assertEqual(decision["status"], "resultado_incierto")
+        self.assertEqual(decision["predicted_class"], "incierto")
+
 
 if __name__ == "__main__":
     unittest.main()

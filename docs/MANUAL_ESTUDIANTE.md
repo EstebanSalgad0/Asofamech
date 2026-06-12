@@ -109,6 +109,8 @@ Este modulo permite explorar imagenes de cortes histologicos en alta resolucion 
 2. La pagina muestra el listado de imagenes cargadas por el equipo docente.
 3. Hacer clic en una imagen para abrirla en el visor.
 
+El estudiante puede consultar y analizar las imagenes disponibles, pero no puede subir, importar ni eliminar laminas histopatologicas. Estas acciones son exclusivas de docentes y administradores.
+
 ### Navegar en el visor
 
 - **Zoom:** usar la rueda del raton o los botones de zoom en pantalla.

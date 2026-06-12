@@ -1,0 +1,125 @@
+{
+  "method": "deterministic slide-sorted tile bags",
+  "bag_size": 8,
+  "validation_bags": 97,
+  "test_bags": 94,
+  "strategies": {
+    "mean": {
+      "validation_selected_threshold": {
+        "threshold": 0.2,
+        "tp": 33,
+        "fp": 3,
+        "fn": 3,
+        "tn": 58,
+        "precision": 0.9166666666666666,
+        "sensitivity": 0.9166666666666666,
+        "specificity": 0.9508196721311475,
+        "f1": 0.9166666666666666,
+        "balanced_accuracy": 0.9337431693989071,
+        "selection_set": "precision_constraint",
+        "minimum_precision": 0.85,
+        "selected_on": "validation"
+      },
+      "test_locked_threshold_metrics": {
+        "threshold": 0.2,
+        "tp": 35,
+        "fp": 4,
+        "fn": 3,
+        "tn": 52,
+        "precision": 0.8974358974358975,
+        "sensitivity": 0.9210526315789473,
+        "specificity": 0.9285714285714286,
+        "f1": 0.9090909090909091,
+        "balanced_accuracy": 0.924812030075188
+      }
+    },
+    "max": {
+      "validation_selected_threshold": {
+        "threshold": 0.8,
+        "tp": 32,
+        "fp": 0,
+        "fn": 4,
+        "tn": 61,
+        "precision": 1.0,
+        "sensitivity": 0.8888888888888888,
+        "specificity": 1.0,
+        "f1": 0.9411764705882353,
+        "balanced_accuracy": 0.9444444444444444,
+        "selection_set": "precision_constraint",
+        "minimum_precision": 0.85,
+        "selected_on": "validation"
+      },
+      "test_locked_threshold_metrics": {
+        "threshold": 0.8,
+        "tp": 28,
+        "fp": 1,
+        "fn": 10,
+        "tn": 55,
+        "precision": 0.9655172413793104,
+        "sensitivity": 0.7368421052631579,
+        "specificity": 0.9821428571428571,
+        "f1": 0.835820895522388,
+        "balanced_accuracy": 0.8594924812030075
+      }
+    },
+    "top_k_mean": {
+      "validation_selected_threshold": {
+        "threshold": 0.45,
+        "tp": 34,
+        "fp": 3,
+        "fn": 2,
+        "tn": 58,
+        "precision": 0.918918918918919,
+        "sensitivity": 0.9444444444444444,
+        "specificity": 0.9508196721311475,
+        "f1": 0.9315068493150684,
+        "balanced_accuracy": 0.947632058287796,
+        "selection_set": "precision_constraint",
+        "minimum_precision": 0.85,
+        "selected_on": "validation"
+      },
+      "test_locked_threshold_metrics": {
+        "threshold": 0.45,
+        "tp": 34,
+        "fp": 2,
+        "fn": 4,
+        "tn": 54,
+        "precision": 0.9444444444444444,
+        "sensitivity": 0.8947368421052632,
+        "specificity": 0.9642857142857143,
+        "f1": 0.918918918918919,
+        "balanced_accuracy": 0.9295112781954887
+      }
+    },
+    "positive_fraction": {
+      "validation_selected_threshold": {
+        "threshold": 0.3,
+        "tp": 27,
+        "fp": 1,
+        "fn": 9,
+        "tn": 60,
+        "precision": 0.9642857142857143,
+        "sensitivity": 0.75,
+        "specificity": 0.9836065573770492,
+        "f1": 0.8437499999999999,
+        "balanced_accuracy": 0.8668032786885246,
+        "selection_set": "precision_constraint",
+        "minimum_precision": 0.85,
+        "selected_on": "validation"
+      },
+      "test_locked_threshold_metrics": {
+        "threshold": 0.3,
+        "tp": 30,
+        "fp": 1,
+        "fn": 8,
+        "tn": 55,
+        "precision": 0.967741935483871,
+        "sensitivity": 0.7894736842105263,
+        "specificity": 0.9821428571428571,
+        "f1": 0.8695652173913043,
+        "balanced_accuracy": 0.8858082706766917
+      }
+    }
+  },
+  "limitation": "Proxy only: bags are built from sampled patches ordered within each slide. They are not contiguous user-selected ROIs and have no expert ROI-level labels."
+}
