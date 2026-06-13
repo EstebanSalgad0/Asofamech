@@ -346,6 +346,7 @@ export function CasesPage() {
                   onClick={() => openDetail(c)}
                   role="button"
                   tabIndex={0}
+                  data-testid={`case-card-${c.id}`}
                   onKeyDown={(e) => e.key === "Enter" && openDetail(c)}
                 >
                   <div className="cases-card-top">
@@ -430,7 +431,11 @@ export function CasesPage() {
                   {selectedCase.image_id && (
                     <button
                       className="cases-resource-btn"
-                      onClick={() => { setShowDetail(false); navigate("/dashboard/images"); }}
+                      data-testid="case-linked-image"
+                      onClick={() => {
+                        setShowDetail(false);
+                        navigate(`/dashboard/images?image=${selectedCase.image_id}`);
+                      }}
                     >
                       Ver imagen histopatológica →
                     </button>
@@ -438,7 +443,11 @@ export function CasesPage() {
                   {selectedCase.sct_test_id && (
                     <button
                       className="cases-resource-btn"
-                      onClick={() => { setShowDetail(false); navigate("/dashboard/sct"); }}
+                      data-testid="case-linked-sct"
+                      onClick={() => {
+                        setShowDetail(false);
+                        navigate(`/dashboard/sct?test=${selectedCase.sct_test_id}`);
+                      }}
                     >
                       Resolver test SCT asociado →
                     </button>

@@ -248,6 +248,8 @@ export const clinicalCaseFixture = {
   body: "Paciente con fiebre persistente y estudio etiologico.",
   difficulty: "pregrado",
   topic: "infectologia",
+  image_id: dziImage.id,
+  sct_test_id: publishedSct.id,
   status: "published",
   created_at: "2026-05-24T08:00:00.000Z",
 };

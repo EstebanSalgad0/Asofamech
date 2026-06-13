@@ -260,7 +260,9 @@ export function DashboardPage() {
   const latestSctScore = dashStats?.sct?.latest?.total_items
     ? Math.round((dashStats.sct.latest.correct_count / dashStats.sct.latest.total_items) * 100)
     : null;
-  const studyLabel  = formatStudyTime(metrics.studyMs);
+  const studyMsTotal = dashStats?.study?.total_ms ?? metrics.studyMs;
+  const studyMsWeek  = dashStats?.study?.week_ms  ?? 0;
+  const studyLabel   = formatStudyTime(studyMsTotal);
   const testsPassedPct = latestSctScore ?? (metrics.testsTotal > 0 ? Math.round((metrics.testsPassed / metrics.testsTotal) * 100) : null);
 
   const latestChat  = activity.find(i => i.type === "chat");
@@ -283,7 +285,7 @@ export function DashboardPage() {
       id: "study",
       label: "TIEMPO DE ESTUDIO",
       value: studyLabel,
-      sub: metrics.studyMs > 0 ? "sesión activa" : "empieza a estudiar",
+      sub: studyMsWeek >= 60_000 ? `+${formatStudyTime(studyMsWeek)} esta semana` : "sesión activa",
       color: "#D4A017",
       daily: null,
     },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { OpenSeadragonViewer } from "../components/OpenSeadragonViewer";
 import { MedicalImageViewer } from "../components/MedicalImageViewer";
 import { startSession, flushSession, pushActivity } from "../tracker";
@@ -60,6 +60,8 @@ function formatFecha(iso) {
 
 export function ImagesPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedImageId = Number.parseInt(searchParams.get("image") || "", 10);
   const [user, setUser] = useState(null);
   const [role, setRole] = useState("Estudiante");
   const [imageLibrary, setImageLibrary] = useState([]);
@@ -83,7 +85,7 @@ export function ImagesPage() {
       setUser(JSON.parse(userData));
       setRole(getStoredRole());
       startSession();
-      loadImageLibrary();
+      loadImageLibrary(Number.isInteger(requestedImageId) && requestedImageId > 0 ? requestedImageId : null);
     }
     const handleUnload = () => flushSession();
     window.addEventListener("beforeunload", handleUnload);
@@ -91,7 +93,7 @@ export function ImagesPage() {
       flushSession();
       window.removeEventListener("beforeunload", handleUnload);
     };
-  }, [navigate]);
+  }, [navigate, requestedImageId]);
 
   const loadRoiHistory = async () => {
     setHistoryLoading(true);
@@ -122,13 +124,17 @@ export function ImagesPage() {
     }
   };
 
-  const loadImageLibrary = async () => {
+  const loadImageLibrary = async (initialImageId = null) => {
     try {
       setLoading(true);
       const response = await authFetch("/api/medical-images/list");
       if (response.ok) {
         const data = await response.json();
         setImageLibrary(data);
+        if (initialImageId) {
+          const requestedImage = data.find((image) => Number(image.id) === initialImageId);
+          if (requestedImage) handleImageSelect(requestedImage);
+        }
       }
     } catch (error) {
       console.error("Error cargando biblioteca:", error);

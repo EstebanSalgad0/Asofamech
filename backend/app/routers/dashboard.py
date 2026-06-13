@@ -4,9 +4,15 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from pydantic import BaseModel
+
 from ..auth import get_current_user
 from ..db import get_db
-from ..models import ChatLog, HistopathologySession, SCTAttempt, User
+from ..models import ChatLog, HistopathologySession, SCTAttempt, StudySession, User
+
+
+class _StudySessionPayload(BaseModel):
+    duration_ms: int
 
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -20,6 +26,18 @@ def _daily_counts(db, query_fn, days=7):
         d_end = d_start + timedelta(days=1)
         result.append(query_fn(d_start, d_end))
     return result
+
+
+@router.post("/study-session", status_code=204)
+def record_study_session(
+    payload: _StudySessionPayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if payload.duration_ms < 500:
+        return
+    db.add(StudySession(user_id=current_user.id, duration_ms=payload.duration_ms))
+    db.commit()
 
 
 @router.get("/stats")
@@ -65,9 +83,18 @@ def get_stats(current_user: User = Depends(get_current_user), db: Session = Depe
         .scalar() or 0
     ))
 
+    study_total_ms = db.query(func.sum(StudySession.duration_ms)).filter(
+        StudySession.user_id == current_user.id
+    ).scalar() or 0
+    study_week_ms = db.query(func.sum(StudySession.duration_ms)).filter(
+        StudySession.user_id == current_user.id,
+        StudySession.recorded_at >= week_ago,
+    ).scalar() or 0
+
     return {
         "chat":  {"total": chat_total,  "week": chat_week,  "daily": chat_daily},
         "histo": {"total": histo_total, "week": histo_week, "daily": histo_daily},
+        "study": {"total_ms": study_total_ms, "week_ms": study_week_ms},
         "sct": {
             "total": sct_total,
             "week": sct_week,

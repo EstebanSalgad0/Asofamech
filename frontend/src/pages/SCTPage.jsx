@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, submitSCTAttempt, listMyAttempts, listAllAttempts, updateSCTTest } from "../api";
 import { startSession, flushSession, trackTestCompleted, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
@@ -17,6 +17,7 @@ const AREA_COLORS = {
   "Neurología":      "#a78bfa",
   "Gastroenterología":"#D4A017",
   "Hematología":     "#f472b6",
+  "Oncología":       "#dc2626",
   "Neumología":      "#60a5fa",
 };
 
@@ -42,7 +43,7 @@ function primaryAreaFromFocus(focus = "") {
 
 const MEDICAL_AREAS = [
   "Cardiología", "Nefrología", "Endocrinología", "Infectología",
-  "Neurología", "Gastroenterología", "Hematología", "Neumología",
+  "Neurología", "Gastroenterología", "Hematología", "Oncología", "Neumología",
 ];
 
 const DIFFICULTY_OPTIONS = [
@@ -164,6 +165,9 @@ function Sparkline({ points = [], color = "#C41E3A" }) {
 
 export function SCTPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedTestId = Number.parseInt(searchParams.get("test") || "", 10);
+  const openedRequestedTestRef = useRef(null);
   const savedRef = useRef(null);
   const [user, setUser] = useState(null);
   const [role, setRole] = useState("Estudiante");
@@ -531,6 +535,19 @@ export function SCTPage() {
       showToast("Error al cargar el test.", "error");
     }
   };
+
+  useEffect(() => {
+    if (
+      !user
+      || !Number.isInteger(requestedTestId)
+      || requestedTestId <= 0
+      || openedRequestedTestRef.current === requestedTestId
+    ) {
+      return;
+    }
+    openedRequestedTestRef.current = requestedTestId;
+    handleLoadTest(requestedTestId);
+  }, [requestedTestId, user]);
 
   const handleBackToConfig = () => {
     if (window.confirm("¿Estás seguro? Se perderá el progreso actual.")) {

@@ -156,6 +156,16 @@ class HeatmapJob(Base):
     user = relationship("User")
 
 
+class StudySession(Base):
+    __tablename__ = "study_sessions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    duration_ms = Column(BigInteger, nullable=False)
+    recorded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User")
+
+
 class SCTAttempt(Base):
     __tablename__ = "sct_attempts"
     id = Column(Integer, primary_key=True, index=True)

@@ -8,7 +8,7 @@
  *   asofamech_streak     – { count, lastDate, weekActivity: { "YYYY-MM-DD": true } }
  */
 
-import { userStorageKey } from "./authClient";
+import { API_BASE, getAuthToken, userStorageKey } from "./authClient";
 
 const METRICS_KEY = "asofamech_metrics";
 const ACTIVITY_KEY = "asofamech_activity";
@@ -66,22 +66,32 @@ export function flushSession() {
   const start = parseInt(localStorage.getItem(key), 10);
   if (!start) return;
   const elapsed = Date.now() - start;
-  if (elapsed > 500) {                       // ignore trivial durations
+  if (elapsed > 500) {
     const m = loadMetrics();
     m.studyMs += elapsed;
     saveMetrics(m);
+    const token = getAuthToken();
+    if (token) {
+      fetch(`${API_BASE}/api/dashboard/study-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ duration_ms: elapsed }),
+        keepalive: true,
+      }).catch(() => {});
+    }
   }
   localStorage.removeItem(key);
 }
 
 /**
  * Format accumulated study milliseconds as a human-friendly string.
- * e.g. "0.2h", "3.5h", "12.1h"
+ * e.g. "0 min", "45 min", "3.5h"
  */
 export function formatStudyTime(ms) {
-  const hours = ms / 3_600_000;
-  if (hours < 0.1) return "0h";
-  return hours.toFixed(1) + "h";
+  if (ms < 60_000) return "0 min";
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${mins} min`;
+  return (ms / 3_600_000).toFixed(1) + "h";
 }
 
 // ── Activity feed ────────────────────────────────────────

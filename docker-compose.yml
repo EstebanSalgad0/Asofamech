@@ -80,6 +80,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend/app:/app/app
+      - ./backend/alembic/versions:/app/alembic/versions
       - ./backend/artifacts:/app/artifacts
       - ./backend/data:/app/data
       - ./backend/uploads:/app/uploads
@@ -109,8 +110,6 @@ services:
     image: ollama/ollama:latest
     container_name: asofamech_ollama
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     deploy:

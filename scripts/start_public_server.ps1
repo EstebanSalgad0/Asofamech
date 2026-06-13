@@ -2,12 +2,13 @@ param(
     [switch]$NoBuild
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $projectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $script:currentJob = $null
 $script:currentJobName = ""
 $script:publicUrl = ""
 $script:cfProcess = $null
+$script:inDoEvents = $false
 $script:cfLogFile = "$env:TEMP\cf_tunnel.log"
 $script:cfExe = "cloudflared"
 
@@ -34,7 +35,10 @@ function Append-Log {
     $logBox.AppendText("[$stamp] $Message`r`n")
     $logBox.SelectionStart = $logBox.Text.Length
     $logBox.ScrollToCaret()
-    [System.Windows.Forms.Application]::DoEvents()
+    if (-not $script:inDoEvents) {
+        $script:inDoEvents = $true
+        try { [System.Windows.Forms.Application]::DoEvents() } finally { $script:inDoEvents = $false }
+    }
 }
 
 function Set-Status {
@@ -128,15 +132,22 @@ function Update-EnvPublicSettings {
 
 function Get-CloudflaredUrl {
     if ($script:publicUrl) { return $script:publicUrl }
-    if (-not (Test-Path $script:cfLogFile)) { return "" }
-    try {
-        $lines = Get-Content $script:cfLogFile -ErrorAction SilentlyContinue
-        foreach ($line in $lines) {
-            if ($line -match "https://[a-z0-9\-]+\.trycloudflare\.com") {
-                return $Matches[0]
+    $files = @($script:cfLogFile, "$env:TEMP\cf_tunnel_out.log") | Where-Object { Test-Path $_ -ErrorAction SilentlyContinue }
+    foreach ($f in $files) {
+        try {
+            $fs = [System.IO.File]::Open($f, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+            $reader = New-Object System.IO.StreamReader($fs)
+            try {
+                $content = $reader.ReadToEnd()
+                if ($content -match "https://[a-z0-9\-]+\.trycloudflare\.com") {
+                    return $Matches[0]
+                }
+            } finally {
+                $reader.Dispose()
+                $fs.Dispose()
             }
-        }
-    } catch {}
+        } catch { }
+    }
     return ""
 }
 
@@ -331,24 +342,31 @@ $form.Controls.Add($logBox)
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 800
 $timer.Add_Tick({
-    if (-not $script:currentJob) { return }
-    $output = Receive-Job -Job $script:currentJob 2>&1
-    foreach ($line in $output) { Append-Log ([string]$line) }
-    if ($script:currentJob.State -in @("Completed", "Failed", "Stopped")) {
-        $state = $script:currentJob.State
-        $more = Receive-Job -Job $script:currentJob 2>&1
-        foreach ($line in $more) { Append-Log ([string]$line) }
-        if ($state -eq "Completed") {
-            Append-Log "Tarea completada: $script:currentJobName"
-        } else {
-            Append-Log "Tarea finalizada con estado: $state"
+    try {
+        if (-not $script:currentJob) { return }
+        $output = Receive-Job -Job $script:currentJob 2>&1
+        foreach ($line in $output) { Append-Log ([string]$line) }
+        if ($script:currentJob.State -in @("Completed", "Failed", "Stopped")) {
+            $state = $script:currentJob.State
+            $more = Receive-Job -Job $script:currentJob 2>&1
+            foreach ($line in $more) { Append-Log ([string]$line) }
+            if ($state -eq "Completed") {
+                Append-Log "Tarea completada: $script:currentJobName"
+            } else {
+                Append-Log "Tarea finalizada con estado: $state"
+            }
+            Remove-Job -Job $script:currentJob -Force -ErrorAction SilentlyContinue
+            $script:currentJob = $null
+            $script:currentJobName = ""
+            $timer.Stop()
+            Set-ButtonsEnabled $true
+            Refresh-Status
         }
-        Remove-Job -Job $script:currentJob -Force -ErrorAction SilentlyContinue
-        $script:currentJob = $null
-        $script:currentJobName = ""
+    } catch {
+        Append-Log "Error interno en monitor de tarea: $($_.Exception.Message)"
         $timer.Stop()
+        $script:currentJob = $null
         Set-ButtonsEnabled $true
-        Refresh-Status
     }
 })
 
@@ -384,79 +402,86 @@ $btnStart.Add_Click({
 })
 
 $btnPublish.Add_Click({
-    if (-not (Test-CloudflaredAvailable)) {
-        Append-Log "cloudflared no esta disponible en PATH."
-        return
-    }
-    $existing = Get-CloudflaredUrl
-    if ($existing) {
-        $script:publicUrl = $existing
-        $publicText.Text = $existing
-        Append-Log "Ya existe un tunel activo: $existing"
-        if (Update-EnvPublicSettings -TunnelUrl $existing) {
-            Invoke-CommandText "docker compose up -d --no-deps --force-recreate backend frontend" | Out-Null
+    try {
+        if (-not (Test-CloudflaredAvailable)) {
+            Append-Log "cloudflared no esta disponible en PATH."
+            return
+        }
+        $existing = Get-CloudflaredUrl
+        if ($existing) {
+            $script:publicUrl = $existing
+            $publicText.Text = $existing
+            Append-Log "Ya existe un tunel activo: $existing"
+            if (Update-EnvPublicSettings -TunnelUrl $existing) {
+                Append-Log "Reiniciando backend y frontend con configuracion publica (esto puede tardar)..."
+                Invoke-CommandText "docker compose up -d --no-deps --force-recreate backend frontend" | Out-Null
+                Append-Log "Reinicio completado."
+            }
+            Refresh-Status
+            return
+        }
+        Append-Log "Iniciando cloudflared tunnel hacia http://localhost:3000"
+        $cfOutLog = "$env:TEMP\cf_tunnel_out.log"
+        Remove-Item $script:cfLogFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $cfOutLog          -Force -ErrorAction SilentlyContinue
+        try {
+            $script:cfProcess = Start-Process `
+                -FilePath $script:cfExe `
+                -ArgumentList "tunnel --url http://localhost:3000 --no-autoupdate" `
+                -RedirectStandardError  $script:cfLogFile `
+                -RedirectStandardOutput $cfOutLog `
+                -NoNewWindow -PassThru -ErrorAction Stop
+        } catch {
+            Append-Log "No se pudo iniciar cloudflared: $($_.Exception.Message)"
+            return
+        }
+        $deadline = (Get-Date).AddSeconds(75)
+        $url = ""
+        $lastPos = 0
+        do {
+            Start-Sleep -Milliseconds 800
+            try {
+                $fs = [System.IO.File]::Open($script:cfLogFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+                $reader = New-Object System.IO.StreamReader($fs)
+                try { $logContent = $reader.ReadToEnd() } finally { $reader.Dispose(); $fs.Dispose() }
+                if ($logContent.Length -gt $lastPos) {
+                    ($logContent.Substring($lastPos) -split "`r?`n") | ForEach-Object {
+                        $t = $_.Trim(); if ($t) { Append-Log "cf: $t" }
+                    }
+                    $lastPos = $logContent.Length
+                }
+            } catch { }
+            $url = Get-CloudflaredUrl
+            if ($url) { break }
+            [System.Windows.Forms.Application]::DoEvents()
+        } while ((Get-Date) -lt $deadline)
+        if ($url) {
+            $script:publicUrl = $url
+            $publicText.Text = $url
+            Append-Log "Tunel publico activo: $url"
+            if (Update-EnvPublicSettings -TunnelUrl $url) {
+                Append-Log "Reiniciando backend y frontend con configuracion publica (esto puede tardar)..."
+                $restart = Invoke-CommandText "docker compose up -d --no-deps --force-recreate backend frontend"
+                if ($restart.ExitCode -eq 0) {
+                    Append-Log "Backend y frontend recreados con la configuracion publica."
+                } else {
+                    Append-Log "ADVERTENCIA: no se pudieron recrear backend/frontend automaticamente."
+                }
+            }
+            try {
+                $health = Invoke-RestMethod -Uri "$url/health" -TimeoutSec 10
+                Append-Log "Health publico: $($health.status)"
+            } catch {
+                Append-Log "Tunel creado. Health publico no respondio aun (normal al inicio)."
+            }
+        } else {
+            Append-Log "cloudflared no entrego URL en el tiempo esperado. Revisa que el puerto 3000 este activo."
         }
         Refresh-Status
-        return
-    }
-    Append-Log "Iniciando cloudflared tunnel hacia http://localhost:3000"
-    if (Test-Path $script:cfLogFile) { Remove-Item $script:cfLogFile -Force }
-    try {
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = $script:cfExe
-        $psi.Arguments = "tunnel --url http://localhost:3000 --no-autoupdate"
-        $psi.UseShellExecute = $false
-        $psi.RedirectStandardOutput = $true
-        $psi.RedirectStandardError = $true
-        $psi.CreateNoWindow = $true
-        $script:cfProcess = New-Object System.Diagnostics.Process
-        $script:cfProcess.StartInfo = $psi
-        $outputSb = [System.Text.StringBuilder]::new()
-        $script:cfProcess.add_OutputDataReceived({
-            param($s, $e)
-            if ($e.Data) { [void]$outputSb.AppendLine($e.Data); [System.IO.File]::AppendAllText($script:cfLogFile, $e.Data + "`n") }
-        })
-        $script:cfProcess.add_ErrorDataReceived({
-            param($s, $e)
-            if ($e.Data) { [void]$outputSb.AppendLine($e.Data); [System.IO.File]::AppendAllText($script:cfLogFile, $e.Data + "`n") }
-        })
-        [void]$script:cfProcess.Start()
-        $script:cfProcess.BeginOutputReadLine()
-        $script:cfProcess.BeginErrorReadLine()
     } catch {
-        Append-Log "No se pudo iniciar cloudflared: $($_.Exception.Message)"
-        return
+        Append-Log "Error al publicar: $($_.Exception.Message)"
+        Refresh-Status
     }
-    $deadline = (Get-Date).AddSeconds(40)
-    $url = ""
-    do {
-        Start-Sleep -Milliseconds 800
-        $url = Get-CloudflaredUrl
-        if ($url) { break }
-        [System.Windows.Forms.Application]::DoEvents()
-    } while ((Get-Date) -lt $deadline)
-    if ($url) {
-        $script:publicUrl = $url
-        $publicText.Text = $url
-        Append-Log "Tunel publico activo: $url"
-        if (Update-EnvPublicSettings -TunnelUrl $url) {
-            $restart = Invoke-CommandText "docker compose up -d --no-deps --force-recreate backend frontend"
-            if ($restart.ExitCode -eq 0) {
-                Append-Log "Backend y frontend recreados con la configuracion publica."
-            } else {
-                Append-Log "ADVERTENCIA: no se pudieron recrear backend/frontend automaticamente."
-            }
-        }
-        try {
-            $health = Invoke-RestMethod -Uri "$url/health" -TimeoutSec 10
-            Append-Log "Health publico: $($health.status)"
-        } catch {
-            Append-Log "Tunel creado. Health publico no respondio aun (normal al inicio)."
-        }
-    } else {
-        Append-Log "cloudflared no entrego URL en el tiempo esperado. Revisa que el puerto 3000 este activo."
-    }
-    Refresh-Status
 })
 
 $btnCopy.Add_Click({
@@ -489,7 +514,8 @@ $btnStopNgrok.Add_Click({
         $script:cfProcess = $null
     }
     Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    if (Test-Path $script:cfLogFile) { Remove-Item $script:cfLogFile -Force -ErrorAction SilentlyContinue }
+    Remove-Item $script:cfLogFile              -Force -ErrorAction SilentlyContinue
+    Remove-Item "$env:TEMP\cf_tunnel_out.log"  -Force -ErrorAction SilentlyContinue
     $script:publicUrl = ""
     $publicText.Text = "Sin tunel activo"
     Refresh-Status
@@ -511,9 +537,8 @@ $form.Add_FormClosing({
         try { $script:cfProcess.Kill() } catch { }
     }
     Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    if (Test-Path $script:cfLogFile) {
-        Remove-Item $script:cfLogFile -Force -ErrorAction SilentlyContinue
-    }
+    Remove-Item $script:cfLogFile             -Force -ErrorAction SilentlyContinue
+    Remove-Item "$env:TEMP\cf_tunnel_out.log" -Force -ErrorAction SilentlyContinue
 })
 
 [void]$form.ShowDialog()
