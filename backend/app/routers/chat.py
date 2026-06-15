@@ -331,10 +331,14 @@ def _build_system_prompt(
 
     if rag_context:
         system_prompt += (
-            "\n\nUsa tambien estas fuentes documentales recuperadas por RAG. "
-            "Prioriza esta informacion cuando sea pertinente, no inventes citas y "
-            "menciona de forma breve que la respuesta se apoya en material cargado "
-            "en la plataforma:\n"
+            "\n\nSe recuperaron automaticamente las siguientes fuentes documentales. "
+            "IMPORTANTE: evalua si cada fuente es directamente relevante para la consulta actual. "
+            "Usa una fuente SOLO si su contenido trata especificamente el tema preguntado; "
+            "si el documento aborda un tema distinto (por ejemplo, fiebre cuando se pregunta "
+            "sobre depresion o infeccion urinaria), IGNORALO completamente y responde desde "
+            "tu conocimiento general sin mencionarlo ni citarlo. "
+            "Cuando si uses una fuente relevante, menciona brevemente que la respuesta se "
+            "apoya en material cargado en la plataforma. No inventes citas:\n"
             f"{rag_context}"
         )
     elif rag_was_requested:
