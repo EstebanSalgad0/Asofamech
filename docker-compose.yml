@@ -49,7 +49,7 @@ services:
       - HISTO_PRIVILEGED_HEATMAP_JOBS_PER_WINDOW=${HISTO_PRIVILEGED_HEATMAP_JOBS_PER_WINDOW:-20}
       - HISTO_HEATMAP_RATE_LIMIT_WINDOW_SECONDS=${HISTO_HEATMAP_RATE_LIMIT_WINDOW_SECONDS:-60}
       - HISTO_HF_TOKEN=${HISTO_HF_TOKEN:-}
-      - RAG_MIN_NEURAL_SCORE=${RAG_MIN_NEURAL_SCORE:-0.45}
+      - RAG_MIN_NEURAL_SCORE=${RAG_MIN_NEURAL_SCORE:-0.48}
       - RAG_MIN_LOCAL_SCORE=${RAG_MIN_LOCAL_SCORE:-0.12}
       - HF_HOME=/root/.cache/huggingface
       - ASOFAMECH_JWT_SECRET=${ASOFAMECH_JWT_SECRET:-}
@@ -81,6 +81,8 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/alembic/versions:/app/alembic/versions
+      - ./backend/scripts:/app/scripts:ro
+      - ./docs/rag_documents:/app/rag_seed_docs:ro
       - ./backend/artifacts:/app/artifacts
       - ./backend/data:/app/data
       - ./backend/uploads:/app/uploads

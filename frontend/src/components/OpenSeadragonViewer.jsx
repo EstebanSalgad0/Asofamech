@@ -15,6 +15,17 @@ const ROI2_MAX_SIZE = 4096;
 const HEATMAP_TILE_SIZE = 512;
 const HEATMAP_STRIDE = 512;
 
+function estimateHeatmapTileCount(roi, tileSize, maxTiles) {
+  if (!roi || !tileSize) return null;
+  const axisCount = (length) => (length <= tileSize ? 1 : Math.ceil(length / tileSize));
+  const rawCount = axisCount(roi.width) * axisCount(roi.height);
+  return {
+    rawCount,
+    displayedCount: Math.min(rawCount, maxTiles),
+    capped: rawCount > maxTiles,
+  };
+}
+
 function normalizeRect(start, end) {
   const x = Math.min(start.x, end.x);
   const y = Math.min(start.y, end.y);
@@ -200,6 +211,10 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
   // correctionDraft[sessionId] = { open, label, note, includeInDataset, saving }
   const heatmapMaxTiles = heatmapMaxTilesForCurrentRole();
   const privilegedHeatmaps = isPrivilegedRole();
+  const estimatedHeatmapTiles = useMemo(
+    () => estimateHeatmapTileCount(roi1, tileSizeOption, heatmapMaxTiles),
+    [roi1, tileSizeOption, heatmapMaxTiles]
+  );
 
   const fetchModelStatus = async () => {
     setStatusLoading(true);
@@ -1110,22 +1125,37 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
               {roi1 && (
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, background: '#f8fafc' }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Configuración del mapa</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 5 }}>Tamaño de tile (px)</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 5 }}>Tamaño de cada tile</div>
                   <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
                     {[512, 1024].map((size) => (
                       <button key={size} onClick={() => setTileSizeOption(size)} style={{ border: tileSizeOption === size ? '1.5px solid #0284c7' : '1px solid #e2e8f0', background: tileSizeOption === size ? '#eff6ff' : '#fff', color: tileSizeOption === size ? '#0284c7' : '#6b7280', borderRadius: 6, padding: '4px 16px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-                        {size}
+                        {size} px
                       </button>
                     ))}
                   </div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>Máx. tiles: {heatmapMaxTiles}</div>
+                  <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.45, marginBottom: 8 }}>
+                    <div>Cada cuadro analizado mide {tileSizeOption}x{tileSizeOption} px.</div>
+                    {estimatedHeatmapTiles && (
+                      <div>
+                        Esta ROI generará {estimatedHeatmapTiles.capped ? 'hasta ' : ''}{estimatedHeatmapTiles.displayedCount} tiles
+                        {estimatedHeatmapTiles.capped ? ` de ${estimatedHeatmapTiles.rawCount} estimados` : ''}.
+                      </div>
+                    )}
+                    <div>Límite de tu rol: {heatmapMaxTiles} tiles por mapa.</div>
+                  </div>
                   <button onClick={() => setTileHelpOpen((v) => !v)} style={{ background: 'none', border: 'none', color: '#0284c7', fontSize: 11, cursor: 'pointer', padding: 0, fontWeight: 600 }}>
                     {tileHelpOpen ? '▲ Ocultar ayuda' : '▼ ¿Cómo funciona?'}
                   </button>
                   {tileHelpOpen && (
                     <div style={{ marginTop: 8, fontSize: 11, color: '#6b7280', lineHeight: 1.65, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
                       <div style={{ color: '#374151', fontWeight: 700, marginBottom: 4 }}>Mapa de calor (ROI 1)</div>
-                      <div style={{ marginBottom: 6 }}>Divide ROI 1 en tiles. La IA clasifica cada tile: <span style={{ color: '#ef4444' }}>■ rojo</span> = metástasis · <span style={{ color: '#22c55e' }}>■ verde</span> = sano.</div>
+                      <div style={{ marginBottom: 6 }}>
+                        Divide ROI 1 en cuadros del tamaño elegido. 512 px genera más cuadros y más detalle; 1024 px genera menos cuadros y un mapa más grueso.
+                      </div>
+                      <div style={{ marginBottom: 6 }}>
+                        Colores: <span style={{ color: '#ef4444' }}>■ rojo</span> = probabilidad metastásica alta · <span style={{ color: '#f59e0b' }}>■ naranja</span> = intermedia · <span style={{ color: '#22c55e' }}>■ verde</span> = baja · <span style={{ color: '#94a3b8' }}>■ gris</span> = tile no evaluable.
+                      </div>
+                      <div style={{ marginBottom: 6 }}>El límite de tiles es solo una cuota de procesamiento; no es el tamaño del tile.</div>
                       <div style={{ fontWeight: 600, color: '#374151', marginBottom: 3 }}>Flujo recomendado:</div>
                       <div style={{ paddingLeft: 8, borderLeft: '2px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: 2 }}>
                         {['① Dibuja ROI 1 sobre área amplia', '② Genera el mapa de calor', '③ Dibuja ROI 2 sobre zona roja', '④ Analiza ROI 2 para resultado'].map((s) => <div key={s}>{s}</div>)}
@@ -1182,7 +1212,8 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                     );
                   })()}
                   <div style={{ fontSize: 11, color: '#374151', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
-                    <div>Tiles: {heatmap.tile_count} · tamaño {heatmap.tile_size}px</div>
+                    <div>Tiles procesados: {heatmap.tile_count}</div>
+                    <div>Tamaño de cada tile: {heatmap.tile_size}x{heatmap.tile_size}px</div>
                     <div>Metastásicos: {heatmap.summary?.classified_metastatic_tiles ?? 0}</div>
                     <div>P(met.) máx: {formatPercent(heatmap.summary?.max_tumor_score)}</div>
                     {heatmap.summary?.probability_aggregation && (
@@ -1203,14 +1234,14 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                     Ocultar mapa
                   </button>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                    {[['#ef4444', 'alta'], ['#f59e0b', 'media'], ['#22c55e', 'baja'], ['#94a3b8', 'no eval.']].map(([c, l]) => (
+                    {[['#ef4444', 'alta'], ['#f59e0b', 'media'], ['#22c55e', 'baja'], ['#94a3b8', 'no evaluable']].map(([c, l]) => (
                       <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#6b7280' }}>
                         <span style={{ width: 8, height: 8, background: c, borderRadius: 2, display: 'inline-block' }} />{l}
                       </span>
                     ))}
                   </div>
                   <div style={{ fontSize: 10, color: '#6b7280', marginTop: 8, lineHeight: 1.35 }}>
-                    Grilla de probabilidades por tiles para apoyo educativo. No es Grad-CAM, no explica causalmente la predicción y no constituye diagnóstico.
+                    Los colores indican probabilidad por tile. Gris significa que el tile no pasó el filtro de calidad; no equivale a tejido sano. No es Grad-CAM ni constituye diagnóstico.
                   </div>
                 </div>
               )}
