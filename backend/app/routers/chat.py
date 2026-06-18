@@ -480,7 +480,8 @@ async def chat(
                 "options": {
                     "temperature": _config_float(config, "temperature", 0.7),
                     "top_p": _config_float(config, "top_p", 0.9),
-                    "num_ctx": 8192,
+                    "num_ctx": _config_int(config, "chat_num_ctx", 4096),
+                    "num_predict": _config_int(config, "chat_max_tokens", 800),
                 },
             }
             ollama_data = await _post_ollama_chat(

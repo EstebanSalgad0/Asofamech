@@ -2175,7 +2175,7 @@ export function ConfigPage() {
                                   </>
                                 ) : item.value_type === "integer" ? (
                                   <>
-                                    <input type="number" min="1" max="20" className="cfg-ai-input" value={item.value}
+                                    <input type="number" min="1" max="8000" className="cfg-ai-input" value={item.value}
                                       onChange={(e) => updateAIConfigItem(item.key, "value", e.target.value)} />
                                     <div className="cfg-ai-field-hint">{item.description}</div>
                                   </>

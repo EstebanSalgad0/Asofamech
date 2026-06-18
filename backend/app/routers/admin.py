@@ -58,6 +58,26 @@ DEFAULT_AI_CONFIG = {
         "value_type": "integer",
         "description": "Cantidad maxima de documentos RAG enviados al prompt.",
     },
+    "chat_max_tokens": {
+        "value": "800",
+        "value_type": "integer",
+        "description": "Tokens maximos por respuesta del chatbot (num_predict). Menos tokens = respuesta mas rapida.",
+    },
+    "chat_num_ctx": {
+        "value": "4096",
+        "value_type": "integer",
+        "description": "Ventana de contexto del chatbot (num_ctx). Valores altos recuerdan mas historial pero son mas lentos.",
+    },
+    "feedback_max_tokens": {
+        "value": "400",
+        "value_type": "integer",
+        "description": "Tokens maximos para la retroalimentacion educativa de histopatologia. Menos tokens = feedback mas rapido.",
+    },
+    "feedback_num_ctx": {
+        "value": "2048",
+        "value_type": "integer",
+        "description": "Ventana de contexto de la retroalimentacion educativa (num_ctx). 2048 es suficiente para prompts cortos.",
+    },
     "neural_embeddings_enabled": {
         "value": os.getenv("RAG_NEURAL_EMBEDDINGS_ENABLED", "true"),
         "value_type": "boolean",

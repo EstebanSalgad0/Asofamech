@@ -64,7 +64,8 @@ from ..auth import (
     get_current_user,
     user_has_permission,
 )
-from .chat import LLM_MODEL, OLLAMA_URL
+from .admin import get_ai_config_map
+from .chat import LLM_MODEL, OLLAMA_URL, _config_int
 from .rag import build_rag_context, retrieve_rag_hits
 
 
@@ -86,6 +87,8 @@ async def _generate_histo_feedback(
     predicted_class: str,
     confidence: float,
     probabilities: dict,
+    max_tokens: int = 400,
+    num_ctx: int = 2048,
 ) -> str | None:
     class_desc = _CLASS_DESCRIPTIONS.get(predicted_class, predicted_class)
     conf_pct = f"{confidence * 100:.1f}%"
@@ -143,7 +146,7 @@ async def _generate_histo_feedback(
                         {"role": "user", "content": user_prompt},
                     ],
                     "stream": False,
-                    "options": {"temperature": 0.4, "top_p": 0.9, "num_ctx": 4096},
+                    "options": {"temperature": 0.4, "top_p": 0.9, "num_ctx": num_ctx, "num_predict": max_tokens},
                 },
             )
             if resp.status_code == 200:
@@ -1181,12 +1184,15 @@ async def generate_educational_feedback(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    config = get_ai_config_map(db)
     feedback = await _generate_histo_feedback(
         db,
         status=req.status,
         predicted_class=req.predicted_class,
         confidence=req.confidence,
         probabilities=req.probabilities,
+        max_tokens=_config_int(config, "feedback_max_tokens", 400),
+        num_ctx=_config_int(config, "feedback_num_ctx", 2048),
     )
     return {"educational_feedback": feedback}
 
