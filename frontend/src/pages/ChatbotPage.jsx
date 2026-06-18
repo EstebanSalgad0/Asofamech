@@ -256,13 +256,21 @@ export function ChatbotPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // RAG sources from the last bot message with sources
+  // RAG sources from the last bot message with sources (deduped by document_id)
   const activeRagSources = useMemo(() => {
     if (!current) return [];
     const botMsgs = current.messages.filter(
       (m) => m.sender === "bot" && getRelevantRagSources(m.ragSources).length > 0
     );
-    return botMsgs.length > 0 ? getRelevantRagSources(botMsgs[botMsgs.length - 1].ragSources) : [];
+    if (botMsgs.length === 0) return [];
+    const sources = getRelevantRagSources(botMsgs[botMsgs.length - 1].ragSources);
+    const seen = new Set();
+    return sources.filter((s) => {
+      const key = s.document_id ?? s.title ?? s.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [current]);
 
   // Topic counts across all conversations

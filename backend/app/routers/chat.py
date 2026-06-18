@@ -454,7 +454,7 @@ async def chat(
                     db,
                     user_text,
                     max_context_documents,
-                    dedupe_documents=False,
+                    dedupe_documents=True,
                 )
                 if should_query_rag
                 else []
