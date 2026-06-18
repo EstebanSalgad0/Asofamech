@@ -357,6 +357,7 @@ export function SCTPage() {
         if (response?.items?.length > 0) {
           const formatted = {
             id: Date.now(),
+            db_id: null,
             title: `Test SCT · ${previewTopic}`,
             items: response.items.map((item, i) => ({
               id: i + 1,
@@ -441,10 +442,12 @@ export function SCTPage() {
       item_id: item.id,
       selected_answer: answers[item.id],
     }));
+    const submittedTestId = currentTest.id;
     (async () => {
       try {
         let dbId = currentTest.db_id;
         if (!dbId && canManage) {
+          setCurrentTest((prev) => (prev?.id === submittedTestId ? { ...prev, isSavingToLibrary: true } : prev));
           // Solo docente/admin puede crear tests: auto-guardar para obtener db_id
           const saved = await saveSCTTest(
             currentTest.title,
@@ -463,8 +466,21 @@ export function SCTPage() {
           );
           dbId = saved?.id;
           if (dbId) {
-            setCurrentTest((prev) => ({ ...prev, db_id: dbId }));
+            setCurrentTest((prev) => (
+              prev?.id === submittedTestId
+                ? {
+                    ...prev,
+                    id: dbId,
+                    db_id: dbId,
+                    title: saved?.name || prev.title,
+                    date: formatDate(saved?.created_at) || prev.date,
+                    isSavingToLibrary: false,
+                  }
+                : prev
+            ));
             loadSavedTests();
+          } else {
+            setCurrentTest((prev) => (prev?.id === submittedTestId ? { ...prev, isSavingToLibrary: false } : prev));
           }
         }
         if (dbId) {
@@ -472,6 +488,7 @@ export function SCTPage() {
           loadMyAttempts();
         }
       } catch {
+        setCurrentTest((prev) => (prev?.id === submittedTestId ? { ...prev, isSavingToLibrary: false } : prev));
         // fallo silencioso — el resultado local ya fue guardado
       }
     })();
@@ -479,9 +496,15 @@ export function SCTPage() {
 
   const handleSaveTest = async (nameOverride) => {
     if (!currentTest) return;
+    if (currentTest.db_id) {
+      setShowSaveModal(false);
+      showToast("Este test ya está guardado.", "info");
+      return;
+    }
     const testName = nameOverride || `Test SCT - ${currentTest.focus}`;
+    const savingTestId = currentTest.id;
     try {
-      await saveSCTTest(
+      const saved = await saveSCTTest(
         testName,
         currentTest.difficulty.toLowerCase(),
         currentTest.focus,
@@ -496,6 +519,19 @@ export function SCTPage() {
           explanation: item.explanation,
         }))
       );
+      if (saved?.id) {
+        setCurrentTest((prev) => (
+          prev?.id === savingTestId
+            ? {
+                ...prev,
+                id: saved.id,
+                db_id: saved.id,
+                title: saved.name || prev.title,
+                date: formatDate(saved.created_at) || prev.date,
+              }
+            : prev
+        ));
+      }
       await loadSavedTests();
       showToast(`"${testName}" guardado correctamente`, "success");
       setShowSaveModal(false);
@@ -667,6 +703,8 @@ export function SCTPage() {
 
   /* ── RESULTS VIEW ── */
   if (viewMode === "results" && testResults) {
+    const canSaveCurrentTest = canManage && currentTest && !currentTest.db_id && !currentTest.isSavingToLibrary;
+
     return (
       <>
         <AppSidebar user={user} role={role} activeRoute="sct" onRoleChange={handleRoleChange} onLogout={handleLogout} />
@@ -726,7 +764,7 @@ export function SCTPage() {
               </div>
             ))}
             <div className="sct-results-actions">
-              {canManage && (
+              {canSaveCurrentTest && (
                 <button onClick={() => { setSaveNameInput(`Test SCT - ${currentTest?.focus || "general"}`); setShowSaveModal(true); }} className="sct-res-btn primary">Guardar Test</button>
               )}
               <button onClick={handleNewTest} className="sct-res-btn secondary">Nuevo Test</button>

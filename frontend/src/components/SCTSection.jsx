@@ -10,6 +10,7 @@ export default function SCTSection() {
   const [showResults, setShowResults] = useState(false);
   const [showTestSelector, setShowTestSelector] = useState(false);
   const [testName, setTestName] = useState("");
+  const [savedTestId, setSavedTestId] = useState(null);
   
   // Configuración
   const [numItems, setNumItems] = useState(5);
@@ -21,6 +22,7 @@ export default function SCTSection() {
     setShowResults(false);
     setUserAnswers({});
     setCurrentItemIndex(0);
+    setSavedTestId(null);
     
     try {
       const data = await generateSCT(numItems, difficulty, focus);
@@ -38,13 +40,18 @@ export default function SCTSection() {
   };
 
   const handleSaveTest = async () => {
+    if (savedTestId) {
+      alert("Este test ya está guardado.");
+      return;
+    }
     if (!testName.trim()) {
       alert("Por favor ingresa un nombre para el test");
       return;
     }
     
     try {
-      await saveSCTTest(testName, difficulty, focus, sctData.items.length, sctData.items);
+      const saved = await saveSCTTest(testName, difficulty, focus, sctData.items.length, sctData.items);
+      setSavedTestId(saved?.id || true);
       alert(`✅ Test "${testName}" guardado exitosamente`);
     } catch (err) {
       console.error("Error al guardar test:", err);
@@ -64,6 +71,7 @@ export default function SCTSection() {
       focus: testData.focus
     });
     setTestName(testData.name);
+    setSavedTestId(testData.id || true);
     setDifficulty(testData.difficulty);
     setFocus(testData.focus);
     setNumItems(testData.num_items);
@@ -221,13 +229,15 @@ export default function SCTSection() {
                       onChange={(e) => setTestName(e.target.value)}
                       placeholder="Ej: SCT VIH - Diciembre 2025"
                     />
-                    <button 
-                      className="btn-save-test"
-                      onClick={handleSaveTest}
-                      title="Guardar test en base de datos"
-                    >
-                      💾 Guardar
-                    </button>
+                    {!savedTestId && (
+                      <button
+                        className="btn-save-test"
+                        onClick={handleSaveTest}
+                        title="Guardar test en base de datos"
+                      >
+                        💾 Guardar
+                      </button>
+                    )}
                   </div>
                 </div>
 
