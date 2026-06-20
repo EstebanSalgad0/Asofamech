@@ -8,10 +8,11 @@ import {
   timeAgo,
 } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
-import { clearAuthSession, getStoredRole } from "../authClient";
+import { clearAuthSession, getStoredRole, userStorageKey } from "../authClient";
 import { getDashboardStats, getDashboardRanking, getMyHistory } from "../api";
 
 const NEW_CHAT_FLAG = "asofamech_new_chat_requested";
+const CHAT_STORAGE_KEY = "asofamech_chat_history";
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -71,10 +72,40 @@ function formatSctScore(item) {
   return `${item.correct_count}/${item.total_items} correctas`;
 }
 
-function makeHistoryGroups(historyData) {
+function loadLocalChatHistory() {
+  try {
+    const raw = localStorage.getItem(userStorageKey(CHAT_STORAGE_KEY));
+    if (!raw) return { hasLocalState: false, items: [] };
+    const conversations = JSON.parse(raw);
+    if (!Array.isArray(conversations)) return { hasLocalState: false, items: [] };
+
+    const items = conversations
+      .map((conversation) => {
+        const messages = Array.isArray(conversation.messages) ? conversation.messages : [];
+        const userMessages = messages.filter((message) => message.sender === "user");
+        if (userMessages.length === 0) return null;
+
+        const usedRag = messages.some((message) => message.sender === "bot" && message.usedRag);
+        return {
+          id: `local-chat-${conversation.id}`,
+          question: conversation.title || userMessages[0]?.text || "Consulta educativa",
+          used_rag: usedRag,
+          created_at: conversation.updatedAt || conversation.createdAt,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+    return { hasLocalState: true, items };
+  } catch {
+    return { hasLocalState: false, items: [] };
+  }
+}
+
+function makeHistoryGroups(historyData, localChatHistory = { hasLocalState: false, items: [] }) {
   const analyses = historyData?.analyses || [];
   const sctAttempts = historyData?.sct_attempts || [];
-  const conversations = historyData?.conversations || [];
+  const conversations = localChatHistory.hasLocalState ? localChatHistory.items : (historyData?.conversations || []);
   const heatmaps = historyData?.heatmaps || [];
   return [
     {
@@ -191,6 +222,7 @@ export function DashboardPage() {
   const [dashStats, setDashStats] = useState(null);
   const [rankingData, setRankingData] = useState(null);
   const [historyData, setHistoryData] = useState(null);
+  const [localChatHistory, setLocalChatHistory] = useState({ hasLocalState: false, items: [] });
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -206,6 +238,7 @@ export function DashboardPage() {
     startSession();
     setMetrics(getMetrics());
     setActivity(getRecentActivity(10));
+    setLocalChatHistory(loadLocalChatHistory());
 
     getDashboardStats().then(setDashStats).catch(() => {});
     getDashboardRanking().then(setRankingData).catch(() => {});
@@ -223,13 +256,18 @@ export function DashboardPage() {
     const refresh = () => {
       setMetrics(getMetrics());
       setActivity(getRecentActivity(10));
+      setLocalChatHistory(loadLocalChatHistory());
     };
     const handleVisibility = () => { if (document.visibilityState === "visible") refresh(); };
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("focus", refresh);
+    window.addEventListener("storage", refresh);
+    window.addEventListener("asofamech-chat-history-updated", refresh);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", refresh);
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("asofamech-chat-history-updated", refresh);
     };
   }, []);
 
@@ -334,7 +372,7 @@ export function DashboardPage() {
   const ranking = rankingData?.ranking ?? [];
   const yourPosition = rankingData?.your_position;
   const percentile   = rankingData?.percentile;
-  const historyGroups = makeHistoryGroups(historyData);
+  const historyGroups = makeHistoryGroups(historyData, localChatHistory);
 
   return (
     <>

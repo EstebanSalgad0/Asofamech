@@ -82,6 +82,7 @@ services:
       - ./backend/app:/app/app
       - ./backend/alembic/versions:/app/alembic/versions
       - ./backend/scripts:/app/scripts:ro
+      - ./backend/model_registry:/app/model_registry:ro
       - ./docs/rag_documents:/app/rag_seed_docs:ro
       - ./backend/artifacts:/app/artifacts
       - ./backend/data:/app/data

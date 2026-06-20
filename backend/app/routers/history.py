@@ -28,8 +28,18 @@ def _iso(value: Any) -> str | None:
     return str(value)
 
 
+def _fix_common_mojibake(value: str) -> str:
+    if not value or not any(marker in value for marker in ("Ã", "Â", "â")):
+        return value
+    try:
+        repaired = value.encode("latin-1").decode("utf-8")
+    except UnicodeError:
+        return value
+    return repaired if repaired else value
+
+
 def _short_text(value: str | None, max_length: int = 220) -> str:
-    text = " ".join((value or "").split())
+    text = " ".join(_fix_common_mojibake(value or "").split())
     if len(text) <= max_length:
         return text
     return f"{text[:max_length].rstrip()}..."

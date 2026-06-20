@@ -129,7 +129,7 @@ def history_client():
                 ),
                 ChatLog(
                     user_id="1",
-                    question="Pregunta de usuario uno",
+                    question="Â¿QuÃ© es una biopsia? Responde en mÃ¡ximo diez lÃ­neas.",
                     answer="Respuesta educativa uno",
                     rag_sources=[],
                     created_at=now,
@@ -186,7 +186,7 @@ def test_my_history_is_scoped_to_current_user(history_client):
     assert response.status_code == 200
     payload = response.json()
     assert [item["trace_id"] for item in payload["analyses"]] == ["trace-a"]
-    assert [item["question"] for item in payload["conversations"]] == ["Pregunta de usuario uno"]
+    assert [item["question"] for item in payload["conversations"]] == ["¿Qué es una biopsia? Responde en máximo diez líneas."]
     assert [item["correct_count"] for item in payload["sct_attempts"]] == [1]
     assert payload["heatmaps"][0]["job_id"] == "job-a"
 

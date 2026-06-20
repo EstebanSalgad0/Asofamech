@@ -1,12 +1,18 @@
 import { expect, test } from "@playwright/test";
 import { apiBase, dziImage } from "./fixtures/e2e-data";
-import { drawOnOverlay } from "./helpers/histopathology";
+import { drawOnOverlay, expectRectStartsAtOverlayPoint } from "./helpers/histopathology";
 import { signInAs } from "./helpers/auth";
 import { mockAllApis } from "./helpers/network";
 
-async function openViewer(page) {
+async function openViewer(page, options: { fontSize?: "large" | "xl" } = {}) {
   await mockAllApis(page);
   await signInAs(page, "student", "/dashboard/images");
+  if (options.fontSize) {
+    await page.evaluate((fontSize) => {
+      localStorage.setItem("asofamech-fontsize", fontSize);
+      document.documentElement.setAttribute("data-fontsize", fontSize);
+    }, options.fontSize);
+  }
   await page.getByTestId(`image-library-item-${dziImage.id}`).click();
   await expect(page.getByTestId("osd-viewer-root")).toBeVisible();
   await expect(page.getByTestId("osd-overlay")).toBeVisible({ timeout: 15_000 });
@@ -53,8 +59,10 @@ test.describe("Visor histopatologico", () => {
   });
 
   test("E2E-05 Seleccion de ROI 1 y ROI 2", async ({ page }) => {
-    await openViewer(page);
+    await openViewer(page, { fontSize: "large" });
     await selectRois(page);
+    await expectRectStartsAtOverlayPoint(page, "osd-overlay", "roi-1-overlay", { x: 120, y: 120 });
+    await expectRectStartsAtOverlayPoint(page, "osd-overlay", "roi-2-overlay", { x: 180, y: 180 });
   });
 
   test("E2E-06 Analisis IA sobre ROI y resultado formativo", async ({ page }) => {

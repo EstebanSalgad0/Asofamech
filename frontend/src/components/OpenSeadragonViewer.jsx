@@ -494,11 +494,13 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
   const roi1ViewerRect = useMemo(() => imageRectToViewerRect(roi1), [roi1, viewportVersion]);
   const roi2ViewerRect = useMemo(() => imageRectToViewerRect(roi2), [roi2, viewportVersion]);
 
-  const getOverlayPoint = (event) => {
-    const bounds = overlayRef.current.getBoundingClientRect();
+  const getElementPoint = (event, element) => {
+    const bounds = element.getBoundingClientRect();
+    const scaleX = bounds.width ? element.clientWidth / bounds.width : 1;
+    const scaleY = bounds.height ? element.clientHeight / bounds.height : 1;
     return {
-      x: event.clientX - bounds.left,
-      y: event.clientY - bounds.top,
+      x: (event.clientX - bounds.left) * scaleX,
+      y: (event.clientY - bounds.top) * scaleY,
     };
   };
 
@@ -506,7 +508,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
     if (activeTool !== 'roi1' && activeTool !== 'roi2') return;
     event.preventDefault();
 
-    const point = getOverlayPoint(event);
+    const point = getElementPoint(event, viewerRef.current || overlayRef.current);
     setDraftStart(point);
     setDraftRect({ x: point.x, y: point.y, width: 0, height: 0 });
     setRoiError(null);
@@ -516,7 +518,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
     if (!draftStart) return;
     event.preventDefault();
 
-    const point = getOverlayPoint(event);
+    const point = getElementPoint(event, viewerRef.current || overlayRef.current);
     setDraftRect(normalizeRect(draftStart, point));
   };
 
