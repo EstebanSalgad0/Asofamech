@@ -112,6 +112,14 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
     (chatGeneration.status === "complete" || chatGeneration.status === "error") &&
     chatGeneration.task?.saved;
   const { count: streakCount, weekBars } = getStreakDisplay();
+  const [streakVisible, setStreakVisible] = useState(
+    () => localStorage.getItem("asofamech_streak_visible") !== "false"
+  );
+  const toggleStreak = () => {
+    const next = !streakVisible;
+    setStreakVisible(next);
+    localStorage.setItem("asofamech_streak_visible", String(next));
+  };
   const visibleItems = navItems.filter((item) => !item.privileged || privileged);
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -207,30 +215,46 @@ export function AppSidebar({ user, role, activeRoute, onLogout }) {
       </nav>
 
       <div className="app-sidebar-footer">
-        <div className="app-streak-card">
-          <div className="app-streak-top">
-            <span>Tu Racha</span>
-            <span className="app-streak-fire">🔥</span>
+        {streakVisible ? (
+          <div className="app-streak-card">
+            <div className="app-streak-top">
+              <span>Tu Racha</span>
+              <div className="app-streak-top-right">
+                <span className="app-streak-fire">🔥</span>
+                <button
+                  className="app-streak-toggle"
+                  onClick={toggleStreak}
+                  title="Ocultar racha"
+                  aria-label="Ocultar racha"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="app-streak-days">
+              <b>{streakCount}</b>
+              <span>días</span>
+            </div>
+            <div className="app-streak-bars">
+              {weekBars.map((bar, index) => (
+                <i
+                  key={index}
+                  className={[bar.active ? "active" : "", bar.isToday ? "today" : ""].filter(Boolean).join(" ")}
+                  title={bar.day}
+                />
+              ))}
+            </div>
+            <div className="app-streak-labels">
+              {weekBars.map((bar, index) => (
+                <span key={index}>{bar.day}</span>
+              ))}
+            </div>
           </div>
-          <div className="app-streak-days">
-            <b>{streakCount}</b>
-            <span>días</span>
-          </div>
-          <div className="app-streak-bars">
-            {weekBars.map((bar, index) => (
-              <i
-                key={index}
-                className={[bar.active ? "active" : "", bar.isToday ? "today" : ""].filter(Boolean).join(" ")}
-                title={bar.day}
-              />
-            ))}
-          </div>
-          <div className="app-streak-labels">
-            {weekBars.map((bar, index) => (
-              <span key={index}>{bar.day}</span>
-            ))}
-          </div>
-        </div>
+        ) : (
+          <button className="app-streak-show" onClick={toggleStreak} title="Mostrar racha">
+            🔥 Mostrar racha
+          </button>
+        )}
 
         <FontSizeControlSidebar />
 
