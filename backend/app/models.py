@@ -58,6 +58,39 @@ class Case(Base):
     creator = relationship("User", foreign_keys=[created_by])
     image = relationship("MedicalImage", foreign_keys=[image_id])
     sct_test = relationship("SCTTest", foreign_keys=[sct_test_id])
+    images = relationship(
+        "CaseImage",
+        back_populates="case",
+        cascade="all, delete-orphan",
+        order_by="CaseImage.position",
+    )
+
+class CaseImage(Base):
+    """Imagenes ilustrativas de un caso clinico (radiografia, TAC, fotografia).
+
+    Deliberadamente separada de MedicalImage: aquella es la piscina de laminas
+    histopatologicas que analiza el clasificador CAMELYON. Una radiografia de
+    torax esta fuera del dominio de ese modelo, y mezclarlas permitiria enviarla
+    al analisis y obtener una probabilidad con apariencia de valida pero sin
+    ningun significado clinico.
+    """
+    __tablename__ = "case_images"
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    filename = Column(String(200), nullable=False)
+    original_filename = Column(String(200), nullable=False)
+    caption = Column(String(300), nullable=True)      # "Radiografia de torax PA"
+    modality = Column(String(80), nullable=True)      # radiografia, TAC, ecografia, clinica
+    file_type = Column(String(20), nullable=False)
+    file_size = Column(BigInteger, nullable=True)
+    file_path = Column(String(500), nullable=False)
+    position = Column(Integer, nullable=False, default=0)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    case = relationship("Case", back_populates="images")
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+
 
 class Document(Base):
     __tablename__ = "documents"

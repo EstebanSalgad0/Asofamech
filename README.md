@@ -70,7 +70,7 @@ La primera vez descarga LLaMA 3 (~4 GB) y los pesos CONCH (~1.5 GB). El backend 
 ### 4. Descargar el modelo LLM (primera vez)
 
 ```bash
-docker exec -it asofamech_ollama ollama pull llama3:8b
+docker exec -it asofamech_ollama ollama pull llama3.1:8b
 ```
 
 ### 5. Verificar que todos los servicios estan activos
@@ -126,7 +126,7 @@ Ver `.env.example` para la lista completa con descripciones. Las variables oblig
 | `HISTO_HF_TOKEN` | Token de Hugging Face para descargar pesos CONCH. |
 | `DATABASE_URL` | Cadena de conexion PostgreSQL. Gestionada automaticamente por Docker Compose. |
 | `OLLAMA_URL` | URL del servicio Ollama. Por defecto `http://ollama:11434`. |
-| `LLM_MODEL` | Modelo a usar. Por defecto `llama3:8b`. |
+| `LLM_MODEL` | Modelo a usar. Por defecto `llama3.1:8b`. |
 | `CORS_ORIGINS` | Origenes permitidos separados por coma. |
 
 ---

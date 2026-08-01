@@ -24,23 +24,37 @@ from ..rag_utils import (
     cosine_similarity,
     make_snippet,
     score_document,
+    strip_evaluation_items,
+    tokenize,
 )
 from .admin import get_ai_config_map, parse_bool
 
 
 router = APIRouter(prefix="/api/rag", tags=["rag"])
-DEFAULT_NEURAL_MIN_SCORE = 0.45
+DEFAULT_NEURAL_MIN_SCORE = 0.42
 DEFAULT_LOCAL_MIN_SCORE = 0.12
 MIN_CHUNK_TOKENS = 80
 MAX_CHUNK_TOKENS = 500
 MIN_CHUNK_OVERLAP = 0
 MAX_CHUNK_OVERLAP = 120
+# Debe coincidir con Document.tags = Column(String(200)) en models.py: sin este
+# limite una lista larga de etiquetas revienta con error 500 al insertar.
+MAX_TAGS_CHARS = 200
+# Un documento puede aportar varios fragmentos al contexto: cuando concentra la
+# respuesta, quedarse con uno solo entrega el tema a medias. Los topes evitan que
+# un unico documento acapare el prompt.
+MAX_CHUNKS_PER_DOCUMENT = 4
+MAX_TOTAL_HITS = 10
+# Fraccion del mejor score por debajo de la cual una fuente se descarta aunque
+# supere el umbral absoluto. Calibrado sobre el corpus: mantiene los fragmentos
+# del documento pertinente y corta los de otro tema clinico.
+DEFAULT_RELATIVE_MARGIN = 0.70
 
 
 class DocumentIn(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     content: str = Field(min_length=20)
-    tags: str = ""
+    tags: str = Field(default="", max_length=MAX_TAGS_CHARS)
     source: str = Field(default="", max_length=500)
     document_type: str = Field(default="text", max_length=50)
     chunk_size: int | None = Field(default=None, ge=MIN_CHUNK_TOKENS, le=MAX_CHUNK_TOKENS)
@@ -135,9 +149,16 @@ def sync_document_chunks(db: Session, document: Document) -> int:
     if pgvector_ready:
         delete_pgvector_embeddings_for_document(db, document.id)
     db.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).delete()
+    body = document.content or ""
+    if parse_bool(config.get("rag_exclude_evaluation_items"), True):
+        stripped = strip_evaluation_items(body)
+        # Si el documento es solo un cuestionario, quedarse sin texto seria peor
+        # que indexar los items: en ese caso se conserva el contenido original.
+        if stripped:
+            body = stripped
     source = "\n".join(
         part
-        for part in [document.title or "", document.tags or "", document.content or ""]
+        for part in [document.title or "", document.tags or "", body]
         if part
     )
     chunks = chunk_text(clean_document_text(source), max_tokens=chunk_size, overlap_tokens=chunk_overlap)
@@ -202,11 +223,64 @@ def _is_relevant_score(score: float, provider: str | None) -> bool:
     return score >= _relevance_threshold(provider)
 
 
+def _has_lexical_support(query: str, title: str, content: str, tags: str = "") -> bool:
+    """Exige que el fragmento comparta al menos un termino con la consulta.
+
+    La similitud vectorial sola deja pasar documentos de otro tema clinico: una
+    consulta sobre infeccion urinaria recupera el documento de fiebre con score
+    0.48 sin compartir ningun termino. Los aciertos legitimos siempre comparten
+    vocabulario, asi que este filtro descarta el ruido tematico sin afectarlos.
+    """
+    query_terms = set(tokenize(query))
+    if not query_terms:
+        # Sin terminos utiles (consulta solo de conectores) no hay evidencia
+        # lexica en ningun sentido: se decide unicamente por score vectorial.
+        return True
+    chunk_terms = set(tokenize(content)) | set(tokenize(title)) | set(tokenize(tags))
+    return bool(query_terms & chunk_terms)
+
+
+def _relative_margin() -> float:
+    try:
+        value = float(os.getenv("RAG_RELATIVE_MARGIN", DEFAULT_RELATIVE_MARGIN))
+    except (TypeError, ValueError):
+        return DEFAULT_RELATIVE_MARGIN
+    return min(max(value, 0.0), 1.0)
+
+
+def _apply_relative_margin(hits: list[RagHit]) -> list[RagHit]:
+    """Descarta fuentes muy por debajo del mejor resultado de la consulta.
+
+    El umbral absoluto no distingue entre "poco relevante" y "poco relevante
+    cuando existe algo mucho mejor". Si el primer resultado puntua 0.88, un
+    fragmento de otro tema en 0.50 solo aporta ruido al contexto.
+    """
+    if not hits:
+        return hits
+    floor = hits[0].score * _relative_margin()
+    return [hit for hit in hits if hit.score >= floor]
+
+
+def _document_budget(
+    document_id: int,
+    per_document: dict[int, int],
+    max_documents: int,
+    max_chunks_per_document: int,
+) -> bool:
+    """Decide si cabe un fragmento mas de este documento en el contexto."""
+    used = per_document.get(document_id, 0)
+    if used >= max_chunks_per_document:
+        return False
+    if used == 0 and len(per_document) >= max_documents:
+        return False
+    return True
+
+
 def retrieve_rag_hits(
     db: Session,
     query: str,
     limit: int = 4,
-    dedupe_documents: bool = True,
+    max_chunks_per_document: int | None = None,
 ) -> list[RagHit]:
     ensure_vector_index(db)
     config = get_ai_config_map(db)
@@ -219,20 +293,35 @@ def retrieve_rag_hits(
     if not any(query_embedding):
         return []
 
+    max_documents = max(1, min(limit, 8))
+    if max_chunks_per_document is None:
+        max_chunks_per_document = _config_int(config, "rag_max_chunks_per_document", 3)
+    max_chunks_per_document = max(1, min(max_chunks_per_document, MAX_CHUNKS_PER_DOCUMENT))
+    max_hits = min(max_documents * max_chunks_per_document, MAX_TOTAL_HITS)
+
     if parse_bool(config.get("pgvector_enabled"), True) and ensure_pgvector_schema(db):
-        vector_rows = search_pgvector(db, query_embedding, limit=max(8, limit * 4))
+        vector_rows = search_pgvector(db, query_embedding, limit=max(12, max_hits * 3))
         if vector_rows:
             hits: list[RagHit] = []
-            seen_documents: set[int] = set()
+            per_document: dict[int, int] = {}
             for row in vector_rows:
                 provider = row.get("provider") or embedding.provider
                 score = round(float(row["score"] or 0.0), 6)
                 if not _is_relevant_score(score, provider):
                     continue
-                document_id = int(row["document_id"])
-                if dedupe_documents and document_id in seen_documents:
+                if not _has_lexical_support(
+                    query,
+                    row["title"],
+                    row["chunk_content"],
+                    row.get("tags") or "",
+                ):
                     continue
-                seen_documents.add(document_id)
+                document_id = int(row["document_id"])
+                if not _document_budget(
+                    document_id, per_document, max_documents, max_chunks_per_document
+                ):
+                    continue
+                per_document[document_id] = per_document.get(document_id, 0) + 1
                 hits.append(
                     RagHit(
                         id=document_id,
@@ -247,9 +336,9 @@ def retrieve_rag_hits(
                         document_type=row.get("document_type") or "text",
                     )
                 )
-                if len(hits) >= max(1, min(limit, 8)):
+                if len(hits) >= max_hits:
                     break
-            return hits
+            return _apply_relative_margin(hits)
 
     chunk_hits: list[tuple[DocumentChunk, float]] = []
     for chunk in (
@@ -260,6 +349,13 @@ def retrieve_rag_hits(
     ):
         vector_score = cosine_similarity(query_embedding, chunk.embedding or [])
         if vector_score <= 0:
+            continue
+        if not _has_lexical_support(
+            query,
+            chunk.document.title,
+            chunk.content,
+            chunk.document.tags or "",
+        ):
             continue
         lexical_boost = score_document(
             query,
@@ -275,11 +371,13 @@ def retrieve_rag_hits(
     chunk_hits.sort(key=lambda item: item[1], reverse=True)
 
     hits: list[RagHit] = []
-    seen_documents: set[int] = set()
+    per_document: dict[int, int] = {}
     for chunk, score in chunk_hits:
-        if dedupe_documents and chunk.document_id in seen_documents:
+        if not _document_budget(
+            chunk.document_id, per_document, max_documents, max_chunks_per_document
+        ):
             continue
-        seen_documents.add(chunk.document_id)
+        per_document[chunk.document_id] = per_document.get(chunk.document_id, 0) + 1
         hits.append(
             RagHit(
                 id=chunk.document_id,
@@ -294,20 +392,33 @@ def retrieve_rag_hits(
                 document_type=chunk.document.document_type or "text",
             )
         )
-        if len(hits) >= max(1, min(limit, 8)):
+        if len(hits) >= max_hits:
             break
-    return hits
+    return _apply_relative_margin(hits)
 
 
 def build_rag_context(hits: list[RagHit]) -> str:
     if not hits:
         return ""
+
+    # Un mismo documento puede aportar varios fragmentos: hay que dejarlo claro
+    # para que el modelo no los lea como fuentes independientes que se confirman
+    # entre si.
+    documents_seen: dict[int, int] = {}
+    for hit in hits:
+        documents_seen[hit.id] = documents_seen.get(hit.id, 0) + 1
+
     blocks = []
     for idx, hit in enumerate(hits, start=1):
         tags = f" | Tags: {hit.tags}" if hit.tags else ""
         source = f" | Fuente: {hit.source}" if hit.source else ""
+        fragment = (
+            f" | Fragmento {hit.chunk_index + 1} del mismo documento"
+            if documents_seen.get(hit.id, 0) > 1 and hit.chunk_index is not None
+            else ""
+        )
         blocks.append(
-            f"Fuente {idx}: {hit.title}{tags}{source}\n"
+            f"Fuente {idx}: {hit.title}{tags}{source}{fragment}\n"
             f"Extracto: {hit.snippet}"
         )
     return "\n\n".join(blocks)
@@ -356,7 +467,7 @@ def create_document(
 @router.post("/documents/upload", response_model=DocumentOut)
 async def upload_document(
     title: str | None = Form(default=None),
-    tags: str = Form(default=""),
+    tags: str = Form(default="", max_length=MAX_TAGS_CHARS),
     source: str | None = Form(default=None),
     chunk_size: int | None = Form(default=None),
     chunk_overlap: int | None = Form(default=None),

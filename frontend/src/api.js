@@ -309,6 +309,27 @@ export async function deleteCase(caseId) {
   }
 }
 
+export async function listCaseImages(caseId) {
+  const res = await authFetch(`/api/cases/${caseId}/images`);
+  return parseJsonResponse(res, "No se pudieron cargar las imagenes del caso");
+}
+
+export async function uploadCaseImages(caseId, formData) {
+  const res = await authFetch(`/api/cases/${caseId}/images`, {
+    method: "POST",
+    body: formData,
+  });
+  return parseJsonResponse(res, "No se pudieron subir las imagenes del caso");
+}
+
+export async function deleteCaseImage(imageId) {
+  const res = await authFetch(`/api/cases/images/${imageId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.detail || `Error al eliminar la imagen (${res.status})`);
+  }
+}
+
 export async function submitFeedback(payload) {
   const res = await authFetch("/api/feedback", {
     method: "POST",

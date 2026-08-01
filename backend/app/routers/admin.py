@@ -24,7 +24,7 @@ _INTEGRATIONS_TTL = 45.0  # segundos
 
 DEFAULT_AI_CONFIG = {
     "llm_model": {
-        "value": os.getenv("LLM_MODEL", "llama3:8b"),
+        "value": os.getenv("LLM_MODEL", "llama3.1:8b"),
         "value_type": "string",
         "description": "Modelo generativo usado por Ollama para el chatbot y SCT.",
     },
@@ -44,9 +44,12 @@ DEFAULT_AI_CONFIG = {
         "description": "Clasifica si la consulta pertenece al ambito medico antes de responder.",
     },
     "temperature": {
-        "value": "0.7",
+        "value": "0.4",
         "value_type": "float",
-        "description": "Creatividad del modelo generativo.",
+        "description": (
+            "Creatividad del modelo generativo. Valores bajos reducen la invencion "
+            "de datos y mejoran la fidelidad a las fuentes RAG."
+        ),
     },
     "top_p": {
         "value": "0.9",
@@ -84,9 +87,16 @@ DEFAULT_AI_CONFIG = {
         "description": "Usa sentence-transformers para embeddings RAG cuando esta disponible.",
     },
     "embedding_model": {
-        "value": os.getenv("RAG_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+        "value": os.getenv(
+            "RAG_EMBEDDING_MODEL",
+            "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        ),
         "value_type": "string",
-        "description": "Modelo sentence-transformers usado para vectorizar documentos.",
+        "description": (
+            "Modelo sentence-transformers usado para vectorizar documentos. "
+            "Debe ser multilingue: el corpus y las consultas estan en espanol. "
+            "Al cambiarlo hay que reindexar el corpus completo."
+        ),
     },
     "pgvector_enabled": {
         "value": os.getenv("RAG_PGVECTOR_ENABLED", "true"),
@@ -94,14 +104,36 @@ DEFAULT_AI_CONFIG = {
         "description": "Usa pgvector como indice de busqueda vectorial si PostgreSQL lo soporta.",
     },
     "rag_chunk_max_tokens": {
-        "value": os.getenv("RAG_CHUNK_MAX_TOKENS", "180"),
+        "value": os.getenv("RAG_CHUNK_MAX_TOKENS", "400"),
         "value_type": "integer",
-        "description": "Tamano maximo de cada fragmento documental RAG.",
+        "description": (
+            "Tamano maximo de cada fragmento documental RAG. 400 tokens conserva "
+            "el parrafo completo en material medico educativo."
+        ),
+    },
+    "rag_max_chunks_per_document": {
+        "value": os.getenv("RAG_MAX_CHUNKS_PER_DOCUMENT", "3"),
+        "value_type": "integer",
+        "description": (
+            "Fragmentos que puede aportar un mismo documento al contexto. Con 1 "
+            "un documento que concentra la respuesta la entrega incompleta."
+        ),
+    },
+    "rag_exclude_evaluation_items": {
+        "value": os.getenv("RAG_EXCLUDE_EVALUATION_ITEMS", "true"),
+        "value_type": "boolean",
+        "description": (
+            "Excluye del indice las preguntas de alternativas y sus claves de "
+            "respuesta, para que no se citen como fuente al estudiante."
+        ),
     },
     "rag_chunk_overlap_tokens": {
-        "value": os.getenv("RAG_CHUNK_OVERLAP_TOKENS", "40"),
+        "value": os.getenv("RAG_CHUNK_OVERLAP_TOKENS", "80"),
         "value_type": "integer",
-        "description": "Solapamiento entre fragmentos documentales RAG.",
+        "description": (
+            "Solapamiento entre fragmentos documentales RAG. 80 tokens evita "
+            "cortar definiciones o listas a la mitad."
+        ),
     },
 }
 

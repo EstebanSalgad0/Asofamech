@@ -20,6 +20,7 @@ from ..auth import (
 router = APIRouter(prefix="/api/sct", tags=["SCT"])
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
+LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1:8b")
 
 VALID_STATUSES = {"draft", "published", "archived"}
 
@@ -170,7 +171,7 @@ async def generate_sct_items(
             focus=request.focus
         )
         ollama_payload = {
-            "model": "llama3:8b",
+            "model": LLM_MODEL,
             "messages": [{"role": "system", "content": prompt}],
             "stream": False,
             "temperature": 0.8,

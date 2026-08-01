@@ -336,33 +336,6 @@ export function ChatbotPage() {
     showToast(`"${current.title}" guardada`);
   };
 
-  const handleRegenerateLastResponse = async () => {
-    if (!current || isLoading) return;
-    const msgs = current.messages;
-    const lastUserIdx = [...msgs].reverse().findIndex((m) => m.sender === "user");
-    if (lastUserIdx === -1) return;
-    const userMsgIdx = msgs.length - 1 - lastUserIdx;
-    const userMsg = msgs[userMsgIdx];
-    const trimmed = msgs.slice(0, userMsgIdx + 1);
-    const updatedConv = { ...current, updatedAt: new Date().toISOString(), messages: trimmed };
-    const updated = conversations.map((c) => (c.id === currentId ? updatedConv : c));
-    persist(updated);
-    const started = startChatGeneration({
-      storageKey: userStorageKey(STORAGE_KEY),
-      conversationId: currentId,
-      promptText: userMsg.text,
-      topic: current.topic,
-      previousTopic: current.topic,
-      activityTitle: current.title,
-      trackActivity: false,
-    });
-    if (started) {
-      showToast("MediChat esta regenerando en segundo plano", "info");
-    } else {
-      showToast("Ya hay una respuesta generandose", "error");
-    }
-  };
-
   const handleSend = () => {
     const question = inputText.trim();
     if (!question || isLoading || !current) return;
@@ -708,7 +681,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                                           </span>
                                         )}
                                         {src.source && (
-                                          <span className="mc-cited-ref">
+                                          <span className="mc-cited-ref mc-cited-file">
                                             {src.source}
                                           </span>
                                         )}
@@ -841,18 +814,6 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:16px 0}
                     <path d="M4 10h12M10 4v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                   </svg>
                   Generar test SCT del hilo
-                </button>
-                <button className="mc-thread-btn" onClick={handleRegenerateLastResponse}>
-                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <path d="M4 10a6 6 0 1 0 1.5-4M4 6v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Re-generar última respuesta
-                </button>
-                <button className="mc-thread-btn">
-                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <path d="M10 13V4M6 9l4 4 4-4M4 16h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Exportar a PDF
                 </button>
               </div>
             </aside>

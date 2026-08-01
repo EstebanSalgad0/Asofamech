@@ -175,3 +175,115 @@ def test_rag_upload_txt_extracts_indexes_and_searches(rag_client):
     search_response = client.get("/api/rag/search?q=fiebre%20prolongada&limit=4")
     assert search_response.status_code == 200
     assert search_response.json()["hits"]
+
+
+def test_lexical_support_requires_shared_term():
+    """El filtro descarta documentos de otro tema clinico sin vocabulario comun."""
+    assert rag._has_lexical_support(
+        "cuando se debe abstener el modelo de clasificar un ROI",
+        "Interpretacion de regiones de interes",
+        "El modelo se abstiene cuando la confianza no supera el umbral.",
+        "ROI, abstencion",
+    )
+    assert not rag._has_lexical_support(
+        "como se diagnostica una infeccion urinaria",
+        "Estadificacion TNM del cancer de mama",
+        "El componente ganglionar pN describe el compromiso axilar.",
+        "TNM, pN",
+    )
+
+
+def test_lexical_support_is_permissive_without_usable_terms():
+    """Sin terminos utiles tras quitar conectores, decide solo el score vectorial."""
+    assert rag._has_lexical_support("que es una", "Titulo", "Contenido cualquiera", "")
+
+
+def test_strip_evaluation_items_removes_quiz_and_keeps_explanation():
+    from app.rag_utils import strip_evaluation_items
+
+    content = (
+        "La NAC resulta de la proliferacion de microorganismos a nivel alveolar.\n\n"
+        "Preguntas faciles\n\n"
+        "Cual es el mecanismo mas comun de llegada de los patogenos?\n"
+        "A) Contacto con la piel\n"
+        "B) Microaspiracion de flora orofaringea\n"
+        "C) Transmision sanguinea\n"
+        "D) Exposicion a radiacion\n\n"
+        "Respuesta correcta: B\nJustificacion: llegan por microaspiracion.\n\n"
+        "El edema alveolar deteriora el intercambio gaseoso."
+    )
+
+    result = strip_evaluation_items(content)
+
+    assert "proliferacion de microorganismos" in result
+    assert "edema alveolar deteriora" in result
+    assert "Respuesta correcta" not in result
+    assert "Microaspiracion de flora" not in result
+    assert "Preguntas faciles" not in result
+
+
+def test_strip_evaluation_items_keeps_short_lettered_lists():
+    """Una lista con dos vinetas no es un item de seleccion multiple."""
+    from app.rag_utils import strip_evaluation_items
+
+    content = "Clasificacion de la resistencia:\na) Primaria\nb) Adquirida"
+
+    assert "Primaria" in strip_evaluation_items(content)
+
+
+def test_document_budget_allows_several_chunks_from_same_document():
+    per_document: dict[int, int] = {}
+
+    assert rag._document_budget(7, per_document, max_documents=2, max_chunks_per_document=3)
+    per_document[7] = 3
+    # Alcanzo su tope de fragmentos.
+    assert not rag._document_budget(7, per_document, max_documents=2, max_chunks_per_document=3)
+    # Otro documento todavia cabe.
+    assert rag._document_budget(9, per_document, max_documents=2, max_chunks_per_document=3)
+    per_document[9] = 1
+    # Con dos documentos distintos ya no entra un tercero.
+    assert not rag._document_budget(11, per_document, max_documents=2, max_chunks_per_document=3)
+
+
+def test_relative_margin_drops_sources_far_below_the_best_hit():
+    hits = [
+        rag.RagHit(id=1, title="Tuberculosis", tags="", score=0.8834, snippet="a"),
+        rag.RagHit(id=2, title="Resistencia", tags="", score=0.7473, snippet="b"),
+        rag.RagHit(id=3, title="Neumonia", tags="", score=0.5158, snippet="c"),
+    ]
+
+    kept = rag._apply_relative_margin(hits)
+
+    # 0.5158 < 0.8834 * 0.70: otro tema clinico colandose por el umbral absoluto.
+    assert [hit.id for hit in kept] == [1, 2]
+
+
+def test_relative_margin_keeps_close_scores():
+    hits = [
+        rag.RagHit(id=1, title="Neumonia", tags="", score=0.6832, snippet="a"),
+        rag.RagHit(id=1, title="Neumonia", tags="", score=0.5593, snippet="b"),
+        rag.RagHit(id=1, title="Neumonia", tags="", score=0.5085, snippet="c"),
+    ]
+
+    assert len(rag._apply_relative_margin(hits)) == 3
+
+
+def test_relative_margin_keeps_a_single_hit():
+    hits = [rag.RagHit(id=1, title="ROI", tags="", score=0.4368, snippet="a")]
+
+    assert rag._apply_relative_margin(hits) == hits
+
+
+def test_build_rag_context_marks_chunks_of_the_same_document():
+    hits = [
+        rag.RagHit(id=1, title="Neumonia", tags="", score=0.8, snippet="uno", chunk_index=0),
+        rag.RagHit(id=1, title="Neumonia", tags="", score=0.7, snippet="dos", chunk_index=2),
+        rag.RagHit(id=2, title="Fiebre", tags="", score=0.6, snippet="tres", chunk_index=0),
+    ]
+
+    context = rag.build_rag_context(hits)
+
+    assert "Fragmento 1 del mismo documento" in context
+    assert "Fragmento 3 del mismo documento" in context
+    # El documento que aparece una sola vez no se etiqueta como fragmento.
+    assert context.count("del mismo documento") == 2

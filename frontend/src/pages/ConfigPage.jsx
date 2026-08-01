@@ -59,8 +59,8 @@ const DEFAULT_RAG_DOCUMENT = {
   source: "",
   document_type: "text",
   content: "",
-  chunk_size: 180,
-  chunk_overlap: 40,
+  chunk_size: 400,
+  chunk_overlap: 80,
 };
 const RAG_PRESETS = [
   { title: "Harrison Principios de Medicina Interna", tags: "libro de texto", chunks: "4.820", iconBg: "rgba(59,130,246,0.1)", iconColor: "#3b82f6", content: "" },
@@ -384,8 +384,8 @@ export function ConfigPage() {
         form.append("title", ragDocumentForm.title || ragFile.name);
         form.append("tags", ragDocumentForm.tags || "");
         form.append("source", ragDocumentForm.source || ragFile.name);
-        form.append("chunk_size", String(ragDocumentForm.chunk_size || 180));
-        form.append("chunk_overlap", String(ragDocumentForm.chunk_overlap || 40));
+        form.append("chunk_size", String(ragDocumentForm.chunk_size || 400));
+        form.append("chunk_overlap", String(ragDocumentForm.chunk_overlap || 80));
         await uploadRagDocument(form);
       } else if (editingRagDocumentId) {
         await updateRagDocument(editingRagDocumentId, ragDocumentForm);
@@ -1532,8 +1532,11 @@ export function ConfigPage() {
                       value={ragDocumentForm.tags}
                       onChange={(e) => updateRagDocumentForm("tags", e.target.value)}
                       placeholder="histopatología, metástasis, SCT"
+                      maxLength={200}
                     />
-                    <div className="cfg-rag-hint">Separadas por coma. Mejora la recuperación temática.</div>
+                    <div className="cfg-rag-hint">
+                      Separadas por coma, máximo 200 caracteres. Mejora la recuperación temática.
+                    </div>
 
                     <label className="cfg-rag-label">FUENTE</label>
                     <input
@@ -2071,7 +2074,7 @@ export function ConfigPage() {
           {activeTab === "ai" && role === "Administrador" && (() => {
             const SLIDER_KEYS = ["temperature", "top_p"];
             const MODEL_OPTS = {
-              llm_model: ["llama3:8b", "llama3:70b", "mistral:7b", "phi3:mini", "qwen2:7b", "gemma2:9b"],
+              llm_model: ["llama3.1:8b", "llama3:8b", "llama3:70b", "mistral:7b", "phi3:mini", "qwen2:7b", "gemma2:9b"],
               embedding_model: [
                 "sentence-transformers/all-MiniLM-L6-v2",
                 "sentence-transformers/all-mpnet-base-v2",

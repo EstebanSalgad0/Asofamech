@@ -100,6 +100,45 @@ def chunk_text(
     return chunks
 
 
+_ANSWER_KEY_RE = re.compile(r"respuesta\s+correcta", re.IGNORECASE)
+_OPTION_LINE_RE = re.compile(r"^\s*[a-eA-E][\)\.]\s+\S")
+_QUIZ_HEADING_RE = re.compile(r"^\s*preguntas\b", re.IGNORECASE)
+
+
+def _looks_like_evaluation_block(paragraph: str) -> bool:
+    normalized = normalize_text(paragraph)
+    if _ANSWER_KEY_RE.search(normalized):
+        return True
+
+    lines = paragraph.splitlines()
+    options = {
+        line.strip()[0].lower()
+        for line in lines
+        if _OPTION_LINE_RE.match(line)
+    }
+    # Tres o mas alternativas distintas (A, B, C...) delatan un item de seleccion
+    # multiple; con menos se corre el riesgo de borrar una lista legitima.
+    if len(options) >= 3:
+        return True
+
+    return bool(_QUIZ_HEADING_RE.match(paragraph.strip())) and len(paragraph.strip()) < 120
+
+
+def strip_evaluation_items(content: str) -> str:
+    """Quita items de autoevaluacion del texto que se indexa para RAG.
+
+    El material docente suele traer preguntas de alternativas con su clave de
+    respuesta. Esos bloques compiten con el texto explicativo en la busqueda
+    vectorial y, cuando ganan, el estudiante recibe como fuente citada la
+    respuesta de un test. El documento original no se modifica: esto solo
+    afecta al texto que se convierte en chunks.
+    """
+    text = (content or "").replace("\r\n", "\n").replace("\r", "\n")
+    paragraphs = re.split(r"\n\s*\n", text)
+    kept = [p for p in paragraphs if p.strip() and not _looks_like_evaluation_block(p)]
+    return "\n\n".join(kept).strip()
+
+
 def score_document(query: str, title: str, content: str, tags: str = "") -> float:
     query_terms = tokenize(query)
     if not query_terms:

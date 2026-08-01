@@ -190,16 +190,16 @@ if ($backendOk) {
 
 if ($dockerReady) {
     $ollamaModels = docker exec asofamech_ollama ollama list 2>$null | Out-String
-    if ($ollamaModels -match "llama3:8b") {
-        Write-Pass "Ollama tiene llama3:8b"
+    if ($ollamaModels -match "llama3.1:8b") {
+        Write-Pass "Ollama tiene llama3.1:8b"
     } else {
-        Write-Failure "Ollama no tiene llama3:8b"
+        Write-Failure "Ollama no tiene llama3.1:8b"
     }
 }
 
 if ($CheckLlmGeneration -and $backendOk) {
     try {
-        $body = @{ model = "llama3:8b"; prompt = "Responde exactamente: OK"; stream = $false } | ConvertTo-Json
+        $body = @{ model = "llama3.1:8b"; prompt = "Responde exactamente: OK"; stream = $false } | ConvertTo-Json
         $watch = [System.Diagnostics.Stopwatch]::StartNew()
         $result = Invoke-RestMethod -Method Post -Uri "http://localhost:11434/api/generate" -ContentType "application/json" -Body $body -TimeoutSec 180
         $watch.Stop()

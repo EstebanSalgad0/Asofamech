@@ -15,7 +15,7 @@ param(
 
     [switch]$PullOllamaModel,
 
-    [string]$OllamaModel = "llama3:8b"
+    [string]$OllamaModel = "llama3.1:8b"
 )
 
 $ErrorActionPreference = "Stop"

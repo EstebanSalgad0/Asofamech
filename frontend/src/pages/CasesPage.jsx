@@ -9,8 +9,12 @@ import {
   deleteCase,
   listMedicalImages,
   listSCTTests,
+  uploadCaseImages,
+  deleteCaseImage,
 } from "../api";
 import { AppSidebar } from "../components/AppSidebar";
+import { CaseImageGallery } from "../components/CaseImageGallery";
+import { CaseBody } from "../components/CaseBody";
 import {
   clearAuthSession,
   getStoredRole,
@@ -33,7 +37,17 @@ const EMPTY_FORM = {
   image_id: "",
   sct_test_id: "",
   status: "draft",
+  image_modality: "",
 };
+const CASE_IMAGE_MODALITIES = [
+  "Radiografía",
+  "TAC",
+  "Ecografía",
+  "Resonancia",
+  "Fotografía clínica",
+  "Electrocardiograma",
+  "Otro",
+];
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -94,6 +108,8 @@ export function CasesPage() {
   const [formError, setFormError] = useState(null);
   const [formSaving, setFormSaving] = useState(false);
   const [medicalImages, setMedicalImages] = useState([]);
+  const [pendingImages, setPendingImages] = useState([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [sctTests, setSctTests] = useState([]);
   const [resourceError, setResourceError] = useState(null);
 
@@ -176,6 +192,7 @@ export function CasesPage() {
   function openCreate() {
     setEditingCase(null);
     setForm(EMPTY_FORM);
+    setPendingImages([]);
     setFormError(null);
     setShowForm(true);
   }
@@ -194,9 +211,26 @@ export function CasesPage() {
       image_id: c.image_id != null ? String(c.image_id) : "",
       sct_test_id: c.sct_test_id != null ? String(c.sct_test_id) : "",
       status: c.status || "draft",
+      image_modality: "",
     });
+    setPendingImages([]);
     setFormError(null);
     setShowForm(true);
+  }
+
+  async function handleDeleteCaseImage(image) {
+    if (!confirm(`¿Eliminar la imagen "${image.caption || image.original_filename}"?`)) return;
+    try {
+      await deleteCaseImage(image.id);
+      const strip = (c) =>
+        c && c.id === image.case_id
+          ? { ...c, images: (c.images || []).filter((i) => i.id !== image.id) }
+          : c;
+      setCases((prev) => prev.map(strip));
+      setSelectedCase((prev) => strip(prev));
+    } catch (err) {
+      alert(err.message);
+    }
   }
 
   async function handleFormSubmit(e) {
@@ -220,15 +254,37 @@ export function CasesPage() {
         sct_test_id: form.sct_test_id ? parseInt(form.sct_test_id, 10) : null,
         status: form.status,
       };
+      let savedCase;
       if (editingCase) {
         const { status: _, ...updatePayload } = payload;
-        const updated = await updateCase(editingCase.id, updatePayload);
-        setCases((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-        if (selectedCase?.id === updated.id) setSelectedCase(updated);
+        savedCase = await updateCase(editingCase.id, updatePayload);
       } else {
-        const created = await createCase(payload);
-        setCases((prev) => [created, ...prev]);
+        savedCase = await createCase(payload);
       }
+
+      // Las imagenes se suben despues de guardar porque el endpoint necesita el
+      // id del caso, que en un caso nuevo solo existe tras la creacion.
+      if (pendingImages.length > 0) {
+        setUploadingImages(true);
+        try {
+          const formData = new FormData();
+          pendingImages.forEach((item) => formData.append("files", item.file));
+          formData.append("captions", pendingImages.map((item) => item.caption || "").join("|"));
+          if (form.image_modality) formData.append("modality", form.image_modality);
+          const uploaded = await uploadCaseImages(savedCase.id, formData);
+          savedCase = { ...savedCase, images: [...(savedCase.images || []), ...uploaded] };
+        } finally {
+          setUploadingImages(false);
+        }
+      }
+
+      setCases((prev) =>
+        editingCase
+          ? prev.map((c) => (c.id === savedCase.id ? savedCase : c))
+          : [savedCase, ...prev]
+      );
+      if (selectedCase?.id === savedCase.id) setSelectedCase(savedCase);
+      setPendingImages([]);
       setShowForm(false);
     } catch (err) {
       setFormError(err.message);
@@ -414,7 +470,9 @@ export function CasesPage() {
 
             <section className="cases-modal-section">
               <h4>Caso clínico</h4>
-              <div className="cases-modal-body">{selectedCase.body}</div>
+              <div className="cases-modal-body">
+                <CaseBody body={selectedCase.body} images={selectedCase.images || []} />
+              </div>
             </section>
 
             {selectedCase.learning_objectives && (
@@ -594,6 +652,78 @@ export function CasesPage() {
 
               {resourceError && <p className="cases-form-hint">{resourceError}</p>}
 
+              <div className="cases-form-row">
+                <label>Imágenes del caso (radiografía, TAC, fotografía…)</label>
+                <p className="cases-form-hint">
+                  Distintas de la lámina histopatológica: estas son ilustrativas del caso y no
+                  se envían al modelo de histopatología. JPG, PNG o WEBP, hasta 12 por caso.
+                </p>
+                <div className="cases-form-row-2col">
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp"
+                    multiple
+                    data-testid="case-images-input"
+                    onChange={(e) => {
+                      const chosen = Array.from(e.target.files || []).map((file) => ({
+                        file,
+                        caption: file.name.replace(/\.[^.]+$/, ""),
+                      }));
+                      setPendingImages((prev) => [...prev, ...chosen]);
+                      e.target.value = "";
+                    }}
+                  />
+                  <select
+                    value={form.image_modality}
+                    onChange={(e) => setForm((f) => ({ ...f, image_modality: e.target.value }))}
+                  >
+                    <option value="">Modalidad (opcional)</option>
+                    {CASE_IMAGE_MODALITIES.map((modality) => (
+                      <option key={modality} value={modality}>{modality}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {pendingImages.length > 0 && (
+                  <ul className="cases-pending-images">
+                    {pendingImages.map((item, index) => (
+                      <li key={`${item.file.name}-${index}`}>
+                        <input
+                          type="text"
+                          value={item.caption}
+                          placeholder="Leyenda de la imagen"
+                          onChange={(e) => {
+                            const caption = e.target.value;
+                            setPendingImages((prev) =>
+                              prev.map((p, i) => (i === index ? { ...p, caption } : p))
+                            );
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPendingImages((prev) => prev.filter((_, i) => i !== index))
+                          }
+                          aria-label={`Quitar ${item.file.name}`}
+                        >
+                          Quitar
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {editingCase?.images?.length > 0 && (
+                  <>
+                    <p className="cases-form-hint">Imágenes ya cargadas:</p>
+                    <CaseImageGallery
+                      images={editingCase.images}
+                      onDelete={handleDeleteCaseImage}
+                    />
+                  </>
+                )}
+              </div>
+
               {!editingCase && (
                 <div className="cases-form-row">
                   <label>Estado inicial</label>
@@ -611,7 +741,13 @@ export function CasesPage() {
                   Cancelar
                 </button>
                 <button type="submit" className="cases-form-btn-save" disabled={formSaving}>
-                  {formSaving ? "Guardando..." : editingCase ? "Guardar cambios" : "Crear caso"}
+                  {uploadingImages
+                    ? "Subiendo imágenes..."
+                    : formSaving
+                      ? "Guardando..."
+                      : editingCase
+                        ? "Guardar cambios"
+                        : "Crear caso"}
                 </button>
               </div>
             </form>

@@ -13,6 +13,9 @@ class CaseOut(BaseModel):
     topic: Optional[str] = None
     image_id: Optional[int] = None
     sct_test_id: Optional[int] = None
+    # Imagenes ilustrativas del caso (radiografia, TAC...), distintas de la
+    # lamina histopatologica referenciada por image_id.
+    images: List[dict] = []
     created_by: Optional[int] = None
     status: str = "draft"
     created_at: Optional[str] = None

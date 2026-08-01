@@ -8,7 +8,11 @@ from .rag_utils import EMBEDDING_DIMENSIONS, embed_text as hash_embed_text
 
 
 logger = logging.getLogger(__name__)
-DEFAULT_SENTENCE_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# Modelo multilingue: el corpus y las consultas del chatbot estan en espanol.
+# all-MiniLM-L6-v2 solo esta entrenado en ingles y hunde los scores de similitud.
+# paraphrase-multilingual-MiniLM-L12-v2 mantiene 384 dimensiones, por lo que es
+# reemplazo directo sin cambios en el esquema de pgvector.
+DEFAULT_SENTENCE_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 
 @dataclass(frozen=True)
