@@ -1,6 +1,7 @@
 import os
 import shutil
 import uuid
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -18,7 +19,7 @@ from ..auth import (
     ROLE_STUDENT,
     user_role,
 )
-from ..models import Case, CaseImage, MedicalImage, SCTTest, User
+from ..models import Case, CaseImage, CaseLink, MedicalImage, SCTTest, User
 from ..schemas import CaseOut, CaseCreate, CaseUpdate, CaseStatusUpdate
 
 router = APIRouter(prefix="/api", tags=["cases"])
@@ -40,13 +41,122 @@ _CONTENT_TYPES = {
 }
 
 
+# ------------------------------------------------------------- recursos externos
+# Tipos de recurso que puede adjuntar el docente. Wooclap se distingue del resto
+# porque es la via de retroalimentacion interactiva: el estudiante sale de la
+# plataforma a responder en vivo, no a leer.
+CASE_LINK_KINDS = {
+    "wooclap",
+    "bibliografia",
+    "guia",
+    "articulo",
+    "video",
+    "otro",
+}
+MAX_LINKS_PER_CASE = 15
+MAX_LINK_URL_LENGTH = 1000
+# Solo http/https: esquemas como javascript:, data: o file: convertirian un
+# enlace publicado por un docente en un vector de ejecucion en el navegador del
+# estudiante, o en una lectura del sistema de archivos local.
+ALLOWED_LINK_SCHEMES = {"http", "https"}
+
+
+def _validate_link_url(raw_url: str, label: str) -> str:
+    url = (raw_url or "").strip()
+    if not url:
+        raise HTTPException(status_code=422, detail=f"El recurso '{label}' no tiene URL.")
+    if len(url) > MAX_LINK_URL_LENGTH:
+        raise HTTPException(
+            status_code=422,
+            detail=f"La URL del recurso '{label}' supera los {MAX_LINK_URL_LENGTH} caracteres.",
+        )
+
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in ALLOWED_LINK_SCHEMES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"La URL del recurso '{label}' debe empezar por http:// o https:// "
+                f"(recibido: '{parsed.scheme or 'sin esquema'}')."
+            ),
+        )
+    if not parsed.netloc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"La URL del recurso '{label}' no tiene un dominio valido.",
+        )
+    return url
+
+
+def _normalize_link_payload(links: list, current_user: User) -> list[dict]:
+    if len(links) > MAX_LINKS_PER_CASE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Un caso admite hasta {MAX_LINKS_PER_CASE} recursos externos.",
+        )
+
+    normalized: list[dict] = []
+    for position, link in enumerate(links):
+        values = link if isinstance(link, dict) else _schema_values(link)
+        label = (values.get("label") or "").strip()
+        if not label:
+            raise HTTPException(
+                status_code=422,
+                detail="Cada recurso externo necesita un titulo visible.",
+            )
+
+        kind = (values.get("kind") or "otro").strip().lower()
+        if kind not in CASE_LINK_KINDS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Tipo de recurso no permitido: {kind}",
+            )
+
+        description = (values.get("description") or "").strip() or None
+        normalized.append({
+            "kind": kind,
+            "label": label[:200],
+            "url": _validate_link_url(values.get("url"), label),
+            "description": description[:400] if description else None,
+            "position": position,
+            "created_by": current_user.id,
+        })
+    return normalized
+
+
+def _replace_case_links(case: Case, links: list, current_user: User, db: Session) -> None:
+    """Sustituye el conjunto completo de recursos del caso.
+
+    El formulario del docente edita la lista entera, asi que reemplazarla es mas
+    simple y menos propenso a divergencias que sincronizar altas y bajas una a una.
+    """
+    normalized = _normalize_link_payload(links, current_user)
+    case.links.clear()
+    db.flush()
+    for values in normalized:
+        case.links.append(CaseLink(**values))
+
+
+def _serialize_case_link(link: CaseLink) -> dict:
+    return {
+        "id": link.id,
+        "case_id": link.case_id,
+        "kind": link.kind,
+        "label": link.label,
+        "url": link.url,
+        "description": link.description,
+        "position": link.position,
+        "created_at": link.created_at.isoformat() if link.created_at else None,
+    }
+
+
 def _schema_values(schema, **kwargs) -> dict:
     if hasattr(schema, "model_dump"):
         return schema.model_dump(**kwargs)
     return schema.dict(**kwargs)
 
 
-def _validate_case_links(values: dict, db: Session) -> None:
+def _validate_linked_resources(values: dict, db: Session) -> None:
     image_id = values.get("image_id")
     if image_id is not None:
         image = (
@@ -102,6 +212,7 @@ def _serialize(case: Case) -> dict:
         "image_id": case.image_id,
         "sct_test_id": case.sct_test_id,
         "images": [_serialize_case_image(img) for img in (case.images or [])],
+        "links": [_serialize_case_link(link) for link in (case.links or [])],
         "created_by": case.created_by,
         "status": case.status,
         "created_at": case.created_at.isoformat() if case.created_at else None,
@@ -204,7 +315,7 @@ def create_case(
         raise HTTPException(status_code=422, detail=f"Estado inválido: {case_data.status}")
 
     values = _schema_values(case_data)
-    _validate_case_links(values, db)
+    _validate_linked_resources(values, db)
 
     new_case = Case(
         title=values["title"],
@@ -223,6 +334,10 @@ def create_case(
         updated_at=datetime.utcnow(),
     )
     db.add(new_case)
+
+    for link_values in _normalize_link_payload(values.get("links") or [], current_user):
+        new_case.links.append(CaseLink(**link_values))
+
     db.commit()
     db.refresh(new_case)
     return _serialize(new_case)
@@ -240,10 +355,15 @@ def update_case(
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
     values = _schema_values(case_data, exclude_unset=True)
-    _validate_case_links(values, db)
+    _validate_linked_resources(values, db)
+
+    # links es una relacion, no una columna: setattr con dicts crudos la rompe.
+    links_payload = values.pop("links", None)
 
     for field, value in values.items():
         setattr(case, field, value)
+    if links_payload is not None:
+        _replace_case_links(case, links_payload, current_user, db)
     case.updated_at = datetime.utcnow()
 
     db.commit()

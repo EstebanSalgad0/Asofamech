@@ -21,6 +21,7 @@ import {
   saveSCTTest,
   searchRagDocuments,
   uploadRagDocument,
+  testLLMProvider,
   updateAIConfig,
   updateAdminUser,
   updateRagDocument,
@@ -143,6 +144,8 @@ export function ConfigPage() {
   const [savingAIConfig, setSavingAIConfig] = useState(false);
   const [integrationStatus, setIntegrationStatus] = useState(null);
   const [loadingIntegrationStatus, setLoadingIntegrationStatus] = useState(false);
+  const [testingLLM, setTestingLLM] = useState(false);
+  const [llmTestResult, setLlmTestResult] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
   const [loadingAdminUsers, setLoadingAdminUsers] = useState(false);
   const [savingAdminUserId, setSavingAdminUserId] = useState(null);
@@ -497,6 +500,27 @@ export function ConfigPage() {
       showToast(error.message || "No se pudo guardar la configuración IA", "error", 7000);
     } finally {
       setSavingAIConfig(false);
+    }
+  };
+
+  // Prueba contra el proveedor ya guardado: distingue "credencial invalida" de
+  // "modelo inexistente" antes de que el error aparezca en una consulta real.
+  const handleTestLLM = async () => {
+    setTestingLLM(true);
+    setLlmTestResult(null);
+    try {
+      const result = await testLLMProvider();
+      setLlmTestResult(result);
+      if (result?.ok) {
+        showToast(`Proveedor operativo (${result.latency_ms} ms)`, "success");
+      } else {
+        showToast(result?.detail || "El proveedor no respondió", "error", 8000);
+      }
+    } catch (error) {
+      setLlmTestResult({ ok: false, detail: error.message });
+      showToast(error.message || "No se pudo probar el proveedor", "error", 8000);
+    } finally {
+      setTestingLLM(false);
     }
   };
 
@@ -2075,19 +2099,48 @@ export function ConfigPage() {
             const SLIDER_KEYS = ["temperature", "top_p"];
             const MODEL_OPTS = {
               llm_model: ["llama3.1:8b", "llama3:8b", "llama3:70b", "mistral:7b", "phi3:mini", "qwen2:7b", "gemma2:9b"],
+              llm_api_model: [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
+                "llama3-70b-8192",
+                "llama3-8b-8192",
+              ],
               embedding_model: [
                 "sentence-transformers/all-MiniLM-L6-v2",
                 "sentence-transformers/all-mpnet-base-v2",
                 "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
               ],
             };
-            const modelItems = aiConfigItems.filter(i => i.value_type !== "boolean");
+            // Los campos del proveedor viven en su propia tarjeta: mezclarlos
+            // con los parametros de muestreo es lo que hace ilegible el panel.
+            const PROVIDER_KEYS = [
+              "llm_provider", "llm_api_base_url", "llm_api_key",
+              "llm_api_model", "llm_model", "ollama_url", "llm_request_timeout",
+            ];
+            const providerValue = (key) =>
+              aiConfigItems.find(i => i.key === key)?.value ?? "";
+            const isExternalProvider = providerValue("llm_provider") !== "ollama";
+            // Con proveedor externo, los campos de Ollama solo confunden, y al reves.
+            const providerItems = aiConfigItems.filter(i =>
+              PROVIDER_KEYS.includes(i.key) &&
+              (isExternalProvider
+                ? !["llm_model", "ollama_url"].includes(i.key)
+                : !["llm_api_base_url", "llm_api_key", "llm_api_model"].includes(i.key))
+            );
+            const modelItems = aiConfigItems.filter(i =>
+              i.value_type !== "boolean" && !PROVIDER_KEYS.includes(i.key)
+            );
             const flagItems  = aiConfigItems.filter(i => i.value_type === "boolean");
-            const ollamaModels = integrationStatus?.llama3?.models || [];
+            const providerModels = integrationStatus?.llm?.models || integrationStatus?.llama3?.models || [];
+            const ollamaModels = isExternalProvider ? [] : providerModels;
             const STATUS_DEFS = [
-              { key: "llama",      label: "Llama / Ollama",    iconBg: "rgba(251,146,60,0.15)",  iconColor: "#ea580c", icon: "🦙",
-                getValue: (s) => s.llama3?.reachable ? "Disponible" : "No confirmado",
-                isOk:     (s) => s.llama3?.reachable },
+              { key: "llm",        label: "Proveedor LLM",     iconBg: "rgba(251,146,60,0.15)",  iconColor: "#ea580c", icon: "🦙",
+                getValue: (s) => {
+                  const llm = s.llm || s.llama3 || {};
+                  if (!llm.configured) return "Sin configurar";
+                  return llm.reachable ? `${llm.label || "Proveedor"} · ${llm.model}` : "No confirmado";
+                },
+                isOk:     (s) => (s.llm || s.llama3 || {}).reachable },
               { key: "rag",        label: "RAG",               iconBg: "rgba(239,68,68,0.15)",   iconColor: "#dc2626", icon: "📚",
                 getValue: (s) => s.rag?.enabled ? `${s.rag.documents_count} documentos` : "Inactivo",
                 isOk:     (s) => s.rag?.enabled && s.rag?.documents_count > 0 },
@@ -2106,7 +2159,7 @@ export function ConfigPage() {
             ];
             const statusClass = (ok) => ok === true ? "ai-st-green" : ok === false ? "ai-st-amber" : "ai-st-teal";
             const overallOk = integrationStatus
-              ? (integrationStatus.llama3?.reachable && integrationStatus.rag?.pgvector_available)
+              ? ((integrationStatus.llm || integrationStatus.llama3 || {}).reachable && integrationStatus.rag?.pgvector_available)
               : null;
 
             return (
@@ -2114,7 +2167,7 @@ export function ConfigPage() {
                 <div className="cfg-section-top">
                   <div>
                     <div className="cfg-section-title">Configuración de IA</div>
-                    <div className="cfg-section-desc">Administra el modelo, la conexión con Ollama, activación RAG y parámetros de respuesta.</div>
+                    <div className="cfg-section-desc">Administra el proveedor del modelo generativo (Ollama local o API externa), la activación del RAG y los parámetros de respuesta.</div>
                   </div>
                   <div className="cfg-inline-actions">
                     <button className="cfg-view-btn" type="button" onClick={loadIntegrationStatus} disabled={loadingIntegrationStatus}>
@@ -2129,9 +2182,111 @@ export function ConfigPage() {
                 <div className="cfg-ai-layout">
                   {/* Left column */}
                   <div className="cfg-ai-left">
-                    {/* Model & connection */}
+                    {/* Provider: dónde se ejecuta el modelo generativo */}
                     <div className="cfg-ai-card">
-                      <div className="cfg-ai-card-title">Modelo y conexión</div>
+                      <div className="cfg-ai-card-title">Proveedor del modelo generativo</div>
+                      <p className="cfg-ai-field-hint" style={{ marginBottom: 14 }}>
+                        Ollama ejecuta el modelo en este servidor. Un proveedor externo
+                        compatible con OpenAI —como Groq— responde mucho más rápido.
+                        En ambos casos el RAG se calcula aquí: al proveedor solo viaja
+                        el prompt, con los fragmentos ya seleccionados localmente.
+                      </p>
+                      <div className="cfg-ai-fields">
+                        {providerItems.map((item) => (
+                          <div key={item.key} className="cfg-ai-field-wrap">
+                            <label className="cfg-ai-field-label" htmlFor={`cfg-${item.key}`}>
+                              {item.key.toUpperCase()}
+                            </label>
+                            {item.key === "llm_provider" ? (
+                              <select
+                                id={`cfg-${item.key}`}
+                                className="cfg-ai-select"
+                                value={item.value}
+                                onChange={(e) => updateAIConfigItem(item.key, "value", e.target.value)}
+                              >
+                                <option value="ollama">Ollama (local)</option>
+                                <option value="groq">Groq (API externa)</option>
+                                <option value="openai_compatible">Otra API compatible con OpenAI</option>
+                              </select>
+                            ) : item.value_type === "password" ? (
+                              <input
+                                id={`cfg-${item.key}`}
+                                type="password"
+                                className="cfg-ai-input"
+                                value={item.value}
+                                autoComplete="off"
+                                placeholder={item.is_set ? "Clave guardada" : "gsk_…"}
+                                onChange={(e) => updateAIConfigItem(item.key, "value", e.target.value)}
+                              />
+                            ) : MODEL_OPTS[item.key] ? (
+                              <>
+                                <select
+                                  id={`cfg-${item.key}`}
+                                  className="cfg-ai-select"
+                                  value={item.value}
+                                  onChange={(e) => updateAIConfigItem(item.key, "value", e.target.value)}
+                                >
+                                  {!(
+                                    (item.key === "llm_model" && ollamaModels.length > 0
+                                      ? ollamaModels
+                                      : MODEL_OPTS[item.key]
+                                    ).includes(item.value)
+                                  ) && <option value={item.value}>{item.value}</option>}
+                                  {(item.key === "llm_model" && ollamaModels.length > 0
+                                    ? ollamaModels
+                                    : MODEL_OPTS[item.key]
+                                  ).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                              </>
+                            ) : item.value_type === "integer" ? (
+                              <input
+                                id={`cfg-${item.key}`}
+                                type="number" min="5" max="600"
+                                className="cfg-ai-input"
+                                value={item.value}
+                                onChange={(e) => updateAIConfigItem(item.key, "value", e.target.value)}
+                              />
+                            ) : (
+                              <input
+                                id={`cfg-${item.key}`}
+                                type="text"
+                                className="cfg-ai-input"
+                                value={item.value}
+                                placeholder={item.key === "ollama_url" ? "http://ollama:11434" : "https://api.groq.com/openai/v1"}
+                                onChange={(e) => updateAIConfigItem(item.key, "value", e.target.value)}
+                              />
+                            )}
+                            <div className="cfg-ai-field-hint">{item.description}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="cfg-inline-actions" style={{ marginTop: 16 }}>
+                        <button
+                          className="cfg-view-btn" type="button"
+                          onClick={handleTestLLM}
+                          disabled={testingLLM || savingAIConfig}
+                        >
+                          {testingLLM ? "Probando…" : "⚡ Probar conexión"}
+                        </button>
+                        {llmTestResult && (
+                          <span className={`cfg-ai-status-val ${llmTestResult.ok ? "ai-st-green" : "ai-st-amber"}`}>
+                            {llmTestResult.ok
+                              ? `${llmTestResult.label} · ${llmTestResult.model} · ${llmTestResult.latency_ms} ms`
+                              : llmTestResult.detail}
+                          </span>
+                        )}
+                      </div>
+                      {isExternalProvider && (
+                        <p className="cfg-ai-field-hint" style={{ marginTop: 10 }}>
+                          La prueba usa la configuración <strong>ya guardada</strong>: guarda antes de probar.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Parámetros de generación */}
+                    <div className="cfg-ai-card">
+                      <div className="cfg-ai-card-title">Parámetros de generación y RAG</div>
                       {loadingAIConfig && aiConfigItems.length === 0 ? (
                         <div className="cfg-loading">Cargando configuración IA…</div>
                       ) : (
@@ -2139,9 +2294,9 @@ export function ConfigPage() {
                           {modelItems.map((item) => {
                             const pct = SLIDER_KEYS.includes(item.key)
                               ? `${Math.round((parseFloat(item.value) || 0) * 100)}%` : "0%";
-                            const opts = item.key === "llm_model" && ollamaModels.length > 0
-                              ? ollamaModels
-                              : (MODEL_OPTS[item.key] || []);
+                            // Los selectores de proveedor y modelo ya viven en su
+                            // propia tarjeta; aqui solo quedan embeddings y numeros.
+                            const opts = MODEL_OPTS[item.key] || [];
                             const currentInOpts = opts.includes(item.value);
                             return (
                               <div key={item.key} className="cfg-ai-field-wrap">
@@ -2169,11 +2324,6 @@ export function ConfigPage() {
                                       {!currentInOpts && <option value={item.value}>{item.value}</option>}
                                       {opts.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                     </select>
-                                    {item.key === "llm_model" && ollamaModels.length === 0 && (
-                                      <div className="cfg-ai-models-hint">
-                                        Verifica la integración para cargar modelos disponibles
-                                      </div>
-                                    )}
                                     <div className="cfg-ai-field-hint">{item.description}</div>
                                   </>
                                 ) : item.value_type === "integer" ? (
@@ -2185,7 +2335,6 @@ export function ConfigPage() {
                                 ) : (
                                   <>
                                     <input type="text" className="cfg-ai-input" value={item.value}
-                                      placeholder={item.key === "ollama_url" ? "http://ollama:11434" : ""}
                                       onChange={(e) => updateAIConfigItem(item.key, "value", e.target.value)} />
                                     <div className="cfg-ai-field-hint">{item.description}</div>
                                   </>

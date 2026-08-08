@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -64,10 +65,13 @@ from ..auth import (
     get_current_user,
     user_has_permission,
 )
+from ..llm_service import build_llm_settings, chat_completion
 from .admin import get_ai_config_map
-from .chat import LLM_MODEL, OLLAMA_URL, _config_int
+from .chat import _config_int
 from .rag import build_rag_context, retrieve_rag_hits
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/histopathology", tags=["histopathology"])
 
@@ -135,25 +139,27 @@ async def _generate_histo_feedback(
         "mejorar la selección de la ROI y qué características buscar."
     )
 
+    settings = build_llm_settings(get_ai_config_map(db))
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={
-                    "model": LLM_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "stream": False,
-                    "options": {"temperature": 0.4, "top_p": 0.9, "num_ctx": num_ctx, "num_predict": max_tokens},
-                },
+        async with httpx.AsyncClient(timeout=min(settings.timeout, 60.0)) as client:
+            text = await chat_completion(
+                client,
+                settings,
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.4,
+                top_p=0.9,
+                max_tokens=max_tokens,
+                num_ctx=num_ctx,
+                purpose="retroalimentacion histopatologica",
             )
-            if resp.status_code == 200:
-                text = resp.json().get("message", {}).get("content", "").strip()
-                return text or None
+            return text or None
     except Exception:
-        pass
+        # La retroalimentacion es un complemento del resultado del clasificador:
+        # si el proveedor falla, el analisis se entrega igual sin la explicacion.
+        logger.warning("No se pudo generar retroalimentacion educativa", exc_info=True)
     return None
 
 

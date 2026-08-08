@@ -15,6 +15,8 @@ import {
 import { AppSidebar } from "../components/AppSidebar";
 import { CaseImageGallery } from "../components/CaseImageGallery";
 import { CaseBody } from "../components/CaseBody";
+import { CaseResources, safeExternalUrl } from "../components/CaseResources";
+import { CaseLinksEditor, serializeLinks } from "../components/CaseLinksEditor";
 import {
   clearAuthSession,
   getStoredRole,
@@ -54,6 +56,22 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+const DIFFICULTY_COLORS = { pregrado: "#60a5fa", internado: "#f59e0b", residente: "#f472b6" };
+
+/** Minutos estimados de lectura, para que el estudiante dimensione el caso antes de entrar. */
+function readingMinutes(caseItem) {
+  const text = [caseItem.description, caseItem.clinical_context, caseItem.body]
+    .filter(Boolean)
+    .join(" ");
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function countResources(caseItem) {
+  const external = (caseItem.links || []).filter((link) => safeExternalUrl(link.url)).length;
+  return external + (caseItem.sct_test_id ? 1 : 0) + (caseItem.image_id ? 1 : 0);
+}
+
 function StatusBadge({ status }) {
   return (
     <span
@@ -67,9 +85,9 @@ function StatusBadge({ status }) {
 
 function DiffBadge({ difficulty }) {
   if (!difficulty) return null;
-  const colors = { pregrado: "#60a5fa", internado: "#f59e0b", residente: "#f472b6" };
+  const color = DIFFICULTY_COLORS[difficulty] || "#94a3b8";
   return (
-    <span className="cases-diff-badge" style={{ borderColor: colors[difficulty] || "#94a3b8", color: colors[difficulty] || "#94a3b8" }}>
+    <span className="cases-diff-badge" style={{ borderColor: color, color }}>
       {difficulty}
     </span>
   );
@@ -108,6 +126,7 @@ export function CasesPage() {
   const [formError, setFormError] = useState(null);
   const [formSaving, setFormSaving] = useState(false);
   const [medicalImages, setMedicalImages] = useState([]);
+  const [formLinks, setFormLinks] = useState([]);
   const [pendingImages, setPendingImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [sctTests, setSctTests] = useState([]);
@@ -192,6 +211,7 @@ export function CasesPage() {
   function openCreate() {
     setEditingCase(null);
     setForm(EMPTY_FORM);
+    setFormLinks([]);
     setPendingImages([]);
     setFormError(null);
     setShowForm(true);
@@ -213,6 +233,14 @@ export function CasesPage() {
       status: c.status || "draft",
       image_modality: "",
     });
+    setFormLinks(
+      (c.links || []).map((link) => ({
+        kind: link.kind || "otro",
+        label: link.label || "",
+        url: link.url || "",
+        description: link.description || "",
+      }))
+    );
     setPendingImages([]);
     setFormError(null);
     setShowForm(true);
@@ -240,6 +268,11 @@ export function CasesPage() {
       setFormError("Título, descripción y cuerpo del caso son obligatorios.");
       return;
     }
+    const { links, error: linksError } = serializeLinks(formLinks);
+    if (linksError) {
+      setFormError(linksError);
+      return;
+    }
     setFormSaving(true);
     try {
       const payload = {
@@ -252,6 +285,7 @@ export function CasesPage() {
         topic: form.topic.trim() || null,
         image_id: form.image_id ? parseInt(form.image_id, 10) : null,
         sct_test_id: form.sct_test_id ? parseInt(form.sct_test_id, 10) : null,
+        links,
         status: form.status,
       };
       let savedCase;
@@ -446,76 +480,97 @@ export function CasesPage() {
       {/* Detail modal */}
       {showDetail && selectedCase && (
         <div className="cases-modal-overlay" onClick={() => setShowDetail(false)}>
-          <div className="cases-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="cases-modal-close" onClick={() => setShowDetail(false)}>✕</button>
-            <div className="cases-modal-badges">
-              <StatusBadge status={selectedCase.status} />
-              {selectedCase.difficulty && <DiffBadge difficulty={selectedCase.difficulty} />}
-            </div>
-            <h2 className="cases-modal-title">{selectedCase.title}</h2>
-            {selectedCase.topic && <p className="cases-modal-topic">Tema: {selectedCase.topic}</p>}
-            <p className="cases-modal-date">Creado: {formatDate(selectedCase.created_at)}</p>
-
-            <section className="cases-modal-section">
-              <h4>Descripción</h4>
-              <p>{selectedCase.description}</p>
-            </section>
-
-            {selectedCase.clinical_context && (
-              <section className="cases-modal-section">
-                <h4>Contexto clínico</h4>
-                <p>{selectedCase.clinical_context}</p>
-              </section>
-            )}
-
-            <section className="cases-modal-section">
-              <h4>Caso clínico</h4>
-              <div className="cases-modal-body">
-                <CaseBody body={selectedCase.body} images={selectedCase.images || []} />
-              </div>
-            </section>
-
-            {selectedCase.learning_objectives && (
-              <section className="cases-modal-section">
-                <h4>Objetivos de aprendizaje</h4>
-                <p>{selectedCase.learning_objectives}</p>
-              </section>
-            )}
-
-            {(selectedCase.image_id || selectedCase.sct_test_id) && (
-              <section className="cases-modal-section cases-modal-links">
-                <h4>Recursos asociados</h4>
-                <div className="cases-modal-resources">
-                  {selectedCase.image_id && (
-                    <button
-                      className="cases-resource-btn"
-                      data-testid="case-linked-image"
-                      onClick={() => {
-                        setShowDetail(false);
-                        navigate(`/dashboard/images?image=${selectedCase.image_id}`);
-                      }}
-                    >
-                      Ver imagen histopatológica →
-                    </button>
-                  )}
-                  {selectedCase.sct_test_id && (
-                    <button
-                      className="cases-resource-btn"
-                      data-testid="case-linked-sct"
-                      onClick={() => {
-                        setShowDetail(false);
-                        navigate(`/dashboard/sct?test=${selectedCase.sct_test_id}`);
-                      }}
-                    >
-                      Resolver test SCT asociado →
-                    </button>
+          <div
+            className="case-detail"
+            data-testid="case-detail"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="case-detail-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera fija: identifica el caso aunque el cuerpo sea largo */}
+            <header className="case-detail-header">
+              <div className="case-detail-header-main">
+                <div className="case-detail-badges">
+                  <StatusBadge status={selectedCase.status} />
+                  {selectedCase.difficulty && <DiffBadge difficulty={selectedCase.difficulty} />}
+                  {selectedCase.topic && (
+                    <span className="case-detail-topic">{selectedCase.topic}</span>
                   )}
                 </div>
-              </section>
-            )}
+                <h2 className="case-detail-title" id="case-detail-title">{selectedCase.title}</h2>
+                <div className="case-detail-meta">
+                  <span>{formatDate(selectedCase.created_at)}</span>
+                  <span>·</span>
+                  <span>{readingMinutes(selectedCase)} min de lectura</span>
+                  {(selectedCase.images || []).length > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>{selectedCase.images.length} imágenes</span>
+                    </>
+                  )}
+                  {countResources(selectedCase) > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>{countResources(selectedCase)} recursos</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <button
+                className="case-detail-close"
+                onClick={() => setShowDetail(false)}
+                aria-label="Cerrar caso clínico"
+              >
+                ✕
+              </button>
+            </header>
+
+            <div className="case-detail-scroll">
+              <div className="case-detail-grid">
+                {/* Columna principal: el relato clínico */}
+                <article className="case-detail-main">
+                  <p className="case-detail-lead">{selectedCase.description}</p>
+
+                  {selectedCase.clinical_context && (
+                    <section className="case-detail-callout">
+                      <h3 className="case-detail-callout-title">Contexto clínico</h3>
+                      <p>{selectedCase.clinical_context}</p>
+                    </section>
+                  )}
+
+                  <section className="case-detail-section">
+                    <h3 className="case-detail-section-title">Caso clínico</h3>
+                    <CaseBody body={selectedCase.body} images={selectedCase.images || []} />
+                  </section>
+                </article>
+
+                {/* Columna lateral: qué hacer con el caso */}
+                <aside className="case-detail-aside">
+                  {selectedCase.learning_objectives && (
+                    <section className="case-detail-card">
+                      <h4 className="case-detail-card-title">Objetivos de aprendizaje</h4>
+                      <p className="case-detail-objectives">{selectedCase.learning_objectives}</p>
+                    </section>
+                  )}
+
+                  <CaseResources
+                    caseItem={selectedCase}
+                    onOpenSct={() => {
+                      setShowDetail(false);
+                      navigate(`/dashboard/sct?test=${selectedCase.sct_test_id}`);
+                    }}
+                    onOpenImage={() => {
+                      setShowDetail(false);
+                      navigate(`/dashboard/images?image=${selectedCase.image_id}`);
+                    }}
+                  />
+                </aside>
+              </div>
+            </div>
 
             {canManage && (
-              <div className="cases-modal-mgmt">
+              <footer className="case-detail-footer">
                 <button className="cases-action-btn" onClick={(e) => { setShowDetail(false); openEdit(selectedCase, e); }}>Editar</button>
                 {selectedCase.status === "draft" && (
                   <button className="cases-action-btn cases-action-publish" onClick={(e) => { handleStatusChange(selectedCase, "published", e); setShowDetail(false); }}>Publicar</button>
@@ -523,7 +578,7 @@ export function CasesPage() {
                 {selectedCase.status === "published" && (
                   <button className="cases-action-btn cases-action-archive" onClick={(e) => { handleStatusChange(selectedCase, "archived", e); setShowDetail(false); }}>Archivar</button>
                 )}
-              </div>
+              </footer>
             )}
           </div>
         </div>
@@ -651,6 +706,16 @@ export function CasesPage() {
               </div>
 
               {resourceError && <p className="cases-form-hint">{resourceError}</p>}
+
+              <div className="cases-form-row">
+                <label>Recursos externos</label>
+                <p className="cases-form-hint">
+                  Enlaces que se muestran al estudiante junto al test SCT y a la lámina:
+                  bibliografía complementaria para que busque el libro, guías clínicas y
+                  actividades de Wooclap para la retroalimentación interactiva.
+                </p>
+                <CaseLinksEditor links={formLinks} onChange={setFormLinks} />
+              </div>
 
               <div className="cases-form-row">
                 <label>Imágenes del caso (radiografía, TAC, fotografía…)</label>

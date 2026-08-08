@@ -4256,25 +4256,65 @@ a { color: inherit; text-decoration: none; }
   text-transform: uppercase; letter-spacing: 0.1em;
   font-family: 'JetBrains Mono', monospace; margin-bottom: 11px;
 }
-.images-v2-upload-zone {
-  border: 2px dashed rgba(30,201,154,0.35); border-radius: 12px;
-  padding: 20px 14px; text-align: center;
-  transition: all 0.15s; cursor: pointer; position: relative;
-  background: rgba(30,201,154,0.03);
+/* ─── Selector de enfermedades ─── */
+.images-v2-disease-help {
+  font-size: 11.5px; line-height: 1.5; color: var(--muted); margin: 0;
 }
-.images-v2-upload-zone:hover { border-color: var(--accent); background: rgba(30,201,154,0.07); }
-.images-v2-upload-icon { font-size: 26px; display: block; margin-bottom: 7px; }
-.images-v2-upload-text { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
-.images-v2-upload-hint { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
-.images-v2-upload-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-.images-v2-upload-warning {
-  margin-top: 10px; padding: 10px 11px;
-  border: 1px solid rgba(217, 119, 6, 0.3); border-radius: 10px;
-  background: rgba(245, 158, 11, 0.08);
-  color: var(--muted); font-size: 10px; line-height: 1.45;
+.images-v2-disease-summary {
+  margin-top: 8px; font-size: 10px; color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
 }
-.images-v2-upload-warning strong { color: #b45309; }
-.images-v2-upload-warning span { color: var(--ink); font-weight: 600; }
+.images-v2-disease-groups { display: flex; flex-direction: column; gap: 6px; }
+.images-v2-disease {
+  border: 1.5px solid var(--line); border-radius: 12px;
+  background: rgba(255,255,255,0.55); overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.images-v2-disease.open {
+  background: white; border-color: rgba(30,201,154,0.45);
+  box-shadow: 0 2px 10px rgba(30,201,154,0.10);
+}
+.images-v2-disease.empty { opacity: 0.72; }
+.images-v2-disease-head {
+  width: 100%; display: grid;
+  grid-template-columns: 26px 1fr auto 12px;
+  align-items: center; gap: 9px;
+  padding: 10px 11px; background: none; border: none;
+  cursor: pointer; text-align: left; font-family: inherit;
+}
+.images-v2-disease-head:hover { background: rgba(30,201,154,0.06); }
+.images-v2-disease-icon { font-size: 18px; line-height: 1; }
+.images-v2-disease-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.images-v2-disease-name {
+  font-size: 12.5px; font-weight: 700; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.images-v2-disease-desc {
+  font-size: 10px; color: var(--muted); line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.images-v2-disease-count {
+  font-size: 9px; font-weight: 700; white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 3px 7px; border-radius: 999px;
+  background: rgba(30,201,154,0.14); color: var(--accent-deep);
+}
+.images-v2-disease.empty .images-v2-disease-count {
+  background: rgba(15,23,42,0.06); color: var(--muted);
+}
+.images-v2-disease-chevron { font-size: 10px; color: var(--muted); }
+.images-v2-disease-body { padding: 4px 7px 8px; border-top: 1px solid var(--line); }
+.images-v2-disease-empty {
+  padding: 10px 6px; font-size: 10.5px; line-height: 1.45; color: var(--muted);
+}
+.images-v2-disease-cta {
+  width: 100%; margin-top: 10px; padding: 10px 11px;
+  border: 1.5px dashed rgba(30,201,154,0.4); border-radius: 12px;
+  background: rgba(30,201,154,0.04); color: var(--accent-deep);
+  font-family: inherit; font-size: 10.5px; font-weight: 600; line-height: 1.4;
+  cursor: pointer; transition: all 0.15s; text-align: left;
+}
+.images-v2-disease-cta:hover { border-color: var(--accent); background: rgba(30,201,154,0.09); }
 .images-v2-list { flex: 1; overflow-y: auto; padding: 10px; }
 .images-v2-img-item {
   display: flex; align-items: center; gap: 10px;
@@ -8393,23 +8433,174 @@ a { color: inherit; text-decoration: none; }
   transition: background 0.12s;
 }
 .cases-modal-close:hover { background: var(--bg-3); color: var(--ink); }
-.cases-modal-badges { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .cases-modal-title { font-size: 22px; font-weight: 700; color: var(--ink); margin: 0 0 6px; font-family: 'Instrument Serif', serif; }
-.cases-modal-topic { font-size: 13px; color: var(--accent-deep); font-weight: 600; margin: 0 0 4px; }
-.cases-modal-date { font-size: 12px; color: var(--muted); margin: 0 0 20px; }
-.cases-modal-section { margin-top: 20px; }
-.cases-modal-section h4 { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; margin: 0 0 8px; }
-.cases-modal-section p { font-size: 14px; color: var(--ink-2); line-height: 1.65; margin: 0; }
-.cases-modal-body { font-size: 14px; color: var(--ink-2); line-height: 1.75; white-space: pre-wrap; }
-.cases-modal-links { }
-.cases-modal-resources { display: flex; gap: 10px; flex-wrap: wrap; }
-.cases-resource-btn {
-  padding: 9px 16px; border-radius: 10px; font-size: 13px; font-weight: 600;
-  background: var(--bg-2); border: 1.5px solid var(--line); color: var(--ink-2);
-  cursor: pointer; font-family: inherit; transition: all 0.12s;
+
+/* ── Detalle del caso clínico ──
+   Tres bandas fijas: cabecera identificatoria, cuerpo desplazable en dos
+   columnas (relato + itinerario del estudiante) y acciones docentes al pie.
+   El estudiante nunca pierde de vista qué caso está leyendo ni qué puede
+   hacer con él, aunque el cuerpo se extienda varias pantallas. */
+.case-detail {
+  background: var(--bg-card, white); border-radius: 20px;
+  width: 100%; max-width: 1120px; max-height: 90vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  position: relative; box-shadow: 0 24px 70px rgba(11,20,16,0.28);
+  border: 1px solid var(--line);
 }
-.cases-resource-btn:hover { background: var(--ink); color: white; border-color: var(--ink); }
-.cases-modal-mgmt { display: flex; gap: 10px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+
+.case-detail-header {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 24px 28px 20px; border-bottom: 1px solid var(--line);
+  background: var(--bg-card, white); flex-shrink: 0;
+}
+.case-detail-header-main { min-width: 0; flex: 1; }
+.case-detail-badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.case-detail-topic {
+  font-size: 11px; font-weight: 600; color: var(--accent-deep);
+  background: rgba(196,30,58,0.08); padding: 3px 10px; border-radius: 20px;
+}
+.case-detail-title {
+  font-size: 26px; line-height: 1.2; font-weight: 700; color: var(--ink);
+  margin: 0 0 8px; font-family: 'Instrument Serif', serif;
+}
+.case-detail-meta {
+  display: flex; gap: 7px; flex-wrap: wrap; align-items: center;
+  font-size: 12.5px; color: var(--muted);
+}
+.case-detail-close {
+  flex-shrink: 0; background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 10px; width: 34px; height: 34px; cursor: pointer; font-size: 15px;
+  color: var(--muted); display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.case-detail-close:hover { background: var(--bg-3); color: var(--ink); }
+
+.case-detail-scroll { overflow-y: auto; overscroll-behavior: contain; flex: 1; }
+.case-detail-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 32px; padding: 28px;
+  align-items: start;
+}
+
+.case-detail-main { min-width: 0; }
+/* Entradilla: el resumen se lee antes que el cuerpo, no como un bloque más. */
+.case-detail-lead {
+  font-size: 16px; line-height: 1.65; color: var(--ink-2);
+  margin: 0 0 24px; padding-bottom: 20px; border-bottom: 1px solid var(--line);
+}
+.case-detail-callout {
+  border-left: 3px solid var(--accent); background: var(--bg-2);
+  border-radius: 0 12px 12px 0; padding: 16px 20px; margin: 0 0 26px;
+}
+.case-detail-callout-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent-deep); margin: 0 0 8px;
+}
+.case-detail-callout p { font-size: 14px; line-height: 1.7; color: var(--ink-2); margin: 0; }
+
+.case-detail-section-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+}
+.case-detail-section .case-body { font-size: 14.5px; line-height: 1.75; }
+
+.case-detail-aside {
+  display: flex; flex-direction: column; gap: 16px;
+  position: sticky; top: 0; min-width: 0;
+}
+.case-detail-card {
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 14px; padding: 18px;
+}
+.case-detail-card-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px;
+}
+.case-detail-objectives { font-size: 13.5px; line-height: 1.7; color: var(--ink-2); margin: 0; }
+
+.case-detail-footer {
+  display: flex; gap: 10px; flex-wrap: wrap; flex-shrink: 0;
+  padding: 16px 28px; border-top: 1px solid var(--line); background: var(--bg-2);
+}
+
+/* ── Recursos del caso ── */
+.case-res { display: flex; flex-direction: column; gap: 16px; }
+.case-res-group {
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 14px; padding: 18px;
+}
+.case-res-group-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 12px;
+}
+.case-res-list { display: flex; flex-direction: column; gap: 8px; }
+.case-res-link {
+  display: flex; align-items: flex-start; gap: 11px; width: 100%; text-align: left;
+  padding: 11px 12px; border-radius: 11px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink-2);
+  font-family: inherit; font-size: 13px; cursor: pointer; text-decoration: none;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+.case-res-link:hover {
+  border-color: var(--accent); box-shadow: 0 3px 12px rgba(196,30,58,0.10);
+  transform: translateY(-1px);
+}
+.case-res-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.case-res-icon {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(196,30,58,0.08); color: var(--accent-deep); font-size: 13px;
+}
+.case-res-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.case-res-label { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.case-res-desc { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.case-res-host {
+  font-size: 10.5px; color: var(--muted); opacity: 0.8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.case-res-arrow { flex-shrink: 0; color: var(--muted); font-size: 13px; align-self: center; }
+.case-res-link:hover .case-res-arrow { color: var(--accent); }
+
+/* ── Editor de recursos externos (formulario docente) ── */
+.case-links-editor { display: flex; flex-direction: column; gap: 12px; }
+.case-link-row {
+  display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+  background: var(--bg-2);
+}
+.case-link-row-head { display: flex; align-items: center; gap: 10px; }
+.case-link-row-index {
+  width: 26px; height: 26px; flex-shrink: 0; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(196,30,58,0.08); color: var(--accent-deep); font-size: 13px;
+}
+.case-link-kind { flex: 1; min-width: 0; }
+.case-link-row-actions { display: flex; gap: 4px; }
+.case-link-row-actions button {
+  width: 28px; height: 28px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg);
+  color: var(--muted); font-size: 12px; font-family: inherit;
+  display: flex; align-items: center; justify-content: center; transition: all 0.12s;
+}
+.case-link-row-actions button:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); }
+.case-link-row-actions button:disabled { opacity: 0.35; cursor: not-allowed; }
+.case-link-remove:hover:not(:disabled) { border-color: var(--coral) !important; color: var(--coral) !important; }
+.case-link-row input, .case-link-row select {
+  padding: 8px 11px; border: 1.5px solid var(--line); border-radius: 8px;
+  font-size: 13px; font-family: inherit; color: var(--ink);
+  background: var(--bg); outline: none; width: 100%; min-width: 0;
+  transition: border-color 0.15s;
+}
+.case-link-row input:focus, .case-link-row select:focus { border-color: var(--accent); }
+.case-link-url-invalid { border-color: var(--coral) !important; }
+.case-link-error { font-size: 12px; color: var(--coral); margin: 0; }
+.case-link-add {
+  align-self: flex-start; padding: 8px 16px; border-radius: 9px;
+  border: 1.5px dashed var(--line); background: transparent; color: var(--ink-2);
+  font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.12s;
+}
+.case-link-add:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-deep); }
+.case-link-add:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Cases form */
 .cases-form { display: flex; flex-direction: column; gap: 18px; margin-top: 20px; min-width: 0; }
@@ -8447,10 +8638,22 @@ a { color: inherit; text-decoration: none; }
 .cases-form-btn-save:hover { background: var(--accent-deep); }
 .cases-form-btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* Bajo 1000px la columna lateral deja de caber al lado sin estrechar el relato,
+   así que pasa debajo: los recursos siguen accesibles, solo cambian de sitio. */
+@media (max-width: 1000px) {
+  .case-detail-grid { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .case-detail-aside { position: static; }
+}
+
 @media (max-width: 640px) {
   .cases-modal-overlay { padding: 12px; }
   .cases-form-modal { padding: 24px 20px; }
   .cases-form-row-2col { grid-template-columns: minmax(0, 1fr); }
+  .case-detail { max-height: 94vh; border-radius: 16px; }
+  .case-detail-header { padding: 18px 18px 16px; }
+  .case-detail-title { font-size: 21px; }
+  .case-detail-grid { padding: 20px 18px; }
+  .case-detail-footer { padding: 14px 18px; }
 }
 
 /* ── Feedback / Usability Page ── */
@@ -8841,6 +9044,8 @@ a { color: inherit; text-decoration: none; }
   .mc-rag-card,
   .images-v2-img-item:hover,
   .images-v2-img-item.selected,
+  .images-v2-disease,
+  .images-v2-disease.open,
   .roi-hist-modal,
   .img-v3-page,
   .img-v3-upload-btn,
@@ -8868,6 +9073,7 @@ a { color: inherit; text-decoration: none; }
   .cfg-ai-card,
   .cases-card,
   .cases-modal,
+  .case-detail,
   .fb-tab.active,
   .fb-summary-card,
   .fb-obs-item

@@ -2,6 +2,21 @@ from pydantic import BaseModel
 from typing import Optional, List
 from enum import Enum
 
+class CaseLinkIn(BaseModel):
+    """Recurso externo del caso: bibliografia, guia, articulo, video o Wooclap."""
+    kind: str = "otro"
+    label: str
+    url: str
+    description: Optional[str] = None
+
+
+class CaseLinkOut(CaseLinkIn):
+    id: int
+    case_id: int
+    position: int = 0
+    created_at: Optional[str] = None
+
+
 class CaseOut(BaseModel):
     id: int
     title: str
@@ -16,6 +31,8 @@ class CaseOut(BaseModel):
     # Imagenes ilustrativas del caso (radiografia, TAC...), distintas de la
     # lamina histopatologica referenciada por image_id.
     images: List[dict] = []
+    # Recursos externos: material complementario y actividades interactivas.
+    links: List[dict] = []
     created_by: Optional[int] = None
     status: str = "draft"
     created_at: Optional[str] = None
@@ -34,6 +51,7 @@ class CaseCreate(BaseModel):
     topic: Optional[str] = None
     image_id: Optional[int] = None
     sct_test_id: Optional[int] = None
+    links: Optional[List[CaseLinkIn]] = None
     status: str = "draft"
 
 class CaseUpdate(BaseModel):
@@ -46,6 +64,8 @@ class CaseUpdate(BaseModel):
     topic: Optional[str] = None
     image_id: Optional[int] = None
     sct_test_id: Optional[int] = None
+    # Omitirlo deja los enlaces intactos; enviarlo reemplaza el conjunto completo.
+    links: Optional[List[CaseLinkIn]] = None
 
 class CaseStatusUpdate(BaseModel):
     status: str

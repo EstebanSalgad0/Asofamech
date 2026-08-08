@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 import httpx
 import json
-import os
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
@@ -10,6 +9,7 @@ from ..schemas import (
     SCTTestUpdate, SCTAnswerItem, SCTAttemptCreate, SCTAttemptOut,
     SCTAttemptWithTest, SCTAttemptDetail, SCTAttemptAdminOut,
 )
+from ..llm_service import chat_completion, resolve_llm_settings
 from ..models import SCTTest, SCTAttempt, User
 from ..db import get_db
 from ..auth import (
@@ -18,9 +18,6 @@ from ..auth import (
 )
 
 router = APIRouter(prefix="/api/sct", tags=["SCT"])
-
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
-LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1:8b")
 
 VALID_STATUSES = {"draft", "published", "archived"}
 
@@ -161,32 +158,34 @@ Genera ahora {num_items} ítems SCT EXCLUSIVAMENTE sobre {focus} con nivel de di
 @router.post("/generate", response_model=SCTResponse)
 async def generate_sct_items(
     request: SCTGenerateRequest,
+    db: Session = Depends(get_db),
     _current_user: User = Depends(require_permission(PERM_MANAGE_SCT)),
 ):
-    """Genera ítems SCT via Ollama/LLaMA. Requiere rol docente o administrador."""
+    """Genera ítems SCT con el proveedor configurado. Requiere docente o administrador."""
     try:
         prompt = SCT_SYSTEM_PROMPT.format(
             num_items=request.num_items,
             difficulty=request.difficulty.value,
             focus=request.focus
         )
-        ollama_payload = {
-            "model": LLM_MODEL,
-            "messages": [{"role": "system", "content": prompt}],
-            "stream": False,
-            "temperature": 0.8,
-            "top_p": 0.95,
-            "num_predict": 4096,
-            "format": "json"
-        }
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            response = await client.post(f"{OLLAMA_URL}/api/chat", json=ollama_payload)
-            response.raise_for_status()
-            data = response.json()
+        settings = resolve_llm_settings(db)
+        # La generación completa de un test es la petición más larga del sistema:
+        # se le concede más margen que al timeout general de chat.
+        async with httpx.AsyncClient(timeout=max(settings.timeout, 300.0)) as client:
+            llama_response = await chat_completion(
+                client,
+                settings,
+                [{"role": "system", "content": prompt}],
+                temperature=0.8,
+                top_p=0.95,
+                max_tokens=4096,
+                num_ctx=8192,
+                json_mode=True,
+                purpose="generacion de items SCT",
+            )
 
-        llama_response = data.get("message", {}).get("content", "")
         if not llama_response:
-            raise HTTPException(status_code=500, detail="LLaMA 3 no generó respuesta")
+            raise HTTPException(status_code=500, detail="El modelo no generó respuesta")
 
         try:
             sct_data = json.loads(llama_response)
@@ -209,12 +208,12 @@ async def generate_sct_items(
                 difficulty=request.difficulty.value, focus=request.focus
             )
         except json.JSONDecodeError as e:
-            raise HTTPException(status_code=500, detail=f"Error al parsear respuesta de LLaMA 3: {e}")
+            raise HTTPException(status_code=500, detail=f"Error al parsear la respuesta del modelo: {e}")
         except ValueError as e:
             raise HTTPException(status_code=500, detail=f"Error en la estructura de datos: {e}")
 
     except httpx.HTTPError as e:
-        raise HTTPException(status_code=503, detail=f"Error al conectar con Ollama: {e}")
+        raise HTTPException(status_code=503, detail=f"Error al conectar con el proveedor del modelo: {e}")
     except HTTPException:
         raise
     except Exception as e:

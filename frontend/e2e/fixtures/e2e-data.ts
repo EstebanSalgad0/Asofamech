@@ -250,6 +250,26 @@ export const clinicalCaseFixture = {
   topic: "infectologia",
   image_id: dziImage.id,
   sct_test_id: publishedSct.id,
+  links: [
+    {
+      id: 9001,
+      case_id: 601,
+      kind: "wooclap",
+      label: "Actividad interactiva del caso",
+      url: "https://app.wooclap.com/EVENTOE2E",
+      description: "Responde en vivo durante la clase",
+      position: 0,
+    },
+    {
+      id: 9002,
+      case_id: 601,
+      kind: "bibliografia",
+      label: "Harrison, capitulo de fiebre de origen desconocido",
+      url: "https://biblioteca.example.cl/harrison-fod",
+      description: null,
+      position: 1,
+    },
+  ],
   status: "published",
   created_at: "2026-05-24T08:00:00.000Z",
 };

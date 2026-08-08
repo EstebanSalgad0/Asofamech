@@ -66,8 +66,9 @@ def chat_client():
     Base.metadata.drop_all(bind=engine)
 
 
-def _ollama_answer(text: str = "Respuesta educativa apoyada en el material cargado."):
-    return {"message": {"content": text}}
+def _ollama_answer(text: str = "Respuesta educativa apoyada en el material cargado.") -> str:
+    """El servicio LLM devuelve texto plano, ya normalizado entre proveedores."""
+    return text
 
 
 def test_chat_uses_rag_context_and_returns_source_chunks(chat_client):
@@ -91,7 +92,7 @@ def test_chat_uses_rag_context_and_returns_source_chunks(chat_client):
         sync_document_chunks(db, document)
         db.commit()
 
-    with patch("app.routers.chat._post_ollama_chat", new=AsyncMock(return_value=_ollama_answer())):
+    with patch("app.routers.chat._generate", new=AsyncMock(return_value=_ollama_answer())):
         response = client.post("/api/chat", json={"text": "Explica metastasis ganglionar"})
 
     assert response.status_code == 200
@@ -112,7 +113,7 @@ def test_chat_uses_rag_context_and_returns_source_chunks(chat_client):
 def test_chat_falls_back_when_no_rag_context(chat_client):
     client, SessionLocal, _ = chat_client
 
-    with patch("app.routers.chat._post_ollama_chat", new=AsyncMock(return_value=_ollama_answer("Respuesta educativa general."))):
+    with patch("app.routers.chat._generate", new=AsyncMock(return_value=_ollama_answer("Respuesta educativa general."))):
         response = client.post("/api/chat", json={"text": "Explica fiebre prolongada en pediatria"})
 
     assert response.status_code == 200
@@ -134,7 +135,7 @@ def test_chat_blocks_out_of_scope_before_rag(chat_client):
         db.commit()
 
     with patch("app.routers.chat._classify_medical_scope", new=AsyncMock(return_value=chat.SCOPE_NON_MEDICAL)):
-        with patch("app.routers.chat._post_ollama_chat", new=AsyncMock()) as ollama_mock:
+        with patch("app.routers.chat._generate", new=AsyncMock()) as ollama_mock:
             response = client.post("/api/chat", json={"text": "Calcula una inversion financiera"})
 
     assert response.status_code == 200

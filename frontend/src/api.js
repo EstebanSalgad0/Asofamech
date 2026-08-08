@@ -88,6 +88,12 @@ export async function updateAIConfig(items) {
   return parseJsonResponse(res, "No se pudo guardar la configuración IA");
 }
 
+/** Genera una respuesta minima con el proveedor guardado para validar credencial y modelo. */
+export async function testLLMProvider() {
+  const res = await authFetch("/api/admin/llm/test", { method: "POST" });
+  return parseJsonResponse(res, "No se pudo probar el proveedor de IA");
+}
+
 export async function getIntegrationStatus() {
   const res = await authFetch("/api/admin/integrations/status");
   return parseJsonResponse(res, "No se pudo verificar la integracion IA");

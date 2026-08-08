@@ -64,6 +64,12 @@ class Case(Base):
         cascade="all, delete-orphan",
         order_by="CaseImage.position",
     )
+    links = relationship(
+        "CaseLink",
+        back_populates="case",
+        cascade="all, delete-orphan",
+        order_by="CaseLink.position",
+    )
 
 class CaseImage(Base):
     """Imagenes ilustrativas de un caso clinico (radiografia, TAC, fotografia).
@@ -90,6 +96,29 @@ class CaseImage(Base):
 
     case = relationship("Case", back_populates="images")
     uploader = relationship("User", foreign_keys=[uploaded_by])
+
+
+class CaseLink(Base):
+    """Recurso externo asociado a un caso clinico.
+
+    Cubre las tres vias de retroalimentacion del caso que no viven en la
+    plataforma: bibliografia complementaria (el estudiante busca el libro por
+    su cuenta), guias y articulos, y actividades interactivas tipo Wooclap.
+    Solo se guarda el enlace: la plataforma no aloja ni proxifica el contenido.
+    """
+    __tablename__ = "case_links"
+    id = Column(Integer, primary_key=True, index=True)
+    case_id = Column(Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = Column(String(40), nullable=False, default="otro")
+    label = Column(String(200), nullable=False)
+    url = Column(String(1000), nullable=False)
+    description = Column(String(400), nullable=True)
+    position = Column(Integer, nullable=False, default=0)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    case = relationship("Case", back_populates="links")
+    creator = relationship("User", foreign_keys=[created_by])
 
 
 class Document(Base):

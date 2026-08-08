@@ -2,7 +2,6 @@ import os
 import time
 from datetime import datetime
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -12,6 +11,13 @@ from ..auth import require_admin
 from ..audit import audit_log_to_payload, record_audit_log
 from ..db import get_db
 from ..email_service import send_template_email
+from ..llm_service import (
+    GROQ_BASE_URL,
+    SECRET_PLACEHOLDER,
+    VALID_PROVIDERS,
+    build_llm_settings,
+    probe_provider,
+)
 from ..models import AIConfiguration, AuditLog, Document, DocumentChunk, EmailTemplate, User
 from ..rag_utils import EMBEDDING_DIMENSIONS
 
@@ -23,6 +29,38 @@ _INTEGRATIONS_TTL = 45.0  # segundos
 
 
 DEFAULT_AI_CONFIG = {
+    "llm_provider": {
+        "value": os.getenv("LLM_PROVIDER", "ollama"),
+        "value_type": "string",
+        "description": (
+            "Proveedor del modelo generativo: ollama (local) o una API externa "
+            "compatible con OpenAI, como Groq. El RAG sigue calculandose en el "
+            "backend en cualquiera de los dos casos."
+        ),
+    },
+    "llm_api_base_url": {
+        "value": os.getenv("LLM_API_BASE_URL", GROQ_BASE_URL),
+        "value_type": "string",
+        "description": (
+            "URL base del proveedor externo, sin /chat/completions. "
+            f"Para Groq: {GROQ_BASE_URL}"
+        ),
+    },
+    "llm_api_key": {
+        "value": os.getenv("LLM_API_KEY", ""),
+        "value_type": "password",
+        "description": "Clave de API del proveedor externo. Se guarda cifrada en transito y nunca se devuelve en claro.",
+    },
+    "llm_api_model": {
+        "value": os.getenv("LLM_API_MODEL", "llama-3.3-70b-versatile"),
+        "value_type": "string",
+        "description": "Modelo del proveedor externo (ej. llama-3.3-70b-versatile en Groq).",
+    },
+    "llm_request_timeout": {
+        "value": os.getenv("LLM_REQUEST_TIMEOUT", "120"),
+        "value_type": "integer",
+        "description": "Segundos de espera maxima por respuesta del proveedor generativo.",
+    },
     "llm_model": {
         "value": os.getenv("LLM_MODEL", "llama3.1:8b"),
         "value_type": "string",
@@ -260,6 +298,45 @@ def parse_bool(value: str | bool | None, default: bool = False) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "si", "on"}
 
 
+def _validate_ai_config_value(item: "AIConfigItem") -> None:
+    """Rechaza valores que dejarian la integracion generativa inutilizable."""
+    value = (item.value or "").strip()
+
+    if item.key == "llm_provider" and value.lower() not in VALID_PROVIDERS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Proveedor no soportado: {value}. Usa {', '.join(sorted(VALID_PROVIDERS))}.",
+        )
+
+    if item.key in {"llm_api_base_url", "ollama_url"} and value:
+        if not value.lower().startswith(("http://", "https://")):
+            raise HTTPException(
+                status_code=422,
+                detail=f"{item.key} debe empezar por http:// o https://",
+            )
+
+    if item.key == "llm_request_timeout" and value:
+        try:
+            timeout = float(value)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="El timeout debe ser numerico")
+        if not 5 <= timeout <= 600:
+            raise HTTPException(status_code=422, detail="El timeout debe estar entre 5 y 600 segundos")
+
+
+def _is_secret_key(key: str, defaults: dict) -> bool:
+    return (defaults.get(key) or {}).get("value_type") == "password"
+
+
+def _mask_secret(value: str) -> str:
+    """Nunca se devuelve un secreto en claro: el panel solo necesita saber si esta puesto."""
+    return SECRET_PLACEHOLDER if value else ""
+
+
+def _is_unchanged_secret(value: str) -> bool:
+    return value == SECRET_PLACEHOLDER
+
+
 def get_ai_config_map(db: Session) -> dict[str, str]:
     config = {key: str(meta["value"]) for key, meta in DEFAULT_AI_CONFIG.items()}
     for item in db.query(AIConfiguration).all():
@@ -346,13 +423,18 @@ def get_ai_config(
     items = []
     for key, meta in DEFAULT_AI_CONFIG.items():
         item = stored.get(key)
+        raw_value = str(item.value if item else meta["value"])
+        is_secret = meta["value_type"] == "password"
         items.append(
             {
                 "key": key,
-                "value": item.value if item else meta["value"],
+                "value": _mask_secret(raw_value) if is_secret else raw_value,
                 "value_type": item.value_type if item else meta["value_type"],
-                "description": item.description if item else meta["description"],
+                # La descripcion canonica vive en el codigo: si se toma la
+                # almacenada, un guardado antiguo congela el texto de ayuda.
+                "description": meta["description"],
                 "source": "database" if item else "default",
+                "is_set": bool(raw_value) if is_secret else None,
             }
         )
     return {"items": items}
@@ -369,6 +451,11 @@ def update_ai_config(
     for item in payload.items:
         if item.key not in allowed:
             raise HTTPException(status_code=422, detail=f"Clave de configuracion no permitida: {item.key}")
+        # El formulario reenvia el placeholder cuando el admin no toco el
+        # secreto; sobrescribirlo con la mascara borraria la credencial real.
+        if _is_secret_key(item.key, DEFAULT_AI_CONFIG) and _is_unchanged_secret(item.value):
+            continue
+        _validate_ai_config_value(item)
         _upsert_config_item(db, item)
         changed_keys.append(item.key)
     record_audit_log(
@@ -654,7 +741,7 @@ async def integrations_status(
         return _integrations_cache["data"]
 
     config = get_ai_config_map(db)
-    ollama_url = config.get("ollama_url", DEFAULT_AI_CONFIG["ollama_url"]["value"])
+    llm_settings = build_llm_settings(config)
     from ..embedding_service import embedding_status_for_rag
     from ..pgvector_store import pgvector_available
 
@@ -666,18 +753,15 @@ async def integrations_status(
     )
     pgvector_ok = pgvector_available(db)
 
-    ollama = {"configured": bool(ollama_url), "url": ollama_url, "reachable": False, "models": []}
-    try:
-        async with httpx.AsyncClient(timeout=1.0) as client:
-            response = await client.get(f"{ollama_url}/api/tags")
-            if response.status_code == 200:
-                ollama["reachable"] = True
-                ollama["models"] = [m["name"] for m in response.json().get("models", [])]
-    except httpx.HTTPError:
-        ollama["reachable"] = False
+    # Un proveedor externo puede tardar mas que Ollama local en el primer
+    # contacto (TLS + latencia de red), asi que la sonda no comparte timeout.
+    llm = await probe_provider(llm_settings, timeout=1.0 if llm_settings.provider == "ollama" else 6.0)
 
     result = {
-        "llama3": ollama,
+        # Se conserva la clave llama3 por compatibilidad con el panel y los
+        # tests existentes; ahora describe el proveedor activo, sea cual sea.
+        "llama3": llm,
+        "llm": llm,
         "rag": {
             "enabled": parse_bool(config.get("rag_enabled"), True),
             "documents_count": documents_count,
@@ -699,6 +783,64 @@ async def integrations_status(
     _integrations_cache["data"] = result
     _integrations_cache["ts"] = now
     return result
+
+
+@router.post("/llm/test")
+async def test_llm_provider(
+    _current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Genera una respuesta minima con el proveedor guardado y mide la latencia.
+
+    Sirve para distinguir "la clave es invalida" de "el modelo no existe" antes
+    de que un estudiante se encuentre el error en medio de una consulta.
+    """
+    import httpx
+
+    from ..llm_service import chat_completion
+
+    settings = build_llm_settings(get_ai_config_map(db))
+    started = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=min(settings.timeout, 30.0)) as client:
+            answer = await chat_completion(
+                client,
+                settings,
+                [
+                    {"role": "system", "content": "Responde con una sola palabra."},
+                    {"role": "user", "content": "Di 'listo'."},
+                ],
+                temperature=0.0,
+                max_tokens=16,
+                num_ctx=512,
+                purpose="prueba de conexion",
+            )
+    except HTTPException as exc:
+        return {
+            "ok": False,
+            "provider": settings.provider,
+            "label": settings.label,
+            "model": settings.model,
+            "detail": exc.detail,
+        }
+    except Exception as exc:  # noqa: BLE001 - el panel necesita el motivo, no un 500
+        return {
+            "ok": False,
+            "provider": settings.provider,
+            "label": settings.label,
+            "model": settings.model,
+            "detail": f"No se pudo contactar al proveedor: {type(exc).__name__}",
+        }
+
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    return {
+        "ok": bool(answer),
+        "provider": settings.provider,
+        "label": settings.label,
+        "model": settings.model,
+        "latency_ms": elapsed_ms,
+        "sample": answer[:120],
+    }
 
 
 # ─── Email config helpers ────────────────────────────────────────────────────
@@ -726,12 +868,14 @@ def get_email_config(
     items = []
     for key, meta in DEFAULT_EMAIL_CONFIG.items():
         item = stored.get(key)
-        value = item.value if item else str(meta["value"])
+        value = str(item.value if item else meta["value"])
+        is_secret = meta["value_type"] == "password"
         items.append({
             "key": key,
-            "value": value,
+            "value": _mask_secret(value) if is_secret else value,
             "value_type": meta["value_type"],
             "description": meta["description"],
+            "is_set": bool(value) if is_secret else None,
         })
     return {"items": items}
 
@@ -747,6 +891,8 @@ def update_email_config(
     for item in payload.items:
         if item.key not in allowed:
             raise HTTPException(status_code=422, detail=f"Clave no permitida: {item.key}")
+        if _is_secret_key(item.key, DEFAULT_EMAIL_CONFIG) and _is_unchanged_secret(item.value):
+            continue
         _upsert_config_item(db, item)
         changed_keys.append(item.key)
     record_audit_log(

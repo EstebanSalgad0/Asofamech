@@ -61,15 +61,23 @@ Requiere permiso `manage_images` (Docente o Admin).
 
 ### Subir una imagen
 
-1. Navegar a **Imagenes IA** desde la barra lateral.
+La carga de laminas se realiza siempre desde **Configuracion > Imagenes**. La pantalla **Imagenes IA** solo consume la biblioteca ya publicada.
+
+1. Navegar a **Configuracion > Imagenes** desde la barra lateral.
 2. Hacer clic en el boton de carga o subida de imagen.
 3. Seleccionar el archivo WSI (formatos soportados: `.tiff`, `.svs`, `.ndpi`, segun configuracion del servidor).
-4. Completar los metadatos: titulo, descripcion, tipo de tejido, diagnostico de referencia.
+4. Completar los metadatos: titulo, descripcion, tipo de patologia, descripcion de referencia.
 5. Hacer clic en **Guardar**.
+
+El campo **tipo de patologia** determina bajo que enfermedad aparece la lamina en el selector de **Imagenes IA** (por ejemplo `Necrosis coagulativa`, `Trombosis venosa`, `CAMELYON17`). Si el valor no coincide con ninguna categoria del catalogo, se crea una entrada propia con ese nombre.
 
 El backend convierte automaticamente el archivo a tiles DZI para el visor OpenSeadragon.
 
-Para laminas WSI grandes que ya estan copiadas en el servidor, usar **Configuracion > Imagenes > Importar CAMELYON17 local**. Esta ruta registra el archivo sin volver a transferirlo por el navegador y normalmente es mucho mas rapida que la carga directa desde **Imagenes IA**.
+Para laminas WSI grandes que ya estan copiadas en el servidor, usar **Configuracion > Imagenes > Importar CAMELYON17 local**. Esta ruta registra el archivo sin volver a transferirlo por el navegador y es mucho mas rapida que subirlo por el navegador.
+
+### Elegir la enfermedad a analizar
+
+En **Imagenes IA**, la barra lateral lista las enfermedades analizables (cancer de mama, necrosis, inflamacion, patologia infecciosa, trastornos vasculares, adaptaciones celulares y las patologias propias registradas). Al seleccionar una enfermedad se despliegan las laminas disponibles para esa categoria; el contador indica cuantas hay cargadas.
 
 ### Administrar imagenes existentes
 
@@ -102,9 +110,43 @@ Requiere permiso `manage_cases` (Docente o Admin).
 | Tema | Area medica (ej. neumologia, infectologia) | No |
 | Imagen asociada | ID de imagen histopatologica relacionada | No |
 | Test SCT asociado | ID de test SCT para este caso | No |
+| Recursos externos | Enlaces a material complementario y actividades | No |
 
 4. Seleccionar el estado inicial: **Borrador** o **Publicado**.
 5. Hacer clic en **Guardar**.
+
+### Recursos externos del caso
+
+Un caso ofrece tres vias de retroalimentacion al estudiante, y el panel lateral
+del caso las presenta juntas:
+
+| Via | Recurso | Donde se configura |
+|---|---|---|
+| Logica | Test SCT de razonamiento clinico | Campo *Test SCT asociado* |
+| Visual | Lamina histopatologica en el visor | Campo *Imagen asociada* |
+| Interactiva | Actividad Wooclap | Recurso externo de tipo *Actividad interactiva* |
+
+En **Recursos externos** se agrega cualquier enlace que el estudiante deba abrir
+fuera de la plataforma. Cada recurso tiene tipo, titulo visible, URL y una
+descripcion opcional:
+
+| Tipo | Uso previsto |
+|---|---|
+| Actividad interactiva | Wooclap u otra actividad en vivo. Aparece junto al SCT y a la lamina |
+| Material complementario | Libros y capitulos. El estudiante sigue el enlace y busca la obra |
+| Guia clinica | Guias MINSAL, protocolos institucionales |
+| Articulo | Publicaciones y revisiones |
+| Video | Clases grabadas, procedimientos |
+| Otro recurso | Cualquier otro enlace |
+
+Los recursos se ordenan con las flechas ↑ ↓ y ese orden es el que ve el
+estudiante. Un caso admite hasta 15.
+
+**Restricciones de seguridad:** solo se aceptan direcciones `http://` y
+`https://`. Cualquier otro esquema (`javascript:`, `data:`, `file:`) se rechaza
+al guardar y, si existiera un enlace historico con uno de ellos, no se muestra
+al estudiante. La plataforma no aloja ni copia el contenido remoto: solo guarda
+el enlace, y este se abre en una pestana nueva sin dar acceso a la sesion.
 
 ### Estados de un caso
 
@@ -239,17 +281,47 @@ Hacer clic en **Exportar CSV** para descargar un archivo con todas las respuesta
 
 Requiere rol **Administrador**.
 
-### Configuracion del modelo IA
+### Proveedor del modelo generativo
 
-Desde **Configuracion** → seccion **Configuracion IA**:
-- Ajustar parametros del modelo LLM (temperatura, contexto, instrucciones de sistema).
-- Verificar el estado de la integracion con Ollama.
+Desde **Configuracion** → **Configuracion de IA** → tarjeta **Proveedor del
+modelo generativo** se elige donde se ejecuta el modelo:
+
+| Proveedor | Cuando conviene |
+|---|---|
+| `ollama` | El modelo corre en este servidor. Sin costo por consulta, depende de la GPU local |
+| `groq` | API externa. Sirve Llama 3.x con latencias muy inferiores a una GPU local |
+| `openai_compatible` | Cualquier otro endpoint `/v1/chat/completions` (OpenRouter, Together, vLLM) |
+
+**Configurar Groq:**
+
+1. Crear una clave en `https://console.groq.com/keys` (empieza por `gsk_`).
+2. En el panel, elegir proveedor **Groq**.
+3. Dejar `LLM_API_BASE_URL` en `https://api.groq.com/openai/v1`.
+4. Pegar la clave en `LLM_API_KEY`.
+5. Elegir el modelo en `LLM_API_MODEL` (p. ej. `llama-3.3-70b-versatile`).
+6. **Guardar configuracion** y luego **Probar conexion**.
+
+La prueba usa la configuracion ya guardada e informa latencia real, credencial
+invalida o modelo inexistente por separado, para no descubrir el error en medio
+de una consulta de un estudiante.
+
+**Sobre la clave:** se guarda en base de datos y la API nunca la devuelve en
+claro; el formulario solo muestra si esta puesta. Volver a guardar sin tocar el
+campo conserva la clave existente; para borrarla hay que vaciar el campo
+explicitamente.
+
+**El RAG no cambia con el proveedor.** Los embeddings se siguen calculando en
+este servidor con sentence-transformers y pgvector. Al proveedor externo solo
+viaja el prompt de cada consulta, con los fragmentos documentales ya
+seleccionados localmente: cambiar de proveedor no obliga a reindexar el corpus
+ni sube los documentos a un tercero.
 
 ### Verificar estado de integracion
 
 El panel de configuracion muestra el estado de conexion con:
-- Ollama (modelo LLM activo).
-- Modulo de embeddings RAG.
+- Proveedor LLM activo (local o externo) y modelo en uso.
+- Modulo de embeddings RAG y backend vectorial.
+- Envio de correo (SMTP).
 
 ---
 
