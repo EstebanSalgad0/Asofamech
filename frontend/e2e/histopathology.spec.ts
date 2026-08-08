@@ -36,19 +36,33 @@ test.describe("Visor histopatologico", () => {
     await mockAllApis(page);
     await signInAs(page, "student", "/dashboard/images");
 
-    await expect(page.getByTestId("image-upload-section")).toHaveCount(0);
+    await expect(page.getByTestId("disease-add-images")).toHaveCount(0);
     await expect(page.getByTestId("histopathology-empty-viewer")).toContainText(
-      /Selecciona una imagen disponible de la biblioteca/i,
+      /selecciona una imagen disponible de la biblioteca/i,
     );
   });
 
-  test("docente ve la carga directa y la advertencia para WSI grandes", async ({ page }) => {
+  test("el selector de enfermedades despliega las laminas de cada patologia", async ({ page }) => {
     await mockAllApis(page);
     await signInAs(page, "teacher", "/dashboard/images");
 
-    await expect(page.getByTestId("image-upload-section")).toBeVisible();
-    await expect(page.getByTestId("image-upload-warning")).toContainText(/puede tardar mucho más/i);
-    await expect(page.getByTestId("image-upload-warning")).toContainText(/Configuración → Imágenes/i);
+    const selector = page.getByTestId("disease-selector");
+    await expect(selector).toBeVisible();
+    // Mas de una enfermedad analizable, no solo cancer.
+    await expect(selector.getByRole("button", { expanded: false })).not.toHaveCount(0);
+    await expect(selector).toContainText(/Cáncer de mama/i);
+    await expect(selector).toContainText(/Necrosis y muerte celular/i);
+
+    // La enfermedad con laminas queda desplegada y muestra sus imagenes.
+    await expect(page.getByTestId(`image-library-item-${dziImage.id}`)).toBeVisible();
+
+    // Colapsar la enfermedad oculta sus laminas.
+    const openHead = selector.getByRole("button", { expanded: true }).first();
+    await openHead.click();
+    await expect(page.getByTestId(`image-library-item-${dziImage.id}`)).toHaveCount(0);
+
+    // Docente puede saltar a Configuracion para cargar mas enfermedades.
+    await expect(page.getByTestId("disease-add-images")).toBeVisible();
   });
 
   test("E2E-04 Apertura de imagen DZI y carga del visor", async ({ page }) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { OpenSeadragonViewer } from "../components/OpenSeadragonViewer";
 import { MedicalImageViewer } from "../components/MedicalImageViewer";
@@ -6,7 +6,6 @@ import { startSession, flushSession, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
 import {
   API_BASE,
-  authErrorMessage,
   authFetch,
   canManageEducationalContent,
   clearAuthSession,
@@ -50,6 +49,94 @@ const STATUS_LABELS = {
   ROI_EVALUABLE: "ROI evaluable",
 };
 
+// Catálogo de enfermedades analizables. Cada lámina se asigna a la primera
+// categoría cuyo patrón coincida con su `pathology_type`; las patologías que no
+// coinciden se agregan como categorías propias al vuelo.
+const DISEASE_CATALOG = [
+  {
+    id: "cancer-mama",
+    label: "Cáncer de mama",
+    icon: "🎗️",
+    desc: "Metástasis en ganglio linfático centinela (CAMELYON17 · SLN-Breast)",
+    patterns: [/camelyon/, /\bsln\b/, /breast/, /mama/, /metasta/, /cancer/, /carcinom/, /tumor/, /neoplas/, /malign/],
+  },
+  {
+    id: "necrosis",
+    label: "Necrosis y muerte celular",
+    icon: "🧬",
+    desc: "Necrosis coagulativa y licuefactiva, apoptosis e infarto",
+    patterns: [/necros/, /apopto/, /infarto/, /isquem/, /gangren/],
+  },
+  {
+    id: "inflamacion",
+    label: "Inflamación aguda y crónica",
+    icon: "🔥",
+    desc: "Infiltrado inflamatorio, absceso y granuloma",
+    patterns: [/inflam/, /absces/, /granulom/, /infiltrad/, /itis\b/],
+  },
+  {
+    id: "infecciosa",
+    label: "Patología infecciosa",
+    icon: "🦠",
+    desc: "Agentes bacterianos, micóticos, virales y parasitarios",
+    patterns: [/infecc/, /bacter/, /micos/, /hongo/, /viral/, /virus/, /parasit/, /tuberculos/, /langerhans/, /histiocit/],
+  },
+  {
+    id: "vascular",
+    label: "Trastornos vasculares",
+    icon: "🩸",
+    desc: "Trombosis, hemorragia, congestión y edema",
+    patterns: [/trombo/, /hemorrag/, /congesti/, /edema/, /embol/, /vascular/, /ateroscler/],
+  },
+  {
+    id: "adaptaciones",
+    label: "Adaptaciones y depósitos celulares",
+    icon: "⚗️",
+    desc: "Hiperplasia, hipertrofia, metaplasia, displasia y esteatosis",
+    patterns: [/hiperplas/, /hipertrof/, /metaplas/, /displas/, /atrofi/, /esteatos/, /amiloid/, /deposit/, /acumulac/],
+  },
+];
+
+function normalizePathology(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim();
+}
+
+function buildDiseaseGroups(images) {
+  const catalog = DISEASE_CATALOG.map((disease) => ({ ...disease, images: [] }));
+  const byId = new Map(catalog.map((group) => [group.id, group]));
+  const extra = new Map();
+
+  (images || []).forEach((img) => {
+    const raw = normalizePathology(img.pathology_type);
+    const match = raw ? DISEASE_CATALOG.find((d) => d.patterns.some((rx) => rx.test(raw))) : null;
+    if (match) {
+      byId.get(match.id).images.push(img);
+      return;
+    }
+    const key = raw || "__sin_clasificar__";
+    if (!extra.has(key)) {
+      extra.set(key, {
+        id: `otra:${key}`,
+        label: raw ? formatDisplayTag(img.pathology_type) : "Sin clasificar",
+        icon: raw ? "🧫" : "❔",
+        desc: raw
+          ? "Patología registrada desde Configuración → Imágenes"
+          : "Láminas sin tipo de patología asignado",
+        images: [],
+      });
+    }
+    extra.get(key).images.push(img);
+  });
+
+  return [...catalog, ...extra.values()].sort(
+    (a, b) => b.images.length - a.images.length || a.label.localeCompare(b.label, "es"),
+  );
+}
+
 function formatFecha(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("es-CL", {
@@ -73,6 +160,10 @@ export function ImagesPage() {
   const [detailSession, setDetailSession] = useState(null);
   const [initialSession, setInitialSession] = useState(null);
   const [deletingSessionId, setDeletingSessionId] = useState(null);
+  const [openDiseaseId, setOpenDiseaseId] = useState(null);
+
+  const diseaseGroups = useMemo(() => buildDiseaseGroups(imageLibrary), [imageLibrary]);
+  const availableDiseases = diseaseGroups.filter((group) => group.images.length > 0);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -152,46 +243,20 @@ export function ImagesPage() {
     });
   };
 
-  const handleFileUpload = async (e) => {
-    if (!canManageEducationalContent(role)) {
-      alert("No tienes permisos para cargar imágenes.");
-      e.target.value = "";
-      return;
-    }
-    const file = e.target.files[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("title", file.name.replace(/\.[^.]+$/, ""));
-    formData.append("description", "Imagen de prueba cargada desde el visor");
-    formData.append("pathology_type", "Histopatología");
-    try {
-      setLoading(true);
-      const response = await authFetch("/api/medical-images/upload", {
-        method: "POST",
-        body: formData,
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(payload?.detail || authErrorMessage(response.status, `Error HTTP ${response.status}`));
-      }
-      const uploaded = await response.json();
-      await loadImageLibrary();
-      setSelectedImage({
-        id: uploaded.id, filename: uploaded.filename,
-        title: uploaded.title, file_type: uploaded.file_type,
-        file_size: uploaded.file_size, has_dzi: uploaded.has_dzi,
-        pathology_type: "Histopatología",
-        url: `${API_BASE}/api/medical-images/view/${uploaded.id}`,
-      });
-    } catch (error) {
-      console.error("Error subiendo imagen:", error);
-      alert(`No se pudo subir la imagen: ${error.message}`);
-    } finally {
-      setLoading(false);
-      e.target.value = "";
-    }
-  };
+  // Mantiene abierta una enfermedad válida: la primera con láminas o la del análisis en curso.
+  useEffect(() => {
+    if (!diseaseGroups.length) return;
+    setOpenDiseaseId((prev) => {
+      if (prev && diseaseGroups.some((group) => group.id === prev)) return prev;
+      return diseaseGroups.find((group) => group.images.length > 0)?.id ?? null;
+    });
+  }, [diseaseGroups]);
+
+  useEffect(() => {
+    if (!selectedImage) return;
+    const owner = diseaseGroups.find((group) => group.images.some((img) => img.id === selectedImage.id));
+    if (owner) setOpenDiseaseId(owner.id);
+  }, [selectedImage, diseaseGroups]);
 
   const handleLogout = () => {
     flushSession();
@@ -241,30 +306,16 @@ export function ImagesPage() {
             </button>
 
             <div className="images-v2-sidebar-content">
-              {canUploadImages && (
-                <div className="images-v2-sidebar-section" data-testid="image-upload-section">
-                  <div className="images-v2-sidebar-title">Carga directa · Docente/Admin</div>
-                  <div className="images-v2-upload-zone">
-                    <span className="images-v2-upload-icon">📤</span>
-                    <div className="images-v2-upload-text">Arrastra o selecciona</div>
-                    <div className="images-v2-upload-hint">SVS · JPG · PNG · TIFF</div>
-                    <input
-                      type="file"
-                      accept="image/*,.svs"
-                      onChange={handleFileUpload}
-                      className="images-v2-upload-input"
-                    />
-                  </div>
-                  <div className="images-v2-upload-warning" data-testid="image-upload-warning">
-                    <strong>WSI grandes:</strong> esta opción sube el archivo completo por el navegador y puede tardar
-                    mucho más. Si la lámina ya está copiada en el servidor, impórtala desde
-                    <span> Configuración → Imágenes</span>.
-                  </div>
-                </div>
-              )}
-
               <div className="images-v2-sidebar-section" style={{ borderBottom: 'none' }}>
-                <div className="images-v2-sidebar-title">Biblioteca</div>
+                <div className="images-v2-sidebar-title">Enfermedades · Biblioteca</div>
+                <p className="images-v2-disease-help">
+                  Elige la enfermedad que quieres analizar para desplegar sus láminas disponibles.
+                </p>
+                {!loading && (
+                  <div className="images-v2-disease-summary">
+                    {availableDiseases.length} de {diseaseGroups.length} enfermedades con láminas · {imageLibrary.length} en total
+                  </div>
+                )}
               </div>
 
               <div className="images-v2-list" data-testid="image-library-list">
@@ -272,37 +323,86 @@ export function ImagesPage() {
                   <div style={{ padding: '20px', textAlign: 'center' }}>
                     <span className="images-v2-loading">Cargando…</span>
                   </div>
-                ) : imageLibrary.length === 0 ? (
-                  <div style={{ padding: '20px', textAlign: 'center' }}>
-                    <span style={{ fontSize: '28px', display: 'block', marginBottom: '8px', opacity: 0.3 }}>🔬</span>
-                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Sin imágenes disponibles</span>
-                  </div>
                 ) : (
-                  imageLibrary.map((img) => (
-                    <div
-                      key={img.id}
-                      className={`images-v2-img-item ${selectedImage?.id === img.id ? "selected" : ""}`}
-                      onClick={() => handleImageSelect(img)}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Abrir imagen ${formatImageDisplayName(img)}`}
-                      data-testid={`image-library-item-${img.id}`}
-                    >
-                      <div className="images-v2-img-thumb">🔬</div>
-                      <div className="images-v2-img-info">
-                        <div className="images-v2-img-name" title={img.title || img.filename}>
-                          {formatImageDisplayName(img)}
-                        </div>
-                        <div className="images-v2-img-meta">
-                          {img.pathology_type && (
-                            <span className="images-v2-img-tag">{formatDisplayTag(img.pathology_type)}</span>
+                  <div className="images-v2-disease-groups" data-testid="disease-selector">
+                    {diseaseGroups.map((group) => {
+                      const isOpen = openDiseaseId === group.id;
+                      const count = group.images.length;
+                      return (
+                        <div
+                          key={group.id}
+                          className={`images-v2-disease${isOpen ? ' open' : ''}${count === 0 ? ' empty' : ''}`}
+                        >
+                          <button
+                            type="button"
+                            className="images-v2-disease-head"
+                            onClick={() => setOpenDiseaseId(isOpen ? null : group.id)}
+                            aria-expanded={isOpen}
+                            title={group.desc}
+                            data-testid={`disease-group-${group.id}`}
+                          >
+                            <span className="images-v2-disease-icon">{group.icon}</span>
+                            <span className="images-v2-disease-info">
+                              <span className="images-v2-disease-name">{group.label}</span>
+                              <span className="images-v2-disease-desc">{group.desc}</span>
+                            </span>
+                            <span className="images-v2-disease-count">
+                              {count > 0 ? `${count} lámina${count !== 1 ? 's' : ''}` : 'Sin láminas'}
+                            </span>
+                            <span className="images-v2-disease-chevron">{isOpen ? '▾' : '▸'}</span>
+                          </button>
+
+                          {isOpen && (
+                            <div className="images-v2-disease-body" data-testid={`disease-images-${group.id}`}>
+                              {count === 0 ? (
+                                <div className="images-v2-disease-empty">
+                                  Aún no hay láminas cargadas para esta enfermedad.
+                                  {canUploadImages && ' Agrégalas desde Configuración → Imágenes.'}
+                                </div>
+                              ) : (
+                                group.images.map((img) => (
+                                  <div
+                                    key={img.id}
+                                    className={`images-v2-img-item ${selectedImage?.id === img.id ? "selected" : ""}`}
+                                    onClick={() => handleImageSelect(img)}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`Abrir imagen ${formatImageDisplayName(img)}`}
+                                    data-testid={`image-library-item-${img.id}`}
+                                  >
+                                    <div className="images-v2-img-thumb">🔬</div>
+                                    <div className="images-v2-img-info">
+                                      <div className="images-v2-img-name" title={img.title || img.filename}>
+                                        {formatImageDisplayName(img)}
+                                      </div>
+                                      <div className="images-v2-img-meta">
+                                        {img.pathology_type && (
+                                          <span className="images-v2-img-tag">{formatDisplayTag(img.pathology_type)}</span>
+                                        )}
+                                        <span>{formatFileType(img.file_type)}</span>
+                                        {formatFileSizeMB(img.file_size) && <span>{formatFileSizeMB(img.file_size)}</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
                           )}
-                          <span>{formatFileType(img.file_type)}</span>
-                          {formatFileSizeMB(img.file_size) && <span>{formatFileSizeMB(img.file_size)}</span>}
                         </div>
-                      </div>
-                    </div>
-                  ))
+                      );
+                    })}
+                  </div>
+                )}
+
+                {!loading && canUploadImages && (
+                  <button
+                    type="button"
+                    className="images-v2-disease-cta"
+                    onClick={() => navigate("/dashboard/config")}
+                    data-testid="disease-add-images"
+                  >
+                    ＋ Cargar láminas de otra enfermedad · Configuración → Imágenes
+                  </button>
                 )}
               </div>
             </div>
@@ -320,9 +420,7 @@ export function ImagesPage() {
                   <span className="images-v2-empty-icon">🔬</span>
                   <div className="images-v2-empty-title">Ninguna imagen seleccionada</div>
                   <p className="images-v2-empty-text">
-                    {canUploadImages
-                      ? "Selecciona una imagen de la biblioteca o carga una desde tu dispositivo"
-                      : "Selecciona una imagen disponible de la biblioteca para comenzar"}
+                    Elige una enfermedad y luego selecciona una imagen disponible de la biblioteca para comenzar
                   </p>
                 </div>
 
