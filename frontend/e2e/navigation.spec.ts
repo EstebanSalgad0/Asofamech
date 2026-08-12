@@ -27,8 +27,8 @@ test.describe("Navegacion principal", () => {
     await expect(page).toHaveURL(/\/dashboard\/cases$/);
     await expect(page.getByTestId("cases-page")).toBeVisible();
 
-    await page.getByTestId("nav-feedback").click();
-    await expect(page).toHaveURL(/\/dashboard\/feedback$/);
-    await expect(page.getByTestId("feedback-page")).toBeVisible();
+    await page.getByTestId("nav-surveys").click();
+    await expect(page).toHaveURL(/\/dashboard\/surveys$/);
+    await expect(page.getByTestId("surveys-page")).toBeVisible();
   });
 });

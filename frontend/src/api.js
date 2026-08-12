@@ -94,9 +94,34 @@ export async function testLLMProvider() {
   return parseJsonResponse(res, "No se pudo probar el proveedor de IA");
 }
 
-export async function getIntegrationStatus() {
-  const res = await authFetch("/api/admin/integrations/status");
+export async function getIntegrationStatus({ refresh = false } = {}) {
+  const qs = refresh ? "?refresh=true" : "";
+  const res = await authFetch(`/api/admin/integrations/status${qs}`);
   return parseJsonResponse(res, "No se pudo verificar la integracion IA");
+}
+
+export async function getLlmUsageSummary(window = "30d") {
+  const res = await authFetch(`/api/admin/llm/usage/summary?window=${encodeURIComponent(window)}`);
+  return parseJsonResponse(res, "No se pudo cargar el consumo del LLM");
+}
+
+export async function getLlmUsageRecent(limit = 50) {
+  const res = await authFetch(`/api/admin/llm/usage/recent?limit=${limit}`);
+  return parseJsonResponse(res, "No se pudieron cargar las últimas llamadas");
+}
+
+export async function downloadLlmUsageCsv(window = "30d") {
+  const res = await authFetch(`/api/admin/llm/usage/export.csv?window=${encodeURIComponent(window)}`);
+  if (!res.ok) throw new Error(`Error al exportar CSV (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `llm_usage_${window}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function listAdminUsers(filters = {}) {
@@ -336,39 +361,59 @@ export async function deleteCaseImage(imageId) {
   }
 }
 
-export async function submitFeedback(payload) {
-  const res = await authFetch("/api/feedback", {
+// ============ Encuestas de percepción ============
+
+export async function listSurveys() {
+  const res = await authFetch("/api/surveys");
+  return parseJsonResponse(res, "No se pudieron cargar las encuestas");
+}
+
+export async function listAllSurveysAdmin() {
+  const res = await authFetch("/api/surveys/admin/all");
+  return parseJsonResponse(res, "No se pudieron cargar las encuestas");
+}
+
+export async function getSurvey(code) {
+  const res = await authFetch(`/api/surveys/${encodeURIComponent(code)}`);
+  return parseJsonResponse(res, "No se pudo cargar la encuesta");
+}
+
+export async function submitSurveyResponse(code, answers) {
+  const res = await authFetch(`/api/surveys/${encodeURIComponent(code)}/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ answers }),
   });
-  return parseJsonResponse(res, "No se pudo enviar la evaluación");
+  return parseJsonResponse(res, "No se pudo enviar la encuesta");
 }
 
-export async function getMyFeedback() {
-  const res = await authFetch("/api/feedback/my");
-  return parseJsonResponse(res, "No se pudo cargar tu evaluación");
+export async function updateSurveyStatus(code, status) {
+  const res = await authFetch(`/api/surveys/${encodeURIComponent(code)}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar el estado");
 }
 
-export async function getFeedbackSummary() {
-  const res = await authFetch("/api/feedback/summary");
-  return parseJsonResponse(res, "No se pudo cargar el resumen de evaluaciones");
+export async function getSurveySummary(code) {
+  const res = await authFetch(`/api/surveys/${encodeURIComponent(code)}/summary`);
+  return parseJsonResponse(res, "No se pudo cargar el resumen");
 }
 
-export async function getFeedbackResponses(role = "") {
-  const params = role ? `?role=${encodeURIComponent(role)}` : "";
-  const res = await authFetch(`/api/feedback/responses${params}`);
-  return parseJsonResponse(res, "No se pudieron cargar las respuestas");
+export async function getSurveyOpenAnswers(code) {
+  const res = await authFetch(`/api/surveys/${encodeURIComponent(code)}/open-answers`);
+  return parseJsonResponse(res, "No se pudieron cargar las respuestas abiertas");
 }
 
-export async function downloadFeedbackCsv() {
-  const res = await authFetch("/api/feedback/export.csv");
+export async function downloadSurveyCsv(code) {
+  const res = await authFetch(`/api/surveys/${encodeURIComponent(code)}/export.csv`);
   if (!res.ok) throw new Error(`Error al exportar CSV (${res.status})`);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "evaluaciones_usabilidad.csv";
+  a.download = `encuesta_${code}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();

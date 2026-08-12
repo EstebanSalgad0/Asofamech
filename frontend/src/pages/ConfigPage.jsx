@@ -26,6 +26,14 @@ import {
   updateAdminUser,
   updateRagDocument,
   updateSCTTest,
+  listAllSurveysAdmin,
+  getSurveySummary,
+  getSurveyOpenAnswers,
+  downloadSurveyCsv,
+  updateSurveyStatus,
+  getLlmUsageSummary,
+  getLlmUsageRecent,
+  downloadLlmUsageCsv,
 } from "../api";
 import { AppSidebar } from "../components/AppSidebar";
 import {
@@ -107,6 +115,22 @@ export function ConfigPage() {
   const [role, setRole] = useState(() => getStoredRole());
   const [activeTab, setActiveTab] = useState("images");
   const [toast, setToast] = useState(null);
+
+  // Estado del panel de Análisis (encuestas)
+  const [surveysList, setSurveysList] = useState([]);
+  const [loadingSurveys, setLoadingSurveys] = useState(false);
+  const [selectedSurveyCode, setSelectedSurveyCode] = useState(null);
+  const [surveySummary, setSurveySummary] = useState(null);
+  const [surveyOpen, setSurveyOpen] = useState([]);
+  const [loadingSurveyDetail, setLoadingSurveyDetail] = useState(false);
+  const [togglingSurveyStatus, setTogglingSurveyStatus] = useState(false);
+
+  // Estado del panel de Consumo del LLM
+  const [usageSummary, setUsageSummary] = useState(null);
+  const [usageWindow, setUsageWindow] = useState("30d");
+  const [loadingUsage, setLoadingUsage] = useState(false);
+  const [usageRecent, setUsageRecent] = useState([]);
+  const [usageError, setUsageError] = useState(null);
 
   const [imageLibrary, setImageLibrary] = useState([]);
   const [loadingImages, setLoadingImages] = useState(false);
@@ -209,11 +233,15 @@ export function ConfigPage() {
     } else if (activeTab === "ai" && canManageAdminSettings(role)) {
       loadAIConfig();
       loadIntegrationStatus();
+    } else if (activeTab === "tokens" && canManageAdminSettings(role)) {
+      loadUsage();
     } else if (activeTab === "correo" && canManageAdminSettings(role)) {
       loadEmailConfig();
       loadEmailTemplates();
     } else if (activeTab === "audit" && canManageAdminSettings(role)) {
       loadAuditLogs();
+    } else if (activeTab === "analytics") {
+      loadSurveysAnalytics();
     }
   }, [activeTab, role]);
 
@@ -449,7 +477,7 @@ export function ConfigPage() {
       const payload = await reindexAllRagDocuments();
       showToast(`Indice vectorial actualizado (${payload?.chunks_indexed ?? 0} chunks)`, "success");
       await loadRagDocuments();
-      await loadIntegrationStatus();
+      await loadIntegrationStatus({ refresh: true });
     } catch (error) {
       showToast(error.message || "No se pudo reindexar el corpus RAG", "error", 7000);
     } finally {
@@ -495,7 +523,7 @@ export function ConfigPage() {
       const payload = await updateAIConfig(aiConfigItems);
       setAiConfigItems(payload?.items || []);
       showToast("Configuración IA guardada", "success");
-      await loadIntegrationStatus();
+      await loadIntegrationStatus({ refresh: true });
     } catch (error) {
       showToast(error.message || "No se pudo guardar la configuración IA", "error", 7000);
     } finally {
@@ -524,10 +552,10 @@ export function ConfigPage() {
     }
   };
 
-  const loadIntegrationStatus = async () => {
+  const loadIntegrationStatus = async ({ refresh = false } = {}) => {
     setLoadingIntegrationStatus(true);
     try {
-      setIntegrationStatus(await getIntegrationStatus());
+      setIntegrationStatus(await getIntegrationStatus({ refresh }));
     } catch (error) {
       console.warn("No se pudo verificar integraciones:", error);
     } finally {
@@ -628,6 +656,109 @@ export function ConfigPage() {
       setAuditLogError(error.message || "No se pudo cargar la auditoria.");
     } finally {
       setLoadingAuditLogs(false);
+    }
+  };
+
+  const loadSurveysAnalytics = async () => {
+    setLoadingSurveys(true);
+    try {
+      const list = await listAllSurveysAdmin();
+      setSurveysList(list || []);
+      if (list && list.length > 0) {
+        const target = selectedSurveyCode && list.some((s) => s.code === selectedSurveyCode)
+          ? selectedSurveyCode
+          : list[0].code;
+        setSelectedSurveyCode(target);
+        await loadSurveyDetail(target);
+      }
+    } catch (error) {
+      showToast(error.message || "No se pudieron cargar las encuestas.", "error");
+    } finally {
+      setLoadingSurveys(false);
+    }
+  };
+
+  const loadSurveyDetail = async (code) => {
+    if (!code) return;
+    setLoadingSurveyDetail(true);
+    try {
+      const [summary, openAns] = await Promise.all([
+        getSurveySummary(code),
+        getSurveyOpenAnswers(code),
+      ]);
+      setSurveySummary(summary);
+      setSurveyOpen(openAns || []);
+    } catch (error) {
+      showToast(error.message || "No se pudo cargar el detalle.", "error");
+    } finally {
+      setLoadingSurveyDetail(false);
+    }
+  };
+
+  const handleSelectSurvey = async (code) => {
+    setSelectedSurveyCode(code);
+    setSurveySummary(null);
+    setSurveyOpen([]);
+    await loadSurveyDetail(code);
+  };
+
+  const handleToggleSurveyStatus = async () => {
+    if (!selectedSurveyCode) return;
+    const current = surveysList.find((s) => s.code === selectedSurveyCode);
+    if (!current) return;
+    const next = current.status === "open" ? "archived" : "open";
+    const label = next === "archived" ? "archivar" : "reabrir";
+    if (!window.confirm(`¿Seguro que quieres ${label} esta encuesta?`)) return;
+    setTogglingSurveyStatus(true);
+    try {
+      await updateSurveyStatus(selectedSurveyCode, next);
+      showToast(`Encuesta ${next === "archived" ? "archivada" : "reabierta"}.`, "success");
+      await loadSurveysAnalytics();
+    } catch (error) {
+      showToast(error.message || "No se pudo actualizar el estado.", "error");
+    } finally {
+      setTogglingSurveyStatus(false);
+    }
+  };
+
+  const handleDownloadSurveyCsv = async () => {
+    if (!selectedSurveyCode) return;
+    try {
+      await downloadSurveyCsv(selectedSurveyCode);
+    } catch (error) {
+      showToast(error.message || "No se pudo descargar el CSV.", "error");
+    }
+  };
+
+  const loadUsage = async (win = usageWindow) => {
+    setLoadingUsage(true);
+    setUsageError(null);
+    try {
+      const [summary, recent] = await Promise.all([
+        getLlmUsageSummary(win),
+        getLlmUsageRecent(20),
+      ]);
+      setUsageSummary(summary);
+      setUsageRecent(recent?.items || []);
+    } catch (error) {
+      const msg = error?.message || "No se pudo cargar el consumo del LLM.";
+      setUsageError(msg);
+      showToast(msg, "error");
+    } finally {
+      setLoadingUsage(false);
+    }
+  };
+
+  const handleChangeUsageWindow = async (win) => {
+    setUsageWindow(win);
+    await loadUsage(win);
+  };
+
+  const handleDownloadUsageCsv = async () => {
+    try {
+      await downloadLlmUsageCsv(usageWindow);
+    } catch (error) {
+      showToast(error.message || "No se pudo descargar el CSV.", "error");
     }
   };
 
@@ -1087,9 +1218,11 @@ export function ConfigPage() {
     { id: "images", label: "Gestión de imágenes", icon: "IMG" },
     { id: "rag", label: "Documentos RAG", icon: "RAG" },
     { id: "sct", label: "Tests SCT", icon: "SCT" },
+    { id: "analytics", label: "Análisis", icon: "📊" },
     ...(canManageAdminSettings(role) ? [
       { id: "users", label: "Usuarios", icon: "USR" },
       { id: "ai", label: "Configuración IA", icon: "IA" },
+      { id: "tokens", label: "Tokens", icon: "💰" },
       { id: "correo", label: "Gestión de Correo", icon: "✉" },
       { id: "audit", label: "Auditoria", icon: "LOG" },
     ] : []),
@@ -2170,7 +2303,7 @@ export function ConfigPage() {
                     <div className="cfg-section-desc">Administra el proveedor del modelo generativo (Ollama local o API externa), la activación del RAG y los parámetros de respuesta.</div>
                   </div>
                   <div className="cfg-inline-actions">
-                    <button className="cfg-view-btn" type="button" onClick={loadIntegrationStatus} disabled={loadingIntegrationStatus}>
+                    <button className="cfg-view-btn" type="button" onClick={() => loadIntegrationStatus({ refresh: true })} disabled={loadingIntegrationStatus}>
                       {loadingIntegrationStatus ? "Verificando…" : "⊙ Verificar integración"}
                     </button>
                     <button className="cfg-action-btn" type="button" onClick={handleSaveAIConfig} disabled={savingAIConfig || loadingAIConfig}>
@@ -2405,11 +2538,343 @@ export function ConfigPage() {
                         </div>
                       )}
                       <button className="cfg-ai-reverify-btn" type="button"
-                        onClick={loadIntegrationStatus} disabled={loadingIntegrationStatus}>
+                        onClick={() => loadIntegrationStatus({ refresh: true })} disabled={loadingIntegrationStatus}>
                         {loadingIntegrationStatus ? "Verificando…" : "⟳ Volver a verificar todo"}
                       </button>
                     </div>
                   </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Panel de consumo del LLM (pestaña propia) */}
+          {activeTab === "tokens" && role === "Administrador" && (() => {
+            const t = usageSummary?.totals || {};
+            const p = usageSummary?.pricing || {};
+            const windows = [
+              { id: "7d", label: "Últimos 7 días" },
+              { id: "30d", label: "Últimos 30 días" },
+              { id: "90d", label: "Últimos 90 días" },
+              { id: "all", label: "Todo el histórico" },
+            ];
+            const fmtNum = (n) => (n ?? 0).toLocaleString("es-CL");
+            const fmtUsd = (n) => `$${(n ?? 0).toFixed(4)}`;
+            const daily = usageSummary?.daily || [];
+            const hasData = (t.calls || 0) > 0;
+
+            // Donut prompt vs completion
+            const R = 70, CIRC = 2 * Math.PI * R;
+            const totalTok = (t.prompt_tokens || 0) + (t.completion_tokens || 0);
+            const promptFrac = totalTok > 0 ? (t.prompt_tokens || 0) / totalTok : 0;
+            const completionFrac = 1 - promptFrac;
+
+            // Area chart
+            const W = 800, H = 200, PAD_L = 40, PAD_R = 12, PAD_T = 12, PAD_B = 26;
+            const chartW = W - PAD_L - PAD_R;
+            const chartH = H - PAD_T - PAD_B;
+            const maxDailyVal = daily.reduce((m, d) => Math.max(m, d.total_tokens || 0), 1);
+            const points = daily.map((d, i) => {
+              const x = daily.length === 1 ? PAD_L + chartW / 2 : PAD_L + (i / (daily.length - 1)) * chartW;
+              const y = PAD_T + chartH - (d.total_tokens / maxDailyVal) * chartH;
+              return { x, y, d };
+            });
+            const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+            const areaPath =
+              points.length > 0
+                ? `${linePath} L${points[points.length - 1].x.toFixed(1)},${(PAD_T + chartH).toFixed(1)} L${points[0].x.toFixed(1)},${(PAD_T + chartH).toFixed(1)} Z`
+                : "";
+            const yTicks = [0, 0.5, 1];
+
+            return (
+              <div className="cfg-section" style={{ marginTop: 16 }} data-testid="usage-panel">
+                <div className="cfg-section-top">
+                  <div>
+                    <div className="cfg-section-title">Consumo de tokens</div>
+                    <div className="cfg-section-desc">
+                      Tokens y costo estimado del proveedor generativo. Los conteos vienen del campo <code>usage</code> que devuelve la API, así que <b>cuadran con lo que muestra el dashboard del proveedor</b>. Los precios en USD por millón de tokens se editan en <b>Configuración IA</b> (<code>llm_price_input_per_million</code> y <code>llm_price_output_per_million</code>).
+                    </div>
+                  </div>
+                  <div className="cfg-inline-actions">
+                    <select
+                      value={usageWindow}
+                      onChange={(e) => handleChangeUsageWindow(e.target.value)}
+                      disabled={loadingUsage}
+                      style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-1)", color: "var(--ink)" }}
+                    >
+                      {windows.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
+                    </select>
+                    <button className="cfg-view-btn" type="button" onClick={() => loadUsage()} disabled={loadingUsage}>
+                      {loadingUsage ? "Cargando…" : "⟳ Actualizar"}
+                    </button>
+                    <button className="cfg-action-btn" type="button" onClick={handleDownloadUsageCsv} disabled={loadingUsage || !hasData}>
+                      Descargar CSV
+                    </button>
+                  </div>
+                </div>
+
+                <div className="usg-body">
+                  {loadingUsage && !usageSummary && (
+                    <div className="usg-empty-state">
+                      <div className="usg-empty-state-icon">⏳</div>
+                      <h3 className="usg-empty-state-title">Cargando consumo…</h3>
+                    </div>
+                  )}
+
+                  {!loadingUsage && usageError && (
+                    <div className="usg-empty-state" style={{ background: "linear-gradient(135deg, rgba(220,38,38,0.08), rgba(220,38,38,0.02))", borderColor: "rgba(220,38,38,0.3)" }}>
+                      <div className="usg-empty-state-icon">⚠️</div>
+                      <h3 className="usg-empty-state-title" style={{ color: "#991b1b" }}>No se pudo cargar el consumo</h3>
+                      <p className="usg-empty-state-hint">
+                        {usageError}
+                        <br /><br />
+                        Si dice <code>404</code> o similar: probablemente el <b>backend no está actualizado</b>. Ejecuta:
+                        <br />
+                        <code style={{ display: "inline-block", marginTop: 8, padding: "6px 10px", background: "var(--bg-2)", borderRadius: 4, fontSize: 12 }}>
+                          docker compose up -d --build backend
+                        </code>
+                      </p>
+                      <button className="cfg-view-btn" style={{ marginTop: 14 }} type="button" onClick={() => loadUsage()}>
+                        ⟳ Reintentar
+                      </button>
+                    </div>
+                  )}
+
+                  {usageSummary && !hasData && (
+                    <div className="usg-empty-state">
+                      <div className="usg-empty-state-icon">📊</div>
+                      <h3 className="usg-empty-state-title">Aún no hay consumo registrado</h3>
+                      <p className="usg-empty-state-hint">
+                        Envía una consulta desde el <b>Asistente IA</b>, genera un test <b>SCT</b> o solicita retroalimentación de una <b>lámina</b> — apenas ocurra la primera llamada al proveedor, aquí verás los tokens, el costo estimado y la evolución diaria.
+                      </p>
+                    </div>
+                  )}
+
+                  {usageSummary && hasData && (
+                    <>
+                      {/* HERO: costo grande + donut prompt/completion */}
+                      <div className="usg-hero">
+                        <div className="usg-hero-left">
+                          <div className="usg-hero-label">Costo estimado · {usageWindow.toUpperCase()}</div>
+                          <div className="usg-hero-cost">
+                            <span className="usd">$</span>{(t.cost_usd || 0).toFixed(4)}
+                          </div>
+                          <p className="usg-hero-sub">
+                            {fmtNum(t.total_tokens)} tokens en {fmtNum(t.calls)} llamadas al proveedor.
+                            Precios: ${(p.input_per_million_usd || 0).toFixed(4)}/1M input · ${(p.output_per_million_usd || 0).toFixed(4)}/1M output.
+                          </p>
+                          <div className="usg-hero-meta">
+                            <div className="usg-hero-meta-item">
+                              <span className="usg-hero-meta-key">Éxito</span>
+                              <span className="usg-hero-meta-val">
+                                {t.calls ? Math.round((t.successful_calls / t.calls) * 100) : 0}%
+                                <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: 12 }}> · {t.failed_calls} fallidas</span>
+                              </span>
+                            </div>
+                            <div className="usg-hero-meta-item">
+                              <span className="usg-hero-meta-key">Proveedor top</span>
+                              <span className="usg-hero-meta-val">{usageSummary.by_provider?.[0]?.key || "—"}</span>
+                            </div>
+                            <div className="usg-hero-meta-item">
+                              <span className="usg-hero-meta-key">Feature top</span>
+                              <span className="usg-hero-meta-val">{usageSummary.by_feature?.[0]?.key || "—"}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="usg-hero-donut">
+                          <div className="usg-donut">
+                            <svg width="180" height="180" viewBox="0 0 180 180">
+                              <circle cx="90" cy="90" r={R} fill="none" stroke="var(--bg-2)" strokeWidth="18" />
+                              {completionFrac > 0 && (
+                                <circle cx="90" cy="90" r={R} fill="none" stroke="#16a34a" strokeWidth="18"
+                                        strokeDasharray={`${(completionFrac * CIRC).toFixed(2)} ${CIRC.toFixed(2)}`}
+                                        strokeDashoffset={0} strokeLinecap="butt" />
+                              )}
+                              {promptFrac > 0 && (
+                                <circle cx="90" cy="90" r={R} fill="none" stroke="#0284c7" strokeWidth="18"
+                                        strokeDasharray={`${(promptFrac * CIRC).toFixed(2)} ${CIRC.toFixed(2)}`}
+                                        strokeDashoffset={-(completionFrac * CIRC)} strokeLinecap="butt" />
+                              )}
+                            </svg>
+                            <div className="usg-donut-inner">
+                              <div className="usg-donut-total">{fmtNum(t.total_tokens)}</div>
+                              <div className="usg-donut-total-label">tokens</div>
+                            </div>
+                            <div className="usg-donut-legend">
+                              <span className="usg-donut-legend-item">
+                                <span className="usg-donut-legend-dot" style={{ background: "#0284c7" }} />
+                                Input {Math.round(promptFrac * 100)}%
+                              </span>
+                              <span className="usg-donut-legend-item">
+                                <span className="usg-donut-legend-dot" style={{ background: "#16a34a" }} />
+                                Output {Math.round(completionFrac * 100)}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* KPIs coloridos */}
+                      <div className="usg-kpis">
+                        <div className="usg-kpi usg-kpi--in">
+                          <div className="usg-kpi-top">
+                            <span className="usg-kpi-label">Input tokens</span>
+                            <span className="usg-kpi-icon">↑</span>
+                          </div>
+                          <div className="usg-kpi-value">{fmtNum(t.prompt_tokens)}</div>
+                          <div className="usg-kpi-hint">≈ {fmtUsd((t.prompt_tokens / 1_000_000) * (p.input_per_million_usd || 0))}</div>
+                        </div>
+                        <div className="usg-kpi usg-kpi--out">
+                          <div className="usg-kpi-top">
+                            <span className="usg-kpi-label">Output tokens</span>
+                            <span className="usg-kpi-icon">↓</span>
+                          </div>
+                          <div className="usg-kpi-value">{fmtNum(t.completion_tokens)}</div>
+                          <div className="usg-kpi-hint">≈ {fmtUsd((t.completion_tokens / 1_000_000) * (p.output_per_million_usd || 0))}</div>
+                        </div>
+                        <div className="usg-kpi usg-kpi--calls">
+                          <div className="usg-kpi-top">
+                            <span className="usg-kpi-label">Llamadas</span>
+                            <span className="usg-kpi-icon">⚡</span>
+                          </div>
+                          <div className="usg-kpi-value">{fmtNum(t.calls)}</div>
+                          <div className="usg-kpi-hint">{t.calls ? Math.round(t.total_tokens / t.calls) : 0} tokens promedio</div>
+                        </div>
+                        <div className="usg-kpi usg-kpi--success">
+                          <div className="usg-kpi-top">
+                            <span className="usg-kpi-label">Tasa de éxito</span>
+                            <span className="usg-kpi-icon">✓</span>
+                          </div>
+                          <div className="usg-kpi-value">{t.calls ? Math.round((t.successful_calls / t.calls) * 100) : 0}%</div>
+                          <div className="usg-kpi-hint">{t.successful_calls} ok · {t.failed_calls} fallidas</div>
+                        </div>
+                      </div>
+
+                      {/* Chart de área SVG */}
+                      <div className="usg-chart-card">
+                        <div className="usg-chart-title">
+                          <h4>Evolución diaria de tokens</h4>
+                          <span className="usg-chart-title-hint">Hover sobre un punto para ver el detalle</span>
+                        </div>
+                        {daily.length === 0 ? (
+                          <div className="usg-chart-empty">Sin datos en la ventana seleccionada.</div>
+                        ) : (
+                          <svg className="usg-chart-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+                            <defs>
+                              <linearGradient id="usgAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
+                                <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.02" />
+                              </linearGradient>
+                            </defs>
+                            {yTicks.map((tick) => {
+                              const y = PAD_T + chartH * (1 - tick);
+                              return (
+                                <g key={tick}>
+                                  <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="var(--border)" strokeDasharray="3 4" />
+                                  <text x={PAD_L - 6} y={y + 4} textAnchor="end" fontSize="10" fill="var(--muted)">
+                                    {tick === 0 ? "0" : fmtNum(Math.round(maxDailyVal * tick))}
+                                  </text>
+                                </g>
+                              );
+                            })}
+                            <path d={areaPath} fill="url(#usgAreaGrad)" />
+                            <path d={linePath} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                            {points.map((pt) => (
+                              <g key={pt.d.date}>
+                                <circle cx={pt.x} cy={pt.y} r="3.5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="1.5" />
+                                <title>{`${pt.d.date}\nTokens: ${fmtNum(pt.d.total_tokens)}\nLlamadas: ${pt.d.calls}\nCosto: ${fmtUsd(pt.d.cost_usd)}`}</title>
+                              </g>
+                            ))}
+                            {daily.length > 1 && (
+                              <>
+                                <text x={PAD_L} y={H - 8} fontSize="10" fill="var(--muted)">{daily[0].date}</text>
+                                <text x={W - PAD_R} y={H - 8} textAnchor="end" fontSize="10" fill="var(--muted)">{daily[daily.length - 1].date}</text>
+                              </>
+                            )}
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Breakdowns con barras horizontales */}
+                      <div className="usg-breakdown-grid">
+                        {[
+                          { title: "Por proveedor", rows: usageSummary.by_provider || [] },
+                          { title: "Por modelo",    rows: usageSummary.by_model || [] },
+                          { title: "Por feature",   rows: usageSummary.by_feature || [] },
+                        ].map((block) => {
+                          const max = block.rows.reduce((m, r) => Math.max(m, r.total_tokens || 0), 1);
+                          return (
+                            <div key={block.title} className="usg-bd">
+                              <div className="usg-bd-title">{block.title}</div>
+                              {block.rows.length === 0 ? (
+                                <div className="usg-bd-empty">Sin datos.</div>
+                              ) : (
+                                block.rows.slice(0, 6).map((r) => {
+                                  const pct = max > 0 ? (r.total_tokens / max) * 100 : 0;
+                                  return (
+                                    <div className="usg-bd-row" key={r.key}>
+                                      <span className="usg-bd-key">{r.key}</span>
+                                      <span className="usg-bd-val">
+                                        {fmtNum(r.total_tokens)}<small>{fmtUsd(r.cost_usd)}</small>
+                                      </span>
+                                      <div className="usg-bd-bar-wrap">
+                                        <div className="usg-bd-bar" style={{ width: `${pct}%` }} />
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Últimas llamadas */}
+                      {usageRecent.length > 0 && (
+                        <div className="usg-recent">
+                          <div className="usg-recent-head">Últimas llamadas</div>
+                          <div style={{ overflowX: "auto" }}>
+                            <table className="usg-recent-table">
+                              <thead>
+                                <tr>
+                                  <th>Fecha</th>
+                                  <th>Proveedor</th>
+                                  <th>Modelo</th>
+                                  <th>Feature</th>
+                                  <th style={{ textAlign: "right" }}>In</th>
+                                  <th style={{ textAlign: "right" }}>Out</th>
+                                  <th style={{ textAlign: "right" }}>ms</th>
+                                  <th style={{ textAlign: "right" }}>USD</th>
+                                  <th style={{ textAlign: "center" }}>OK</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {usageRecent.map((r) => (
+                                  <tr key={r.id}>
+                                    <td style={{ color: "var(--muted)", whiteSpace: "nowrap" }}>
+                                      {r.occurred_at ? new Date(r.occurred_at).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}
+                                    </td>
+                                    <td>{r.provider}</td>
+                                    <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.model}>{r.model}</td>
+                                    <td style={{ color: "var(--muted)" }}>{r.feature || "—"}</td>
+                                    <td style={{ textAlign: "right" }}>{fmtNum(r.prompt_tokens)}</td>
+                                    <td style={{ textAlign: "right" }}>{fmtNum(r.completion_tokens)}</td>
+                                    <td style={{ textAlign: "right", color: "var(--muted)" }}>{r.latency_ms ?? "—"}</td>
+                                    <td style={{ textAlign: "right", color: "var(--accent)", fontWeight: 700 }}>{fmtUsd(r.cost_usd)}</td>
+                                    <td style={{ textAlign: "center" }}>
+                                      {r.success
+                                        ? <span className="usg-status-ok">✓</span>
+                                        : <span className="usg-status-err" title={r.error_kind || "error"}>✗</span>}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -2606,6 +3071,200 @@ export function ConfigPage() {
                     <button className="cfg-action-btn" type="button" onClick={() => setShowGenerateModal(true)}>+ Crear test manual</button>
                   </div>
                 </div>
+              </div>
+            );
+          })()}
+
+          {/* -- ANALYTICS TAB (encuestas de percepción) -- */}
+          {activeTab === "analytics" && (() => {
+            const current = surveysList.find((s) => s.code === selectedSurveyCode);
+            const isArchived = current?.status === "archived";
+            return (
+              <div style={{ padding: "24px 32px" }} data-testid="analytics-panel">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, gap: 16, flexWrap: "wrap" }}>
+                  <div>
+                    <h2 style={{ margin: "0 0 4px", fontFamily: "'Instrument Serif', serif", fontSize: 26 }}>
+                      Análisis de encuestas
+                    </h2>
+                    <p style={{ margin: 0, color: "var(--muted)", fontSize: 14, maxWidth: 640, lineHeight: 1.5 }}>
+                      Resultados agregados y respuestas abiertas de las encuestas de percepción.
+                      Los datos son <b>anónimos</b>: no se muestra ni almacena qué usuario respondió qué.
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <select
+                      value={selectedSurveyCode || ""}
+                      onChange={(e) => handleSelectSurvey(e.target.value)}
+                      disabled={loadingSurveys || surveysList.length === 0}
+                      style={{ padding: "8px 12px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg-1)", color: "var(--ink)" }}
+                    >
+                      {surveysList.map((s) => (
+                        <option key={s.code} value={s.code}>
+                          {s.title} {s.status === "archived" ? "(archivada)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleToggleSurveyStatus}
+                      disabled={togglingSurveyStatus || !current}
+                      className="cfg-action-btn"
+                      style={{ background: isArchived ? "#16a34a" : "#f59e0b" }}
+                    >
+                      {isArchived ? "Reabrir" : "Archivar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadSurveyCsv}
+                      disabled={!current}
+                      className="cfg-action-btn"
+                    >
+                      Descargar CSV
+                    </button>
+                  </div>
+                </div>
+
+                {loadingSurveys && <p>Cargando encuestas...</p>}
+                {!loadingSurveys && surveysList.length === 0 && (
+                  <div style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
+                    No hay encuestas creadas todavía.
+                  </div>
+                )}
+
+                {current && loadingSurveyDetail && <p>Cargando resultados...</p>}
+
+                {current && surveySummary && !loadingSurveyDetail && (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
+                      <div style={{ background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+                        <div style={{ color: "var(--muted)", fontSize: 12 }}>Respuestas totales</div>
+                        <div style={{ fontSize: 32, fontWeight: 700, color: "var(--ink)" }}>{surveySummary.total_responses}</div>
+                      </div>
+                      <div style={{ background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+                        <div style={{ color: "var(--muted)", fontSize: 12 }}>Promedio global (Likert)</div>
+                        <div style={{ fontSize: 32, fontWeight: 700, color: "var(--ink)" }}>
+                          {surveySummary.global_average !== null && surveySummary.global_average !== undefined
+                            ? surveySummary.global_average.toFixed(2)
+                            : "—"}
+                        </div>
+                      </div>
+                      <div style={{ background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+                        <div style={{ color: "var(--muted)", fontSize: 12 }}>Estado</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: isArchived ? "#f59e0b" : "#16a34a" }}>
+                          {isArchived ? "Archivada" : "Abierta"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <h3 style={{ margin: "16px 0 10px", fontSize: 16 }}>Promedio por sección</h3>
+                    <div style={{ background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", marginBottom: 24 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                        <thead style={{ background: "var(--bg-2)" }}>
+                          <tr>
+                            <th style={{ textAlign: "left", padding: "10px 12px" }}>Sección</th>
+                            <th style={{ textAlign: "right", padding: "10px 12px", width: 100 }}>Ítems</th>
+                            <th style={{ textAlign: "right", padding: "10px 12px", width: 100 }}>Promedio</th>
+                            <th style={{ width: 200, padding: "10px 12px" }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {surveySummary.section_averages.map((s) => (
+                            <tr key={s.section} style={{ borderTop: "1px solid var(--border)" }}>
+                              <td style={{ padding: "10px 12px" }}>{s.section}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "right", color: "var(--muted)" }}>{s.n_items}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 600 }}>
+                                {s.average !== null ? s.average.toFixed(2) : "—"}
+                              </td>
+                              <td style={{ padding: "10px 12px" }}>
+                                {s.average !== null && (
+                                  <div style={{ background: "var(--bg-2)", borderRadius: 4, height: 8, overflow: "hidden" }}>
+                                    <div
+                                      style={{
+                                        width: `${(s.average / 5) * 100}%`,
+                                        height: "100%",
+                                        background: s.average >= 4 ? "#16a34a" : s.average >= 3 ? "#f59e0b" : "#dc2626",
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <h3 style={{ margin: "16px 0 10px", fontSize: 16 }}>Detalle por ítem</h3>
+                    <div style={{ background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", marginBottom: 24 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead style={{ background: "var(--bg-2)" }}>
+                          <tr>
+                            <th style={{ textAlign: "left", padding: "10px 12px" }}>Pregunta</th>
+                            <th style={{ textAlign: "right", padding: "10px 12px", width: 70 }}>N</th>
+                            <th style={{ textAlign: "right", padding: "10px 12px", width: 90 }}>Promedio</th>
+                            <th style={{ textAlign: "left", padding: "10px 12px", width: 250 }}>Distribución 1–5</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {surveySummary.item_stats
+                            .filter((i) => i.item_type === "likert_1_5")
+                            .map((i) => (
+                              <tr key={i.item_id} style={{ borderTop: "1px solid var(--border)" }}>
+                                <td style={{ padding: "10px 12px" }}>
+                                  <div style={{ color: "var(--muted)", fontSize: 11, marginBottom: 2 }}>{i.section}</div>
+                                  {i.text}
+                                </td>
+                                <td style={{ padding: "10px 12px", textAlign: "right", color: "var(--muted)" }}>{i.n}</td>
+                                <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 600 }}>
+                                  {i.average !== null ? i.average.toFixed(2) : "—"}
+                                </td>
+                                <td style={{ padding: "10px 12px" }}>
+                                  <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 30 }}>
+                                    {[1, 2, 3, 4, 5].map((n) => {
+                                      const count = i.distribution?.[String(n)] || 0;
+                                      const maxV = Math.max(1, ...[1, 2, 3, 4, 5].map((k) => i.distribution?.[String(k)] || 0));
+                                      const h = (count / maxV) * 100;
+                                      return (
+                                        <div key={n} title={`${n}: ${count}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                                          <div style={{ width: "100%", background: "var(--bg-2)", borderRadius: 2, height: 22, display: "flex", alignItems: "flex-end" }}>
+                                            <div style={{ width: "100%", height: `${h}%`, background: "#0284c7", borderRadius: 2 }} />
+                                          </div>
+                                          <span style={{ fontSize: 10, color: "var(--muted)" }}>{n}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {surveyOpen.length > 0 && (
+                      <>
+                        <h3 style={{ margin: "16px 0 10px", fontSize: 16 }}>Respuestas abiertas</h3>
+                        <div style={{ display: "grid", gap: 16 }}>
+                          {surveyOpen.map((oa) => (
+                            <div key={oa.item_id} style={{ background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+                              <div style={{ color: "var(--muted)", fontSize: 11, marginBottom: 4 }}>{oa.section}</div>
+                              <div style={{ fontWeight: 600, marginBottom: 10 }}>{oa.item_text}</div>
+                              {oa.answers.length === 0 ? (
+                                <div style={{ color: "var(--muted)", fontSize: 13, fontStyle: "italic" }}>Sin respuestas todavía.</div>
+                              ) : (
+                                <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
+                                  {oa.answers.map((ans, idx) => (
+                                    <li key={idx} style={{ fontSize: 14, lineHeight: 1.5 }}>{ans}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             );
           })()}

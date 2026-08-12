@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from .routers import admin, auth, chat, cases, dashboard, feedback, history, rag, sct, medical_images, histopathology
+from .routers import admin, auth, chat, cases, dashboard, history, rag, sct, medical_images, histopathology, surveys
 
 app = FastAPI(title="Backend ASOFAMECH Educativo")
 
@@ -44,6 +44,17 @@ def on_startup():
     except Exception as exc:
         print(f"[backend] ADVERTENCIA: No se pudo recuperar jobs de heatmap atascados: {exc}")
 
+    try:
+        from .db import SessionLocal
+        from .seeds.surveys_loader import seed_surveys
+        db = SessionLocal()
+        try:
+            seed_surveys(db)
+        finally:
+            db.close()
+    except Exception as exc:
+        print(f"[backend] ADVERTENCIA: No se pudieron sembrar las encuestas: {exc}")
+
     print("[backend] Servicio FastAPI iniciado correctamente.")
 
 
@@ -63,7 +74,7 @@ app.include_router(sct.router)
 app.include_router(auth.router)
 app.include_router(medical_images.router)
 app.include_router(histopathology.router)
-app.include_router(feedback.router)
+app.include_router(surveys.router)
 
 # Las imágenes médicas y tiles DZI se sirven exclusivamente a través de los
 # endpoints autenticados de /api/medical-images/. No se expone el directorio

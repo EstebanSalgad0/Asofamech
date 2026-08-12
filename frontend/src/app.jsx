@@ -8,7 +8,7 @@ import { SCTPage } from "./pages/SCTPage";
 import { ImagesPage } from "./pages/ImagesPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { CasesPage } from "./pages/CasesPage";
-import { FeedbackPage } from "./pages/FeedbackPage";
+import { SurveysPage } from "./pages/SurveysPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ThemeToggle } from "./components/ThemeToggle";
 
@@ -31,7 +31,7 @@ export default function App() {
         <Route path="/dashboard/sct" element={<SCTPage />} />
         <Route path="/dashboard/images" element={<ImagesPage />} />
         <Route path="/dashboard/cases" element={<CasesPage />} />
-        <Route path="/dashboard/feedback" element={<FeedbackPage />} />
+        <Route path="/dashboard/surveys" element={<SurveysPage />} />
         <Route path="/dashboard/config" element={<ConfigPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

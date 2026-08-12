@@ -186,53 +186,6 @@ class SCTAttemptAdminOut(SCTAttemptWithTest):
     user_name: str = ""
 
 
-# ========== Usability Feedback Schemas ==========
-
-class FeedbackCreate(BaseModel):
-    nav_clarity: int          # 1-5
-    viewer_ease: int          # 1-5
-    roi_ease: int             # 1-5
-    ai_clarity: int           # 1-5
-    chatbot_utility: int      # 1-5
-    sct_utility: int          # 1-5
-    observations: Optional[str] = None
-    display_name: Optional[str] = None
-
-class FeedbackOut(BaseModel):
-    id: int
-    role_at_submission: str
-    nav_clarity: int
-    viewer_ease: int
-    roi_ease: int
-    ai_clarity: int
-    chatbot_utility: int
-    sct_utility: int
-    observations: Optional[str] = None
-    display_name: Optional[str] = None
-    submitted_at: Optional[str] = None
-    updated_at: Optional[str] = None
-
-    class Config:
-        orm_mode = True
-
-class DimensionAverage(BaseModel):
-    nav_clarity: float
-    viewer_ease: float
-    roi_ease: float
-    ai_clarity: float
-    chatbot_utility: float
-    sct_utility: float
-
-class RoleBreakdown(BaseModel):
-    count: int
-    averages: DimensionAverage
-
-class FeedbackSummary(BaseModel):
-    total_responses: int
-    averages: DimensionAverage
-    by_role: dict
-    recent_observations: List[str]
-
 class ForgotPasswordRequest(BaseModel):
     email: str
 
@@ -240,14 +193,80 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
-class FeedbackResponseItem(BaseModel):
-    role: str
-    display_name: Optional[str] = None
-    nav_clarity: int
-    viewer_ease: int
-    roi_ease: int
-    ai_clarity: int
-    chatbot_utility: int
-    sct_utility: int
-    observations: Optional[str] = None
-    submitted_at: Optional[str] = None
+
+# ========== Encuestas de percepción ==========
+
+class SurveyItemOut(BaseModel):
+    id: int
+    section: str
+    section_order: int
+    item_order: int
+    text: str
+    item_type: str            # "likert_1_5" | "open_text"
+    required: bool
+
+    class Config:
+        orm_mode = True
+
+
+class SurveyOut(BaseModel):
+    id: int
+    code: str
+    title: str
+    description: Optional[str] = None
+    status: str               # "open" | "archived"
+    created_at: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
+class SurveyDetailOut(SurveyOut):
+    items: List[SurveyItemOut] = []
+    already_answered: bool = False
+
+
+class SurveyStatusUpdate(BaseModel):
+    status: str               # "open" | "archived"
+
+
+class SurveyAnswerIn(BaseModel):
+    item_id: int
+    value_int: Optional[int] = None    # 1..5 para Likert
+    value_text: Optional[str] = None   # respuesta libre
+
+
+class SurveyResponseCreate(BaseModel):
+    answers: List[SurveyAnswerIn]
+
+
+class ItemStat(BaseModel):
+    item_id: int
+    section: str
+    text: str
+    item_type: str
+    average: Optional[float] = None
+    n: int
+    distribution: dict = {}    # {"1": x, "2": y, ...}
+
+
+class SectionStat(BaseModel):
+    section: str
+    average: Optional[float] = None
+    n_items: int
+
+
+class SurveySummary(BaseModel):
+    survey_code: str
+    survey_title: str
+    total_responses: int
+    global_average: Optional[float] = None
+    section_averages: List[SectionStat] = []
+    item_stats: List[ItemStat] = []
+
+
+class OpenAnswerOut(BaseModel):
+    item_id: int
+    item_text: str
+    section: str
+    answers: List[str] = []

@@ -1,0 +1,67 @@
+{
+  "code": "fpa",
+  "title": "Fisiopatología",
+  "description": "Encuesta cualitativa sobre percepción de aprendizaje con plataforma basada en inteligencia artificial y casos clínicos integrados. Escala Likert 1-5 (1 = Totalmente en desacuerdo, 5 = Totalmente de acuerdo).",
+  "sections": [
+    {
+      "name": "I. Utilidad Percibida para el Aprendizaje",
+      "items": [
+        "El uso de la plataforma de IA generativa mejoró mi comprensión de los conceptos de fisiopatología.",
+        "Las imágenes de histopatología y contenido de fisiopatología integradas me ayudaron a correlacionar la teoría con la práctica clínica.",
+        "Los casos clínicos generados por la IA fueron relevantes para mi nivel de formación.",
+        "La plataforma facilitó la integración entre la histopatología, la fisiopatología y la clínica.",
+        "Considero que esta herramienta es más efectiva que los métodos tradicionales de aprendizaje."
+      ]
+    },
+    {
+      "name": "II. Interés y Atracción",
+      "items": [
+        "La plataforma basada en IA me resulta atractiva para el aprendizaje de la Fisiopatología.",
+        "La integración de IA en el proceso de aprendizaje hace que me sienta más motivado a estudiar Fisiopatología.",
+        "Los casos clínicos integrados en la plataforma son interesantes y me motivan a aprender más."
+      ]
+    },
+    {
+      "name": "III. Interacción con la Plataforma",
+      "items": [
+        "La interfaz de la plataforma fue intuitiva y fácil de usar.",
+        "La IA responde de manera eficiente a mis preguntas y dudas durante el proceso de aprendizaje.",
+        "La plataforma se adapta bien a mi nivel de conocimiento y me ofrece contenido adecuado a mi progreso.",
+        "La interacción con la IA me hizo reflexionar críticamente."
+      ]
+    },
+    {
+      "name": "IV. Aplicabilidad Clínica y Reflexión Profesional",
+      "items": [
+        "Comprendí mejor la relevancia de la patología y anatomía patológica y la fisiopatología en la toma de decisiones clínicas.",
+        "Pude aplicar los conocimientos de Fisiopatología de manera más integrada.",
+        "Me siento más preparado/a para enfrentar evaluaciones, gracias a esta herramienta."
+      ]
+    },
+    {
+      "name": "V. Calidad de la Retroalimentación",
+      "items": [
+        "La retroalimentación proporcionada por la IA sobre mis respuestas es clara y comprensible.",
+        "La retroalimentación proporcionada por la IA es específica y útil para mi desarrollo académico.",
+        "La plataforma me ofrece retroalimentación continua que contribuye a mi aprendizaje de manera efectiva."
+      ]
+    },
+    {
+      "name": "VI. Evaluación Global",
+      "items": [
+        "En general, estoy satisfecho con la experiencia de aprendizaje utilizando esta plataforma basada en IA.",
+        "Recomendaría esta plataforma a otros estudiantes de medicina como una herramienta útil para su formación.",
+        "Me gustaría que esta tecnología se integrara regularmente en el plan de estudios.",
+        "Considero que el uso de inteligencia artificial en la educación médica representa una innovación valiosa."
+      ]
+    },
+    {
+      "name": "VII. Preguntas abiertas",
+      "items": [
+        {"text": "¿Tienes alguna sugerencia o recomendación para mejorar la plataforma?", "type": "open_text", "required": false},
+        {"text": "¿Encontró algún aspecto negativo en la plataforma?", "type": "open_text", "required": false},
+        {"text": "¿Qué fue lo que más le gustó de la plataforma?", "type": "open_text", "required": false}
+      ]
+    }
+  ]
+}

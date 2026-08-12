@@ -8,7 +8,7 @@ const routes = [
   { path: "/dashboard/sct", role: "student", root: "[data-testid='sct-page']" },
   { path: "/dashboard/images", role: "student", root: "[data-testid='histopathology-page']" },
   { path: "/dashboard/cases", role: "teacher", root: "[data-testid='cases-page']" },
-  { path: "/dashboard/feedback", role: "admin", root: "[data-testid='feedback-page']" },
+  { path: "/dashboard/surveys", role: "admin", root: "[data-testid='surveys-page']" },
   { path: "/dashboard/config", role: "admin", root: "[data-testid='config-page']" },
 ] as const;
 

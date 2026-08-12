@@ -1,9 +1,14 @@
+import csv
+import io
 import os
 import time
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from ..auth_security import display_role, hash_password, normalize_email, normalize_role_for_storage
@@ -18,7 +23,7 @@ from ..llm_service import (
     build_llm_settings,
     probe_provider,
 )
-from ..models import AIConfiguration, AuditLog, Document, DocumentChunk, EmailTemplate, User
+from ..models import AIConfiguration, AuditLog, Document, DocumentChunk, EmailTemplate, LlmUsageLog, User
 from ..rag_utils import EMBEDDING_DIMENSIONS
 
 
@@ -171,6 +176,23 @@ DEFAULT_AI_CONFIG = {
         "description": (
             "Solapamiento entre fragmentos documentales RAG. 80 tokens evita "
             "cortar definiciones o listas a la mitad."
+        ),
+    },
+    "llm_price_input_per_million": {
+        "value": os.getenv("LLM_PRICE_INPUT_PER_MILLION", "0.05"),
+        "value_type": "float",
+        "description": (
+            "Precio en USD por cada 1 000 000 de tokens de entrada (prompt). "
+            "Actualizalo cuando el proveedor cambie sus tarifas. Solo se usa "
+            "para estimar el costo del consumo mostrado en el panel."
+        ),
+    },
+    "llm_price_output_per_million": {
+        "value": os.getenv("LLM_PRICE_OUTPUT_PER_MILLION", "0.08"),
+        "value_type": "float",
+        "description": (
+            "Precio en USD por cada 1 000 000 de tokens de salida (completion). "
+            "Actualizalo cuando el proveedor cambie sus tarifas."
         ),
     },
 }
@@ -467,6 +489,10 @@ def update_ai_config(
         details={"keys": changed_keys},
     )
     db.commit()
+    # Cualquier cambio en la config invalida el snapshot del panel de estado
+    # de integracion; si no, el admin ve datos viejos hasta 45 s despues.
+    _integrations_cache["data"] = None
+    _integrations_cache["ts"] = 0.0
     return get_ai_config(current_user, db)
 
 
@@ -814,6 +840,8 @@ async def test_llm_provider(
                 max_tokens=16,
                 num_ctx=512,
                 purpose="prueba de conexion",
+                db=db,
+                feature="llm_probe",
             )
     except HTTPException as exc:
         return {
@@ -976,3 +1004,213 @@ def update_email_template(
             "updated_at": t.updated_at.isoformat() if t.updated_at else None,
         }
     }
+
+
+# ============ Consumo del LLM (tokens y costo) ============
+
+_WINDOW_TO_DAYS = {"7d": 7, "30d": 30, "90d": 90, "all": None}
+
+
+def _price_from_config(db: Session) -> tuple[float, float]:
+    """Lee los precios/1M tokens actuales del panel. 0 si están mal formateados."""
+    config = get_ai_config_map(db)
+    try:
+        p_in = float(config.get("llm_price_input_per_million") or 0.0)
+    except (TypeError, ValueError):
+        p_in = 0.0
+    try:
+        p_out = float(config.get("llm_price_output_per_million") or 0.0)
+    except (TypeError, ValueError):
+        p_out = 0.0
+    return max(0.0, p_in), max(0.0, p_out)
+
+
+def _cost_usd(prompt_tokens: int, completion_tokens: int, price_in: float, price_out: float) -> float:
+    return round((prompt_tokens / 1_000_000.0) * price_in + (completion_tokens / 1_000_000.0) * price_out, 6)
+
+
+@router.get("/llm/usage/summary")
+def llm_usage_summary(
+    window: str = Query(default="30d"),
+    _current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Agregados de consumo para el panel: totales, breakdown por proveedor,
+    modelo, feature y serie diaria de tokens/costo."""
+    if window not in _WINDOW_TO_DAYS:
+        raise HTTPException(status_code=422, detail="window debe ser 7d, 30d, 90d o all")
+
+    days = _WINDOW_TO_DAYS[window]
+    q = db.query(LlmUsageLog)
+    if days is not None:
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        q = q.filter(LlmUsageLog.occurred_at >= cutoff)
+
+    price_in, price_out = _price_from_config(db)
+
+    # Totales globales
+    totals_row = q.with_entities(
+        func.coalesce(func.sum(LlmUsageLog.prompt_tokens), 0),
+        func.coalesce(func.sum(LlmUsageLog.completion_tokens), 0),
+        func.count(LlmUsageLog.id),
+        func.coalesce(func.sum(case((LlmUsageLog.success == True, 1), else_=0)), 0),  # noqa: E712
+    ).one()
+    prompt_total, completion_total, calls_total, calls_success = totals_row
+    total_tokens = int(prompt_total) + int(completion_total)
+
+    def _breakdown(column):
+        rows = (
+            q.with_entities(
+                column,
+                func.coalesce(func.sum(LlmUsageLog.prompt_tokens), 0),
+                func.coalesce(func.sum(LlmUsageLog.completion_tokens), 0),
+                func.count(LlmUsageLog.id),
+            )
+            .group_by(column)
+            .all()
+        )
+        result = []
+        for key, pt, ct, n in rows:
+            pt, ct, n = int(pt), int(ct), int(n)
+            result.append({
+                "key": key or "(sin dato)",
+                "prompt_tokens": pt,
+                "completion_tokens": ct,
+                "total_tokens": pt + ct,
+                "calls": n,
+                "cost_usd": _cost_usd(pt, ct, price_in, price_out),
+            })
+        result.sort(key=lambda r: r["total_tokens"], reverse=True)
+        return result
+
+    # Serie diaria: agregación en Python (compatible con SQLite en tests).
+    rows_daily = q.with_entities(
+        LlmUsageLog.occurred_at,
+        LlmUsageLog.prompt_tokens,
+        LlmUsageLog.completion_tokens,
+    ).all()
+    daily: dict[str, dict] = defaultdict(lambda: {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0})
+    for occurred_at, pt, ct in rows_daily:
+        day_key = (occurred_at or datetime.utcnow()).strftime("%Y-%m-%d")
+        bucket = daily[day_key]
+        bucket["prompt_tokens"] += int(pt or 0)
+        bucket["completion_tokens"] += int(ct or 0)
+        bucket["calls"] += 1
+    series = []
+    for day_key in sorted(daily.keys()):
+        b = daily[day_key]
+        total = b["prompt_tokens"] + b["completion_tokens"]
+        series.append({
+            "date": day_key,
+            "prompt_tokens": b["prompt_tokens"],
+            "completion_tokens": b["completion_tokens"],
+            "total_tokens": total,
+            "calls": b["calls"],
+            "cost_usd": _cost_usd(b["prompt_tokens"], b["completion_tokens"], price_in, price_out),
+        })
+
+    return {
+        "window": window,
+        "generated_at": datetime.utcnow().isoformat(),
+        "pricing": {
+            "input_per_million_usd": price_in,
+            "output_per_million_usd": price_out,
+        },
+        "totals": {
+            "prompt_tokens": int(prompt_total),
+            "completion_tokens": int(completion_total),
+            "total_tokens": total_tokens,
+            "calls": int(calls_total),
+            "successful_calls": int(calls_success),
+            "failed_calls": int(calls_total) - int(calls_success),
+            "cost_usd": _cost_usd(int(prompt_total), int(completion_total), price_in, price_out),
+        },
+        "by_provider": _breakdown(LlmUsageLog.provider),
+        "by_model": _breakdown(LlmUsageLog.model),
+        "by_feature": _breakdown(LlmUsageLog.feature),
+        "daily": series,
+    }
+
+
+@router.get("/llm/usage/recent")
+def llm_usage_recent(
+    limit: int = Query(default=50, ge=1, le=500),
+    _current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Últimas N llamadas al LLM, útil para debug. Sin user_id."""
+    price_in, price_out = _price_from_config(db)
+    rows = (
+        db.query(LlmUsageLog)
+        .order_by(LlmUsageLog.occurred_at.desc(), LlmUsageLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "count": len(rows),
+        "items": [
+            {
+                "id": r.id,
+                "occurred_at": r.occurred_at.isoformat() if r.occurred_at else None,
+                "provider": r.provider,
+                "model": r.model,
+                "feature": r.feature,
+                "prompt_tokens": r.prompt_tokens,
+                "completion_tokens": r.completion_tokens,
+                "total_tokens": r.total_tokens,
+                "latency_ms": r.latency_ms,
+                "success": r.success,
+                "error_kind": r.error_kind,
+                "estimated": r.estimated,
+                "cost_usd": _cost_usd(r.prompt_tokens, r.completion_tokens, price_in, price_out),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/llm/usage/export.csv")
+def llm_usage_export(
+    window: str = Query(default="30d"),
+    _current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if window not in _WINDOW_TO_DAYS:
+        raise HTTPException(status_code=422, detail="window debe ser 7d, 30d, 90d o all")
+    days = _WINDOW_TO_DAYS[window]
+    q = db.query(LlmUsageLog)
+    if days is not None:
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        q = q.filter(LlmUsageLog.occurred_at >= cutoff)
+    q = q.order_by(LlmUsageLog.occurred_at.asc())
+
+    price_in, price_out = _price_from_config(db)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "occurred_at", "provider", "model", "feature",
+        "prompt_tokens", "completion_tokens", "total_tokens",
+        "latency_ms", "success", "error_kind", "estimated", "cost_usd",
+    ])
+    for r in q.all():
+        writer.writerow([
+            r.occurred_at.isoformat() if r.occurred_at else "",
+            r.provider,
+            r.model,
+            r.feature or "",
+            r.prompt_tokens,
+            r.completion_tokens,
+            r.total_tokens,
+            r.latency_ms if r.latency_ms is not None else "",
+            "true" if r.success else "false",
+            r.error_kind or "",
+            "true" if r.estimated else "false",
+            _cost_usd(r.prompt_tokens, r.completion_tokens, price_in, price_out),
+        ])
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="llm_usage_{window}.csv"'},
+    )

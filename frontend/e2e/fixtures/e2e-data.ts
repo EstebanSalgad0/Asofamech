@@ -274,16 +274,11 @@ export const clinicalCaseFixture = {
   created_at: "2026-05-24T08:00:00.000Z",
 };
 
-export const feedbackResponseFixture = {
-  id: 1001,
-  user_id: testUsers.student.id,
-  role: "estudiante",
-  nav_clarity: 5,
-  viewer_ease: 4,
-  roi_ease: 4,
-  ai_clarity: 5,
-  chatbot_utility: 5,
-  sct_utility: 4,
-  observations: "Flujo E2E claro y estable.",
-  submitted_at: "2026-05-24T12:00:00.000Z",
+export const surveyDemoFixture = {
+  id: 2001,
+  code: "demo",
+  title: "Encuesta demo E2E",
+  description: "Encuesta simulada para pruebas E2E.",
+  status: "open",
+  created_at: "2026-05-24T12:00:00.000Z",
 };

@@ -154,6 +154,8 @@ async def _generate_histo_feedback(
                 max_tokens=max_tokens,
                 num_ctx=num_ctx,
                 purpose="retroalimentacion histopatologica",
+                db=db,
+                feature="histopathology_feedback",
             )
             return text or None
     except Exception:

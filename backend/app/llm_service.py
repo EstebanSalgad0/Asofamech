@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -206,6 +207,89 @@ def _extract_content(settings: LLMSettings, data: dict) -> str:
     return (data.get("message") or {}).get("content") or ""
 
 
+def _extract_usage(settings: LLMSettings, data: dict, content: str) -> tuple[int, int, bool]:
+    """Devuelve (prompt_tokens, completion_tokens, estimated).
+
+    Cada proveedor reporta consumo distinto:
+      - OpenAI-style (Groq, OpenAI): data["usage"]["prompt_tokens" | "completion_tokens"].
+      - Ollama:                       data["prompt_eval_count"] + data["eval_count"].
+
+    Si el campo esperado falta (raro), se estima como len(text)//4 y se marca
+    `estimated=True` para no contaminar los agregados como si fueran oficiales.
+    """
+    if settings.is_openai_style:
+        usage = data.get("usage") or {}
+        prompt = usage.get("prompt_tokens")
+        completion = usage.get("completion_tokens")
+        if isinstance(prompt, int) and isinstance(completion, int):
+            return prompt, completion, False
+    else:
+        prompt = data.get("prompt_eval_count")
+        completion = data.get("eval_count")
+        if isinstance(prompt, int) and isinstance(completion, int):
+            return prompt, completion, False
+
+    # Fallback: estimacion muy gruesa. Marcamos como estimated para que el
+    # panel pueda distinguir tokens autoritativos vs aproximados.
+    est_out = max(1, len(content) // 4) if content else 0
+    return 0, est_out, True
+
+
+def _http_error_kind(status_code: int) -> str:
+    if status_code == 401 or status_code == 403:
+        return "http_auth"
+    if status_code == 404:
+        return "http_not_found"
+    if status_code == 429:
+        return "http_rate_limit"
+    if status_code >= 500:
+        return "http_server"
+    return f"http_{status_code}"
+
+
+def _record_usage(
+    db: Session | None,
+    settings: LLMSettings,
+    *,
+    feature: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    latency_ms: int,
+    success: bool,
+    error_kind: str | None,
+    estimated: bool,
+) -> None:
+    """Persiste una fila en llm_usage_log. Falla silenciosa: si no se puede
+    grabar (ej. tests sin la tabla, DB caida), se logea pero no revienta la
+    consulta del usuario."""
+    if db is None:
+        return
+    try:
+        from .models import LlmUsageLog
+
+        db.add(
+            LlmUsageLog(
+                provider=settings.provider,
+                model=settings.model or "",
+                feature=(feature or None),
+                prompt_tokens=int(prompt_tokens or 0),
+                completion_tokens=int(completion_tokens or 0),
+                total_tokens=int(prompt_tokens or 0) + int(completion_tokens or 0),
+                latency_ms=latency_ms,
+                success=success,
+                error_kind=error_kind,
+                estimated=estimated,
+            )
+        )
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[llm_usage] no se pudo registrar consumo: %s", exc)
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _error_detail(settings: LLMSettings, response: httpx.Response) -> str:
     """Mensaje accionable sin filtrar credenciales ni el cuerpo completo."""
     if response.status_code in (401, 403):
@@ -234,8 +318,16 @@ async def chat_completion(
     num_ctx: int = 4096,
     json_mode: bool = False,
     purpose: str = "respuesta",
+    db: Session | None = None,
+    feature: str | None = None,
 ) -> str:
-    """Envia una conversacion al proveedor activo y devuelve el texto generado."""
+    """Envia una conversacion al proveedor activo y devuelve el texto generado.
+
+    Si se pasa ``db``, cada llamada (exitosa o fallida) queda registrada en
+    ``llm_usage_log`` con los tokens autoritativos que devolvio el proveedor.
+    ``feature`` etiqueta la fuente (chat, sct, cases, ...) para desglose
+    en el panel de consumo; si no viene, se usa ``purpose``.
+    """
     _require_usable(settings)
 
     builder = _openai_request if settings.is_openai_style else _ollama_request
@@ -250,23 +342,71 @@ async def chat_completion(
     )
 
     logger.info("Enviando %s a %s (%s)", purpose, settings.label, settings.model)
-    response = await client.post(url, json=payload, headers=headers)
+    started = time.monotonic()
+    feature_tag = feature or purpose
+
+    try:
+        response = await client.post(url, json=payload, headers=headers)
+    except httpx.HTTPError as exc:
+        latency_ms = int((time.monotonic() - started) * 1000)
+        _record_usage(
+            db, settings,
+            feature=feature_tag,
+            prompt_tokens=0, completion_tokens=0,
+            latency_ms=latency_ms,
+            success=False,
+            error_kind="network",
+            estimated=False,
+        )
+        raise HTTPException(status_code=502, detail=f"{settings.label} no respondio.") from exc
+
+    latency_ms = int((time.monotonic() - started) * 1000)
 
     if response.status_code != 200:
         logger.warning(
             "%s respondio %s para %s", settings.label, response.status_code, purpose
+        )
+        _record_usage(
+            db, settings,
+            feature=feature_tag,
+            prompt_tokens=0, completion_tokens=0,
+            latency_ms=latency_ms,
+            success=False,
+            error_kind=_http_error_kind(response.status_code),
+            estimated=False,
         )
         raise HTTPException(status_code=502, detail=_error_detail(settings, response))
 
     try:
         data = response.json()
     except ValueError as exc:
+        _record_usage(
+            db, settings,
+            feature=feature_tag,
+            prompt_tokens=0, completion_tokens=0,
+            latency_ms=latency_ms,
+            success=False,
+            error_kind="invalid_json",
+            estimated=False,
+        )
         raise HTTPException(
             status_code=502,
             detail=f"No se pudo interpretar la respuesta de {settings.label}.",
         ) from exc
 
-    return _extract_content(settings, data).strip()
+    content = _extract_content(settings, data).strip()
+    prompt_tokens, completion_tokens, estimated = _extract_usage(settings, data, content)
+    _record_usage(
+        db, settings,
+        feature=feature_tag,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        latency_ms=latency_ms,
+        success=True,
+        error_kind=None,
+        estimated=estimated,
+    )
+    return content
 
 
 async def probe_provider(settings: LLMSettings, timeout: float = 4.0) -> dict:

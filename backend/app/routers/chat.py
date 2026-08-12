@@ -203,6 +203,8 @@ async def _generate(
     max_tokens: int = 800,
     num_ctx: int = 4096,
     json_mode: bool = False,
+    db: Session | None = None,
+    feature: str | None = None,
 ) -> str:
     """Punto unico de salida hacia el proveedor generativo activo."""
     return await chat_completion(
@@ -215,6 +217,8 @@ async def _generate(
         num_ctx=num_ctx,
         json_mode=json_mode,
         purpose=purpose,
+        db=db,
+        feature=feature,
     )
 
 
@@ -222,6 +226,7 @@ async def _classify_medical_scope(
     client: httpx.AsyncClient,
     question: str,
     settings: LLMSettings,
+    db: Session | None = None,
 ) -> str:
     if _is_greeting_only(question):
         return SCOPE_MEDICAL
@@ -238,6 +243,8 @@ async def _classify_medical_scope(
         max_tokens=120,
         num_ctx=2048,
         json_mode=True,
+        db=db,
+        feature="chat_scope",
     )
     return _parse_scope_decision(content)
 
@@ -454,7 +461,7 @@ async def chat(
 
         async with httpx.AsyncClient(timeout=settings.timeout) as client:
             if scope_filter_enabled:
-                scope = await _classify_medical_scope(client, user_text, settings)
+                scope = await _classify_medical_scope(client, user_text, settings, db=db)
                 if scope == SCOPE_NON_MEDICAL:
                     return _chat_response(
                         OUT_OF_SCOPE_RESPONSE,
@@ -503,6 +510,8 @@ async def chat(
                 top_p=_config_float(config, "top_p", 0.9),
                 max_tokens=_config_int(config, "chat_max_tokens", 800),
                 num_ctx=_config_int(config, "chat_num_ctx", 4096),
+                db=db,
+                feature="chat",
             )
 
             if not assistant_text:

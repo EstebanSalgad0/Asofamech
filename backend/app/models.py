@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, Float, String, Text, DateTime, Boolean, JSON, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, Float, String, Text, DateTime, Boolean, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .db import Base
@@ -269,26 +269,6 @@ class HistopathologySession(Base):
     correction = relationship("HistopathologyCorrection", back_populates="session", uselist=False)
 
 
-class UsabilityFeedback(Base):
-    """Evaluación de usabilidad enviada por un usuario autenticado. Un registro por usuario."""
-    __tablename__ = "usability_feedback"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
-    role_at_submission = Column(String(50), nullable=False)
-    nav_clarity = Column(Integer, nullable=False)       # 1-5 claridad de navegación
-    viewer_ease = Column(Integer, nullable=False)       # 1-5 facilidad del visor
-    roi_ease = Column(Integer, nullable=False)          # 1-5 facilidad para seleccionar ROI
-    ai_clarity = Column(Integer, nullable=False)        # 1-5 claridad de resultados IA
-    chatbot_utility = Column(Integer, nullable=False)   # 1-5 utilidad del chatbot
-    sct_utility = Column(Integer, nullable=False)       # 1-5 utilidad del SCT
-    observations = Column(Text, nullable=True)
-    display_name = Column(String(100), nullable=True)
-    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    user = relationship("User")
-
-
 class PasswordResetToken(Base):
     """Token de un solo uso para recuperación de contraseña. Expira en 1 hora."""
     __tablename__ = "password_reset_tokens"
@@ -335,3 +315,106 @@ class HistopathologyCorrection(Base):
 
     session = relationship("HistopathologySession", back_populates="correction")
     docente = relationship("User")
+
+
+# ========== Encuestas de percepción ==========
+# Instrumento Likert (+ preguntas abiertas). Diseño anónimo con verificación de
+# participación única: survey_participation liga user_id ↔ survey_id pero NO
+# guarda respuesta alguna; survey_response contiene las respuestas SIN user_id.
+# No existe clave común entre ambas tablas, por lo que es imposible ligar una
+# respuesta a su autor.
+
+class Survey(Base):
+    __tablename__ = "surveys"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(60), nullable=False, unique=True, index=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="open")   # open | archived
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items = relationship(
+        "SurveyItem",
+        back_populates="survey",
+        cascade="all, delete-orphan",
+        order_by="(SurveyItem.section_order, SurveyItem.item_order)",
+    )
+
+
+class SurveyItem(Base):
+    __tablename__ = "survey_items"
+    id = Column(Integer, primary_key=True, index=True)
+    survey_id = Column(Integer, ForeignKey("surveys.id", ondelete="CASCADE"), nullable=False, index=True)
+    section = Column(String(200), nullable=False)
+    section_order = Column(Integer, nullable=False, default=0)
+    item_order = Column(Integer, nullable=False, default=0)
+    text = Column(Text, nullable=False)
+    item_type = Column(String(20), nullable=False, default="likert_1_5")   # likert_1_5 | open_text
+    required = Column(Boolean, nullable=False, default=True)
+
+    survey = relationship("Survey", back_populates="items")
+
+
+class SurveyResponse(Base):
+    """Cabecera de una respuesta. NO contiene user_id: es anónima por diseño."""
+    __tablename__ = "survey_responses"
+    id = Column(Integer, primary_key=True, index=True)
+    survey_id = Column(Integer, ForeignKey("surveys.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_at_submission = Column(String(50), nullable=True)   # rol al momento de responder, para desglose
+    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    answers = relationship(
+        "SurveyAnswer",
+        back_populates="response",
+        cascade="all, delete-orphan",
+    )
+
+
+class SurveyAnswer(Base):
+    __tablename__ = "survey_answers"
+    id = Column(Integer, primary_key=True, index=True)
+    response_id = Column(Integer, ForeignKey("survey_responses.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("survey_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    value_int = Column(Integer, nullable=True)     # 1..5 para Likert
+    value_text = Column(Text, nullable=True)       # texto libre
+
+    response = relationship("SurveyResponse", back_populates="answers")
+
+
+class LlmUsageLog(Base):
+    """Registro de consumo del LLM por llamada. Sin user_id: anónimo por diseño.
+
+    Tokens vienen del campo `usage` que devuelve el proveedor (OpenAI-style
+    trae prompt_tokens/completion_tokens; Ollama trae prompt_eval_count/
+    eval_count). Si el proveedor no los devolvió, `estimated=True` señala que
+    la cifra proviene de una aproximación local (len(text)//4).
+    """
+    __tablename__ = "llm_usage_log"
+    id = Column(Integer, primary_key=True, index=True)
+    occurred_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    provider = Column(String(40), nullable=False, index=True)     # ollama | groq | openai_compatible
+    model = Column(String(120), nullable=False, index=True)
+    feature = Column(String(80), nullable=True, index=True)       # chat | sct | cases | histopathology | ...
+    prompt_tokens = Column(Integer, nullable=False, default=0)
+    completion_tokens = Column(Integer, nullable=False, default=0)
+    total_tokens = Column(Integer, nullable=False, default=0)
+    latency_ms = Column(Integer, nullable=True)
+    success = Column(Boolean, nullable=False, default=True, index=True)
+    error_kind = Column(String(60), nullable=True)                # http_401 | http_429 | timeout | ...
+    estimated = Column(Boolean, nullable=False, default=False)    # tokens estimados por fallback
+
+
+class SurveyParticipation(Base):
+    """Registro de participación única por (user, survey). Deliberadamente
+    desacoplada de SurveyResponse: al no compartir clave, es imposible ligar
+    una respuesta con su autor. Solo sirve para bloquear duplicados."""
+    __tablename__ = "survey_participation"
+    id = Column(Integer, primary_key=True, index=True)
+    survey_id = Column(Integer, ForeignKey("surveys.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    participated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("survey_id", "user_id", name="uq_survey_participation_survey_user"),
+    )

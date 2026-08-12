@@ -7,8 +7,8 @@ import {
   dashboardStatsFixture,
   dziImage,
   dziManifest,
-  feedbackResponseFixture,
   heatmapFixture,
+  surveyDemoFixture,
   pngTileBase64,
   publishedSct,
   publishedSctDetail,
@@ -124,13 +124,23 @@ export async function mockSctApi(page: Page) {
   await page.route("**/api/sct/801/attempt", (route) => json(route, sctAttemptFixture));
 }
 
-export async function mockFeedbackApi(page: Page) {
-  await page.route("**/api/feedback/my", (route) => json(route, null));
-  await page.route("**/api/feedback", (route) => json(route, feedbackResponseFixture));
-  await page.route("**/api/feedback/summary", (route) =>
-    json(route, { total_responses: 1, averages: feedbackResponseFixture, by_role: {}, recent_observations: [] }),
+export async function mockSurveysApi(page: Page) {
+  await page.route("**/api/surveys", (route) => json(route, [surveyDemoFixture]));
+  await page.route("**/api/surveys/admin/all", (route) => json(route, [surveyDemoFixture]));
+  await page.route("**/api/surveys/demo", (route) =>
+    json(route, { ...surveyDemoFixture, items: [], already_answered: false }),
   );
-  await page.route("**/api/feedback/responses?**", (route) => json(route, [feedbackResponseFixture]));
+  await page.route("**/api/surveys/demo/summary", (route) =>
+    json(route, {
+      survey_code: "demo",
+      survey_title: "Demo",
+      total_responses: 0,
+      global_average: null,
+      section_averages: [],
+      item_stats: [],
+    }),
+  );
+  await page.route("**/api/surveys/demo/open-answers", (route) => json(route, []));
 }
 
 export async function mockAllApis(page: Page) {
@@ -138,5 +148,5 @@ export async function mockAllApis(page: Page) {
   await mockHistopathologyApi(page);
   await mockChatApi(page);
   await mockSctApi(page);
-  await mockFeedbackApi(page);
+  await mockSurveysApi(page);
 }

@@ -182,6 +182,8 @@ async def generate_sct_items(
                 num_ctx=8192,
                 json_mode=True,
                 purpose="generacion de items SCT",
+                db=db,
+                feature="sct",
             )
 
         if not llama_response:
