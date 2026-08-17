@@ -11,12 +11,20 @@ import {
   listSCTTests,
   uploadCaseImages,
   deleteCaseImage,
+  importCaseFromFile,
 } from "../api";
 import { AppSidebar } from "../components/AppSidebar";
 import { CaseImageGallery } from "../components/CaseImageGallery";
 import { CaseBody } from "../components/CaseBody";
 import { CaseResources, safeExternalUrl } from "../components/CaseResources";
 import { CaseLinksEditor, serializeLinks } from "../components/CaseLinksEditor";
+import { CaseStructureEditor } from "../components/CaseStructureEditor";
+import { CaseStructuredView } from "../components/CaseStructuredView";
+import {
+  emptyCaseStructure,
+  isStructureEmpty,
+  withDefaults,
+} from "../components/caseStructure";
 import {
   clearAuthSession,
   getStoredRole,
@@ -32,6 +40,7 @@ const EMPTY_FORM = {
   title: "",
   description: "",
   body: "",
+  case_code: "",
   clinical_context: "",
   learning_objectives: "",
   difficulty: "pregrado",
@@ -40,6 +49,36 @@ const EMPTY_FORM = {
   sct_test_id: "",
   status: "draft",
   image_modality: "",
+};
+
+// Un caso se redacta de una de dos formas: con la estructura PA-ASO-001, que es
+// el formato acordado, o con el markdown libre de los casos antiguos. El modo
+// se decide al abrir el formulario y el backend guarda solo la que corresponda.
+const MODE_STRUCTURED = "structured";
+const MODE_FREE = "free";
+
+const IMPORT_FORMATS = ".docx,.pdf,.txt,.md";
+
+/** Reconstruye el archivo de imagen que el backend devolvió en base64. */
+function base64ToFile(image) {
+  const binary = atob(image.data_base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], image.filename, { type: image.content_type });
+}
+
+/** Etiquetas legibles de las rutas que la IA marcó como deducidas. */
+const INFERRED_LABELS = {
+  "semantics.pivot_symptom": "Síntoma pivote",
+  "semantics.key_terms": "Términos médicos",
+  "semantics.qualifiers.temporality": "Calificadores de temporalidad",
+  "semantics.qualifiers.evolution": "Calificadores de evolución",
+  "semantics.qualifiers.intensity": "Calificadores de intensidad",
+  "semantics.qualifiers.features": "Calificadores de características",
+  "diagnoses.differentials": "Diagnósticos diferenciales",
+  "diagnoses.primary": "Diagnóstico principal",
+  "identification.keywords": "Palabras clave",
+  "identification.summary": "Resumen",
 };
 const CASE_IMAGE_MODALITIES = [
   "Radiografía",
@@ -126,9 +165,14 @@ export function CasesPage() {
   const [formError, setFormError] = useState(null);
   const [formSaving, setFormSaving] = useState(false);
   const [medicalImages, setMedicalImages] = useState([]);
+  const [formMode, setFormMode] = useState(MODE_STRUCTURED);
+  const [formStructure, setFormStructure] = useState(emptyCaseStructure);
   const [formLinks, setFormLinks] = useState([]);
   const [pendingImages, setPendingImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [importing, setImporting] = useState(false);
+  // Qué dedujo la IA y qué faltaba en el documento importado.
+  const [importReport, setImportReport] = useState(null);
   const [sctTests, setSctTests] = useState([]);
   const [resourceError, setResourceError] = useState(null);
 
@@ -211,19 +255,78 @@ export function CasesPage() {
   function openCreate() {
     setEditingCase(null);
     setForm(EMPTY_FORM);
+    setFormMode(MODE_STRUCTURED);
+    setFormStructure(emptyCaseStructure());
     setFormLinks([]);
     setPendingImages([]);
+    setImportReport(null);
     setFormError(null);
     setShowForm(true);
+  }
+
+  /**
+   * Convierte un documento en un borrador y abre el editor con todo precargado.
+   *
+   * No crea el caso: el docente revisa la propuesta, corrige lo que la IA
+   * dedujo mal y decide si publicarlo. Las imágenes que traía el documento
+   * quedan como pendientes, igual que si las hubiera adjuntado a mano.
+   */
+  async function handleImportDocument(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const draft = await importCaseFromFile(formData);
+
+      setEditingCase(null);
+      setFormMode(MODE_STRUCTURED);
+      setFormStructure(withDefaults(draft.structured || emptyCaseStructure()));
+      setForm({
+        ...EMPTY_FORM,
+        title: draft.title || "",
+        description: draft.description || "",
+        topic: draft.topic || "",
+        difficulty: draft.difficulty || "pregrado",
+      });
+      setFormLinks([]);
+      setPendingImages(
+        (draft.images || []).map((image) => ({
+          file: base64ToFile(image),
+          caption: "",
+        }))
+      );
+      setImportReport({
+        sourceFilename: draft.source_filename || file.name,
+        inferred: draft.inferred || [],
+        warnings: draft.warnings || [],
+        notes: draft.notes || "",
+        imageCount: (draft.images || []).length,
+      });
+      setFormError(null);
+      setShowForm(true);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setImporting(false);
+    }
   }
 
   function openEdit(c, e) {
     e.stopPropagation();
     setEditingCase(c);
+    // Un caso antiguo (sin estructura) se sigue editando como markdown libre:
+    // forzarlo al formulario estructurado dejaria su cuerpo huerfano.
+    setFormMode(c.structured ? MODE_STRUCTURED : MODE_FREE);
+    setFormStructure(withDefaults(c.structured || emptyCaseStructure()));
     setForm({
       title: c.title || "",
       description: c.description || "",
       body: c.body || "",
+      case_code: c.case_code || "",
       clinical_context: c.clinical_context || "",
       learning_objectives: c.learning_objectives || "",
       difficulty: c.difficulty || "pregrado",
@@ -242,6 +345,7 @@ export function CasesPage() {
       }))
     );
     setPendingImages([]);
+    setImportReport(null);
     setFormError(null);
     setShowForm(true);
   }
@@ -264,8 +368,17 @@ export function CasesPage() {
   async function handleFormSubmit(e) {
     e.preventDefault();
     setFormError(null);
-    if (!form.title.trim() || !form.description.trim() || !form.body.trim()) {
-      setFormError("Título, descripción y cuerpo del caso son obligatorios.");
+    const structured = formMode === MODE_STRUCTURED;
+    if (!form.title.trim() || !form.description.trim()) {
+      setFormError("Título y descripción son obligatorios.");
+      return;
+    }
+    if (structured && isStructureEmpty(formStructure)) {
+      setFormError("Completa al menos una sección de la estructura clínica.");
+      return;
+    }
+    if (!structured && !form.body.trim()) {
+      setFormError("El cuerpo del caso es obligatorio.");
       return;
     }
     const { links, error: linksError } = serializeLinks(formLinks);
@@ -278,7 +391,13 @@ export function CasesPage() {
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
-        body: form.body.trim(),
+        // En modo estructurado el cuerpo lo regenera el backend desde la
+        // estructura; enviarlo tambien lo dejaria desincronizado.
+        ...(structured
+          ? { structured: formStructure }
+          : { body: form.body.trim(), structured: null }),
+        case_code:
+          (structured ? formStructure.identification?.case_code : form.case_code)?.trim() || null,
         clinical_context: form.clinical_context.trim() || null,
         learning_objectives: form.learning_objectives.trim() || null,
         difficulty: form.difficulty || null,
@@ -378,9 +497,21 @@ export function CasesPage() {
               </p>
             </div>
             {canManage && (
-              <button className="cases-btn-create" onClick={openCreate}>
-                + Nuevo caso
-              </button>
+              <div className="cases-header-actions">
+                <label className={`cases-btn-import ${importing ? "busy" : ""}`}>
+                  {importing ? "Interpretando documento…" : "Importar desde Word"}
+                  <input
+                    type="file"
+                    accept={IMPORT_FORMATS}
+                    disabled={importing}
+                    data-testid="case-import-input"
+                    onChange={handleImportDocument}
+                  />
+                </label>
+                <button className="cases-btn-create" onClick={openCreate}>
+                  + Nuevo caso
+                </button>
+              </div>
             )}
           </div>
 
@@ -440,6 +571,7 @@ export function CasesPage() {
                   onKeyDown={(e) => e.key === "Enter" && openDetail(c)}
                 >
                   <div className="cases-card-top">
+                    {c.case_code && <span className="cases-code-badge">{c.case_code}</span>}
                     <StatusBadge status={c.status} />
                     {c.difficulty && <DiffBadge difficulty={c.difficulty} />}
                   </div>
@@ -492,6 +624,9 @@ export function CasesPage() {
             <header className="case-detail-header">
               <div className="case-detail-header-main">
                 <div className="case-detail-badges">
+                  {selectedCase.case_code && (
+                    <span className="cases-code-badge">{selectedCase.case_code}</span>
+                  )}
                   <StatusBadge status={selectedCase.status} />
                   {selectedCase.difficulty && <DiffBadge difficulty={selectedCase.difficulty} />}
                   {selectedCase.topic && (
@@ -541,7 +676,15 @@ export function CasesPage() {
 
                   <section className="case-detail-section">
                     <h3 className="case-detail-section-title">Caso clínico</h3>
-                    <CaseBody body={selectedCase.body} images={selectedCase.images || []} />
+                    {selectedCase.structured ? (
+                      <CaseStructuredView
+                        structure={selectedCase.structured}
+                        images={selectedCase.images || []}
+                        canManage={canManage}
+                      />
+                    ) : (
+                      <CaseBody body={selectedCase.body} images={selectedCase.images || []} />
+                    )}
                   </section>
                 </article>
 
@@ -593,7 +736,48 @@ export function CasesPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <button className="cases-modal-close" onClick={() => setShowForm(false)}>✕</button>
-            <h2 className="cases-modal-title">{editingCase ? "Editar caso" : "Nuevo caso clínico"}</h2>
+            <h2 className="cases-modal-title">
+              {editingCase
+                ? "Editar caso"
+                : importReport
+                  ? "Revisar caso importado"
+                  : "Nuevo caso clínico"}
+            </h2>
+
+            {importReport && (
+              <div className="cases-import-report" data-testid="case-import-report">
+                <p className="cases-import-source">
+                  Propuesta generada desde <strong>{importReport.sourceFilename}</strong>
+                  {importReport.imageCount > 0 &&
+                    ` · ${importReport.imageCount} imagen${importReport.imageCount === 1 ? "" : "es"} del documento`}
+                  . Nada se ha guardado todavía: revisa cada sección antes de crear el caso.
+                </p>
+
+                {importReport.inferred.length > 0 && (
+                  <div className="cases-import-block cases-import-inferred">
+                    <h4>Deducido por la IA — verifícalo</h4>
+                    <ul>
+                      {importReport.inferred.map((path) => (
+                        <li key={path}>{INFERRED_LABELS[path] || path}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {importReport.warnings.length > 0 && (
+                  <div className="cases-import-block cases-import-missing">
+                    <h4>El documento no traía</h4>
+                    <ul>
+                      {importReport.warnings.map((warning, index) => (
+                        <li key={index}>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {importReport.notes && <p className="cases-import-notes">{importReport.notes}</p>}
+              </div>
+            )}
 
             <form className="cases-form" onSubmit={handleFormSubmit}>
               <div className="cases-form-row">
@@ -637,15 +821,60 @@ export function CasesPage() {
               </div>
 
               <div className="cases-form-row">
-                <label>Caso clínico completo *</label>
-                <textarea
-                  value={form.body}
-                  onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
-                  placeholder="Descripción detallada del caso..."
-                  rows={6}
-                  required
-                />
+                <label>Formato del caso</label>
+                <div className="cases-mode-switch" role="radiogroup" aria-label="Formato del caso">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={formMode === MODE_STRUCTURED}
+                    className={formMode === MODE_STRUCTURED ? "active" : ""}
+                    onClick={() => setFormMode(MODE_STRUCTURED)}
+                  >
+                    Estructura clínica (PA-ASO-001)
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={formMode === MODE_FREE}
+                    className={formMode === MODE_FREE ? "active" : ""}
+                    onClick={() => setFormMode(MODE_FREE)}
+                  >
+                    Texto libre
+                  </button>
+                </div>
+                <p className="cases-form-hint">
+                  {formMode === MODE_STRUCTURED
+                    ? "Formato acordado por la coordinación académica: relatos, análisis semántico, examen físico, laboratorio, diagnósticos y Practical Script. El cuerpo del caso se genera a partir de estas secciones."
+                    : "Redacción libre en markdown ligero (##, listas, tablas y [[imagen:N]]). Se conserva para los casos anteriores al formato estructurado."}
+                </p>
               </div>
+
+              {formMode === MODE_STRUCTURED ? (
+                <div className="cases-form-row">
+                  <label>Estructura del caso *</label>
+                  <CaseStructureEditor value={formStructure} onChange={setFormStructure} />
+                </div>
+              ) : (
+                <>
+                  <div className="cases-form-row">
+                    <label>Código del caso</label>
+                    <input
+                      value={form.case_code}
+                      onChange={(e) => setForm((f) => ({ ...f, case_code: e.target.value }))}
+                      placeholder="PAC-ASO-002"
+                    />
+                  </div>
+                  <div className="cases-form-row">
+                    <label>Caso clínico completo *</label>
+                    <textarea
+                      value={form.body}
+                      onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+                      placeholder="Descripción detallada del caso..."
+                      rows={6}
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="cases-form-row">
                 <label>Contexto clínico</label>

@@ -1,0 +1,451 @@
+{
+  "case_code": "PAC-ASO-001",
+  "title": "Tuberculosis miliar en paciente con VIH positivo",
+  "description": "Paciente portador de VIH con poca adhesión a medicamentos que consulta por baja de peso, sudoración nocturna, tos hemoptoica y disnea progresiva de tres meses de evolución.",
+  "topic": "Tuberculosis pulmonar",
+  "difficulty": "pregrado",
+  "clinical_context": "Hombre de 34 años, VIH positivo diagnosticado hace 2 años, en tratamiento antirretroviral irregular. CD4 reciente de 98 células/μL (VR: 500–1.500). Consumo de alcohol que cumple criterios DSM-5.",
+  "learning_objectives": "Patología: resuelve situaciones relacionadas con daños por inflamación y posterior reparación celular. Fisiopatología: interpreta situaciones clínicas aplicando el conocimiento de inflamación, dolor y estrés, y de las enfermedades respiratorias más frecuentes. Razonamiento clínico: integra la historia, el examen físico y los estudios complementarios para plantear hipótesis diagnósticas principal y diferenciales.",
+  "status": "published",
+  "links": [
+    {
+      "kind": "bibliografia",
+      "label": "VIH — Goldman-Cecil, Tratado de medicina interna",
+      "url": "https://www.clinicalkey.com/student/content/book/3-s2.0-B9788413827230003541",
+      "description": "Capítulo de referencia sobre infección por VIH."
+    },
+    {
+      "kind": "articulo",
+      "label": "Anemia de la inflamación (UpToDate)",
+      "url": "https://www.uptodate.com/contents/anemia-of-chronic-disease-anemia-of-inflammation",
+      "description": "Base para interpretar la anemia normocítica del caso."
+    },
+    {
+      "kind": "guia",
+      "label": "MINSAL — Informe del Programa de Control y Eliminación de la Tuberculosis 2023",
+      "url": "https://diprece.minsal.cl/wp-content/uploads/2024/08/2024.08.22_INFORME-TUBERCULOSIS-2023.pdf",
+      "description": "Incidencia nacional y coinfección TBC/VIH en Chile."
+    },
+    {
+      "kind": "articulo",
+      "label": "Radiopaedia — Miliary tuberculosis (radiografía de tórax)",
+      "url": "https://radiopaedia.org/cases/miliary-tuberculosis-1",
+      "description": "Caso 14175. Schubert R, Radiopaedia.org, doi 10.53347/rID-14175."
+    },
+    {
+      "kind": "articulo",
+      "label": "Radiopaedia — Miliary tuberculosis (TC de tórax)",
+      "url": "https://radiopaedia.org/cases/33071",
+      "description": "Caso 33071. Hennessy O, Radiopaedia.org, doi 10.53347/rID-33071."
+    }
+  ],
+  "structured": {
+    "identification": {
+      "case_code": "PAC-ASO-001",
+      "summary": "Paciente portador de VIH con poca adhesión a medicamentos.",
+      "keywords": [
+        "Tuberculosis miliar",
+        "VIH positivo",
+        "Inmunodepresión",
+        "Granuloma caseificante"
+      ]
+    },
+    "narratives": {
+      "patient_first_person": "Hace tres meses comencé a notar cambios que me preocupaban. Perdí aproximadamente 10 kilogramos sin comer menos ni hacer más ejercicio. Al principio no le di mucha importancia, pero pronto me di cuenta de que algo no estaba bien. Empecé a sentir una fatiga constante, como si no tuviera fuerzas para realizar mis actividades cotidianas. Era una sensación de agotamiento que no se aliviaba con el descanso.\n\nLo peor vino hace un mes, cuando comenzó la sensación de fiebre y el dolor de cabeza. Se presentaba todos los días, especialmente al caer la tarde. No era alta y se acompañaba de transpiración que empapaba mi ropa. La incomodidad era tal que me despertaba varias veces durante la noche y me resultaba difícil volver a dormir.\n\nCasi al mismo tiempo empecé con la tos seca, pero en las últimas semanas apareció flema y lo que más me asustó fue que tenía unas gotitas de sangre. En los últimos días la tos fue empeorando y me costaba cada vez más respirar. Incluso me sentía sin aliento estando en reposo, algo que nunca me había sucedido antes. La idea de que algo grave podría estar ocurriendo en mi cuerpo comenzó a rondar mi mente. Decidí finalmente venir a consultarlo.",
+      "clinical_presentation": "Paciente con cuadro de aproximadamente 3 meses de evolución, caracterizado por pérdida de peso involuntaria de 10 kg, astenia marcada y sensación febril diaria, predominante por la tarde, asociada a cefalea y sudoración nocturna profusa que interfiere con el descanso nocturno. Inicialmente presentó tos seca, que posteriormente evolucionó a tos productiva con expectoración, agregándose en las últimas semanas hemoptisis escasa en forma de pequeñas gotas de sangre. En paralelo desarrolló disnea progresiva, con empeoramiento reciente hasta presentarse en reposo. El cuadro se acompaña de deterioro del estado general y compromiso funcional creciente."
+    },
+    "semantics": {
+      "pivot_symptom": "Tos con hemoptisis",
+      "key_terms": [
+        "Pérdida de peso involuntaria",
+        "Astenia / fatiga marcada",
+        "Febrícula diaria",
+        "Sudoración nocturna",
+        "Cefalea",
+        "Tos seca que progresa a tos productiva",
+        "Expectoración hemoptoica / hemoptisis",
+        "Disnea progresiva",
+        "Disnea en reposo",
+        "Compromiso del estado general"
+      ],
+      "qualifiers": {
+        "temporality": [
+          "Hace aproximadamente 3 meses",
+          "En las últimas semanas",
+          "En los últimos días",
+          "Diaria",
+          "Al caer la tarde",
+          "Nocturna"
+        ],
+        "evolution": [
+          "Progresiva",
+          "Empeoramiento",
+          "Inicialmente... luego...",
+          "Reciente"
+        ],
+        "intensity": [
+          "Aproximadamente 10 kg",
+          "Marcada",
+          "Profusa",
+          "Pequeñas gotas de sangre"
+        ],
+        "features": [
+          "Involuntaria",
+          "Constante",
+          "Seca",
+          "Productiva",
+          "Sin alivio con el descanso",
+          "Incluso en reposo"
+        ]
+      }
+    },
+    "clinical": {
+      "patient_profile": {
+        "age": "34 años",
+        "sex": "Masculino",
+        "background": "VIH positivo diagnosticado hace 2 años, en tratamiento irregular con antirretrovirales. CD4 reciente: 98 células/μL (VR: 500 a 1.500 células/μL)."
+      },
+      "chief_complaint": "Preocupación por pérdida de peso involuntaria, astenia persistente, fiebre, tos productiva hemoptoica y disnea progresiva.",
+      "anamnesis": "El paciente presenta una pérdida de peso involuntaria de aproximadamente 10 kg durante los últimos tres meses. Inicialmente no prestó atención a los síntomas, pero luego notó una astenia persistente que no se aliviaba con el descanso. A los dos meses del inicio desarrolló fiebre de bajo grado (menos de 38 °C), acompañada de cefalea diaria, predominantemente vespertina, e hiperhidrosis nocturna que alteraba el sueño, con despertares frecuentes y dificultad para volver a dormir. Hace un mes comenzó con tos seca, que evolucionó a tos productiva con expectoración escasa hemoptoica. En los últimos días la tos ha empeorado, con la aparición de disnea progresiva incluso en reposo.",
+      "medications": [
+        "Zidovudina",
+        "Lamivudina",
+        "Efavirenz"
+      ],
+      "habits": "No fuma. Bebe durante los fines de semana alrededor de 15 latas de cerveza. Está diagnosticado como alcohólico porque cumple criterios DSM-5.",
+      "occupation": "Panificador"
+    },
+    "physical_exam": {
+      "vital_signs": {
+        "blood_pressure": "108/70 mmHg",
+        "heart_rate": "102 lpm",
+        "respiratory_rate": "24 rpm",
+        "temperature": "37,8 °C",
+        "oxygen_saturation": "91% al aire ambiente",
+        "weight": "50 kg",
+        "height": "1,68 m",
+        "bmi": "17,7 kg/m²"
+      },
+      "general_state": "Paciente en regular estado general, visiblemente adelgazado, con facies de cansancio. Se muestra alerta y orientado, pero asténico. Habla con pausas por disnea leve al conversar.",
+      "systems": [
+        {
+          "name": "Cabeza y cuello",
+          "findings": "Normocéfalo, sin lesiones visibles. Conjuntivas ligeramente pálidas. Oídos y nariz sin hallazgos relevantes. Mucosa oral seca, sin lesiones. Adenopatías cervicales bilaterales pequeñas, móviles y no dolorosas. No hay rigidez de nuca. Tráquea centrada. Palpación supraclavicular negativa para adenopatías."
+        },
+        {
+          "name": "Tórax y aparato respiratorio",
+          "findings": "Inspección: tórax simétrico, con retracción intercostal leve y uso de músculos accesorios al respirar. Disminución de movimientos torácicos en región apical derecha. Palpación: frémito táctil aumentado en región subclavicular derecha; expansión torácica ligeramente disminuida en el hemitórax derecho. Percusión: submatidez en región apical y subclavicular derecha. Auscultación: murmullo vesicular disminuido en vértice pulmonar derecho, crépitos finos y estertores de burbuja fina en ambas bases, más notables a derecha. No se detectan sibilancias."
+        },
+        {
+          "name": "Sistema cardiovascular",
+          "findings": "Ruidos cardíacos normofonéticos, taquicardia sinusal. No se auscultan soplos ni frotes. Pulsos periféricos presentes y simétricos. Llenado capilar ligeramente retardado (~3 segundos). No hay edemas periféricos."
+        },
+        {
+          "name": "Abdomen",
+          "findings": "Blando, depresible, sin dolor a la palpación. No se palpan visceromegalias. Ruidos hidroaéreos conservados. No hay masas ni ascitis."
+        },
+        {
+          "name": "Sistema genitourinario",
+          "findings": "No hay dolor a la palpación suprapúbica ni a la puñopercusión."
+        },
+        {
+          "name": "Sistema músculo-esquelético",
+          "findings": "Tono muscular disminuido, atrofia leve en extremidades. No hay signos de artritis ni deformidades. Marcha lenta, con pausas por disnea."
+        },
+        {
+          "name": "Piel y faneras",
+          "findings": "Sudoración marcada en región cervical y espalda. Piel pálida y ligeramente seca. Uñas con líneas de Beau. No se observan lesiones dérmicas activas."
+        },
+        {
+          "name": "Examen neurológico",
+          "findings": "Consciente y orientado en las tres esferas. Fuerza muscular 4/5 en extremidades. Reflejos osteotendíneos presentes. Sensibilidad conservada. No hay signos meníngeos ni déficit focal neurológico."
+        }
+      ]
+    },
+    "workup": {
+      "lab_panels": [
+        {
+          "name": "Hemograma con VHS",
+          "comment": "Anemia normocítica normocrómica leve-moderada, compatible con anemia de enfermedad crónica. Leucocitosis con neutrofilia, que sugiere respuesta inflamatoria/infecciosa. Linfopenia, posible reflejo de estado inflamatorio crónico o inmunosupresión. Trombocitosis reactiva, común en procesos inflamatorios persistentes.",
+          "rows": [
+            {"parameter": "Hemoglobina (Hb)", "result": "10,2 g/dL", "reference": "13,5 – 17,5 g/dL", "interpretation": "Anemia moderada (probable anemia inflamatoria)"},
+            {"parameter": "Hematocrito (Hto)", "result": "31,5 %", "reference": "40 – 50 %", "interpretation": "Disminuido"},
+            {"parameter": "Recuento de eritrocitos (RBC)", "result": "3,7 millones/µL", "reference": "4,5 – 5,9 millones/µL", "interpretation": "Disminuido"},
+            {"parameter": "VCM", "result": "85 fL", "reference": "80 – 96 fL", "interpretation": "Normocítico"},
+            {"parameter": "HCM", "result": "27,5 pg", "reference": "27 – 33 pg", "interpretation": "Normal"},
+            {"parameter": "CHCM", "result": "32,3 g/dL", "reference": "31 – 36 g/dL", "interpretation": "Normal"},
+            {"parameter": "Leucocitos totales (WBC)", "result": "12.400 /µL", "reference": "4.500 – 11.000 /µL", "interpretation": "Leucocitosis leve (infección activa)"},
+            {"parameter": "Segmentados (neutrófilos)", "result": "70 %", "reference": "55 – 65 %", "interpretation": "Levemente aumentados"},
+            {"parameter": "Linfocitos", "result": "18 %", "reference": "25 – 40 %", "interpretation": "Disminuidos"},
+            {"parameter": "Monocitos", "result": "8 %", "reference": "2 – 8 %", "interpretation": "Límite alto"},
+            {"parameter": "Eosinófilos", "result": "1 %", "reference": "1 – 4 %", "interpretation": "Normal"},
+            {"parameter": "Basófilos", "result": "0 %", "reference": "0 – 1 %", "interpretation": "Normal"},
+            {"parameter": "Plaquetas (PLT)", "result": "462.000 /µL", "reference": "150.000 – 400.000 /µL", "interpretation": "Trombocitosis reactiva"},
+            {"parameter": "VHS", "result": "120 mm/hr", "reference": "< 25 mm/hr", "interpretation": "Muy elevada"}
+          ]
+        },
+        {
+          "name": "Perfil bioquímico y electrolitos plasmáticos",
+          "comment": "PCR elevada como reactante de fase aguda; albúmina ligeramente disminuida por inflamación crónica y/o desnutrición.",
+          "rows": [
+            {"parameter": "PCR (proteína C reactiva)", "result": "38 mg/L", "reference": "< 5 mg/L", "interpretation": "Elevada"},
+            {"parameter": "Glucosa en ayunas", "result": "89 mg/dL", "reference": "70 – 100 mg/dL", "interpretation": "Normal"},
+            {"parameter": "Urea", "result": "31 mg/dL", "reference": "10 – 50 mg/dL", "interpretation": "Normal"},
+            {"parameter": "Creatinina", "result": "0,8 mg/dL", "reference": "0,6 – 1,2 mg/dL", "interpretation": "Normal"},
+            {"parameter": "Sodio (Na⁺)", "result": "137 mEq/L", "reference": "135 – 145 mEq/L", "interpretation": "Normal"},
+            {"parameter": "Potasio (K⁺)", "result": "4,2 mEq/L", "reference": "3,5 – 5,0 mEq/L", "interpretation": "Normal"},
+            {"parameter": "Cloro (Cl⁻)", "result": "100 mEq/L", "reference": "96 – 106 mEq/L", "interpretation": "Normal"},
+            {"parameter": "Transaminasas (ALT/AST)", "result": "24 / 20 U/L", "reference": "< 35 U/L", "interpretation": "Normal"},
+            {"parameter": "Albúmina", "result": "3,1 g/dL", "reference": "3,5 – 5,0 g/dL", "interpretation": "Ligeramente disminuida"}
+          ]
+        }
+      ],
+      "microbiology": [
+        {"test": "Baciloscopia (3 muestras)", "result": "Negativa", "note": "La baciloscopia detecta solo el 50–80 % de los casos de TB con cultivo positivo."},
+        {"test": "Hemocultivo", "result": "Negativo", "note": ""},
+        {"test": "GeneXpert MTB/RIF (PCR)", "result": "Positivo para Mycobacterium tuberculosis", "note": "Sin resistencia a rifampicina. Recibido a los 15 días de hospitalización."},
+        {"test": "Cultivo Löwenstein-Jensen (30 días)", "result": "Positivo para bacilos ácido-alcohol resistentes", "note": "Tinción de Ziehl-Neelsen positiva. Sensible a rifampicina."}
+      ],
+      "imaging": [
+        {
+          "study": "Radiografía de tórax posteroanterior y lateral",
+          "source": "https://radiopaedia.org/cases/miliary-tuberculosis-1",
+          "report": "Innumerables nódulos pequeños bilaterales de entre 1 mm y 3 mm de diámetro, uniformes en tamaño y distribución."
+        },
+        {
+          "study": "TC de tórax",
+          "source": "https://radiopaedia.org/cases/33071",
+          "report": "Nódulos miliares en ambos pulmones, distribuidos de forma aleatoria. Se observa consolidación del lóbulo medio derecho y derrame pleural derecho."
+        }
+      ]
+    },
+    "course": {
+      "timeline": [
+        {"moment": "Día 0", "event": "Hospitalización de urgencia el mismo día de la consulta."},
+        {"moment": "Primera semana", "event": "Se reciben los primeros exámenes: hemograma, perfil bioquímico, baciloscopias y hemocultivo."},
+        {"moment": "Día 15", "event": "GeneXpert MTB/RIF positivo para Mycobacterium tuberculosis, sin resistencia a rifampicina (demora por recursos y logística)."},
+        {"moment": "Al mes", "event": "Biopsia pulmonar con aguja gruesa: inflamación granulomatosa necrosante con necrosis caseosa central, histiocitos epitelioides, células gigantes multinucleadas y linfocitos; Ziehl-Neelsen con bacilos ácido-alcohol resistentes. Cultivo Löwenstein-Jensen positivo, sensible a rifampicina."}
+      ],
+      "treatment_plan": "Iniciar esquema antituberculoso primario según norma nacional, con seguimiento de adherencia y reevaluación de la terapia antirretroviral por el equipo de infectología."
+    },
+    "diagnoses": {
+      "primary": {"name": "Tuberculosis miliar", "sctid": "47604008"},
+      "differentials": [
+        {"name": "Neumonía por Pneumocystis jirovecii", "sctid": "415125002"},
+        {"name": "Neumonía por Coccidioides immitis/posadasii", "sctid": "417018008"},
+        {"name": "Linfoma no Hodgkin", "sctid": "1172592001"},
+        {"name": "Metástasis miliar por carcinoma renal de células claras", "sctid": "254915003"},
+        {"name": "Sarcoidosis", "sctid": "24369008"}
+      ],
+      "justification": "Tuberculosis: no existe una escala diagnóstica. La tuberculosis pulmonar es común en pacientes con VIH, especialmente con recuento de CD4 bajo. La pérdida de peso y la fiebre intermitente son síntomas clásicos, y los hallazgos radiológicos (nódulos, cavitación) la respaldan aunque la baciloscopia sea negativa. La tos productiva con hemoptisis es característica y la leucocitosis con linfopenia apoya la infección activa. La incidencia en Chile es alta. La PCR, la histopatología y el cultivo positivo confirman la presencia de la bacteria.\n\nNeumonía por Pneumocystis jirovecii: infección oportunista común con CD4 < 200/μL; cursa con fiebre, tos seca y disnea progresiva, con infiltrados difusos bilaterales. Baciloscopia y cultivo negativos. Incidencia baja en Chile.\n\nLinfoma no Hodgkin: frecuente en VIH, con adenopatías indoloras, baja de peso, sudores nocturnos y fiebre persistente; se confirma con biopsia ganglionar. Cultivos y baciloscopia negativos. Incidencia baja en Chile.\n\nCoccidioidomicosis: micosis de áreas endémicas (suroeste de EE. UU. y norte de México) con tos productiva, disnea y nódulos bilaterales; la eosinofilia es más característica. Casi inexistente en Chile.\n\nMetástasis miliar por carcinoma renal de células claras: nódulos pulmonares de distribución aleatoria en pacientes con antecedente de cáncer renal; cultivos negativos. Incidencia significativa en Chile.\n\nSarcoidosis: infiltrados pulmonares y adenopatías hiliares/mediastínicas, con CD4 normal o levemente disminuido y granulomas no caseificantes en la biopsia. Muy poco frecuente en Chile y menos probable en inmunosupresión grave."
+    },
+    "practical_script": {
+      "instructions": "Practical Script. Para cada nuevo dato, indique cómo cambia la probabilidad de cada diagnóstico: −2 mucho menos apropiada, −1 menos apropiada, 0 sin cambios, +1 más apropiada, +2 mucho más apropiada.",
+      "columns": [
+        "Tuberculosis miliar",
+        "Neumonía por P. jirovecii",
+        "Neumonía por Coccidioides",
+        "Linfoma no Hodgkin",
+        "Metástasis miliar (carcinoma renal)",
+        "Sarcoidosis"
+      ],
+      "rows": [
+        {
+          "finding": "1. Pérdida de peso",
+          "ratings": [
+            {"value": 2, "rationale": "Muy frecuente, generalmente > 10 kg en meses."},
+            {"value": 1, "rationale": "Frecuente, generalmente en VIH avanzado."},
+            {"value": 1, "rationale": "Frecuente, asociada a la forma pulmonar crónica."},
+            {"value": 1, "rationale": "Frecuente, con pérdida de masa muscular."},
+            {"value": 1, "rationale": "Frecuente en cáncer metastásico."},
+            {"value": 1, "rationale": "Común, aunque no específica."}
+          ]
+        },
+        {
+          "finding": "2. Fiebre",
+          "ratings": [
+            {"value": 2, "rationale": "Fiebre de bajo grado, intermitente."},
+            {"value": 1, "rationale": "Fiebre moderada a alta."},
+            {"value": 1, "rationale": "Más apropiada."},
+            {"value": 1, "rationale": "Más apropiada."},
+            {"value": 1, "rationale": "Más apropiada."},
+            {"value": 1, "rationale": "Más apropiada."}
+          ]
+        },
+        {
+          "finding": "3. Tos productiva hemoptoica",
+          "ratings": [
+            {"value": 2, "rationale": "Muy común, especialmente en formas pulmonares."},
+            {"value": 1, "rationale": "Rara vez con hemoptisis, más comúnmente seca."},
+            {"value": 0, "rationale": "Rara vez hemoptoica."},
+            {"value": 1, "rationale": "Tos seca inicialmente, puede progresar a productiva."},
+            {"value": 0, "rationale": "Tos seca o productiva, a menudo con disnea."},
+            {"value": 0, "rationale": "Tos seca, menos frecuente en etapas iniciales."}
+          ]
+        },
+        {
+          "finding": "4. Disnea progresiva",
+          "ratings": [
+            {"value": 1, "rationale": "Puede deberse a afectación pulmonar extensa."},
+            {"value": 2, "rationale": "Común, especialmente con CD4 bajos."},
+            {"value": 1, "rationale": "Común si hay compromiso pulmonar."},
+            {"value": 1, "rationale": "Puede presentarse con compromiso pulmonar o extrapulmonar."},
+            {"value": 1, "rationale": "Común en metástasis pulmonares."},
+            {"value": 1, "rationale": "Puede haber disnea si hay infiltrados pulmonares."}
+          ]
+        },
+        {
+          "finding": "5. Adenopatías cervicales",
+          "ratings": [
+            {"value": 1, "rationale": "Frecuentes, no dolorosas, típicas de TB ganglionar."},
+            {"value": 0, "rationale": "Raras; si las hay, secundarias a infección generalizada."},
+            {"value": 0, "rationale": "Pueden estar presentes, pero no son típicas."},
+            {"value": 1, "rationale": "Frecuentes, indoloras, más comunes en el cuello."},
+            {"value": 0, "rationale": "Frecuentes en caso de metástasis ganglionares."},
+            {"value": 1, "rationale": "Frecuentes, indoloras, en cuello, mediastino o hilios."}
+          ]
+        },
+        {
+          "finding": "6. Radiografía de tórax",
+          "ratings": [
+            {"value": 2, "rationale": "Nódulos pulmonares, cavitación, infiltrados."},
+            {"value": 1, "rationale": "Infiltrados difusos, a menudo bilaterales."},
+            {"value": 1, "rationale": "Nódulos bilaterales, pueden simular TB o cáncer."},
+            {"value": 1, "rationale": "Infiltrados pulmonares difusos o masas."},
+            {"value": 2, "rationale": "Nódulos pulmonares de distribución miliar."},
+            {"value": 1, "rationale": "Infiltrados pulmonares, adenopatías hiliares."}
+          ]
+        },
+        {
+          "finding": "7. Hemograma",
+          "ratings": [
+            {"value": 1, "rationale": "Leucocitosis leve, linfocitos bajos, anemia moderada."},
+            {"value": 1, "rationale": "Leucocitosis moderada, linfocitos bajos."},
+            {"value": 1, "rationale": "Leucocitosis con eosinofilia, posible anemia."},
+            {"value": 1, "rationale": "Leucocitosis, linfocitosis."},
+            {"value": 1, "rationale": "Leucocitosis, linfocitosis, anemia."},
+            {"value": 1, "rationale": "Leucocitosis, linfocitosis, anemia."}
+          ]
+        },
+        {
+          "finding": "8. Baciloscopia negativa",
+          "ratings": [
+            {"value": -1, "rationale": "Detecta solo el 50–80 % de los casos con cultivo positivo, así que no descarta."},
+            {"value": 0, "rationale": "Negativa; sin cambios."},
+            {"value": 0, "rationale": "Negativa para Coccidioides en prueba directa."},
+            {"value": 0, "rationale": "Negativa; sin cambios."},
+            {"value": 0, "rationale": "Negativa; sin cambios."},
+            {"value": 0, "rationale": "Negativa; sin cambios."}
+          ]
+        },
+        {
+          "finding": "9. Cultivo de esputo",
+          "ratings": [
+            {"value": 2, "rationale": "Positivo para Mycobacterium tuberculosis."},
+            {"value": 0, "rationale": "Negativo; el cultivo de P. jirovecii es poco sensible."},
+            {"value": 0, "rationale": "Negativo; positivo en formas pulmonares crónicas."},
+            {"value": 0, "rationale": "Negativo."},
+            {"value": 0, "rationale": "Negativo."},
+            {"value": 0, "rationale": "Negativo."}
+          ]
+        },
+        {
+          "finding": "10. Nivel de CD4 (98 células/μL)",
+          "ratings": [
+            {"value": 1, "rationale": "Puede estar bajo en pacientes VIH positivos; 8,6 % de los casos de TBC en Chile."},
+            {"value": 2, "rationale": "Comúnmente bajo (menos de 200 células/μL)."},
+            {"value": 0, "rationale": "No se relaciona directamente con CD4."},
+            {"value": 0, "rationale": "No afectado por CD4; depende de la enfermedad sistémica."},
+            {"value": 0, "rationale": "No relacionado con CD4."},
+            {"value": 0, "rationale": "Normal o ligeramente disminuido."}
+          ]
+        },
+        {
+          "finding": "11. Prevalencia o incidencia en Chile",
+          "ratings": [
+            {"value": 1, "rationale": "Incidencia en Chile 2023: 15,8 casos nuevos por 100.000 habitantes."},
+            {"value": 0, "rationale": "1,2 % de los pacientes con VIH en Chile; prevalencia de VIH 2024: 460,5 por 100.000 hab."},
+            {"value": -2, "rationale": "Muy poco prevalente en Chile; endémica del suroeste de EE. UU. y norte de México."},
+            {"value": 0, "rationale": "0,8 a 1,0 por 100.000 habitantes al año, sobre todo en adultos de 20 a 40 años."},
+            {"value": 1, "rationale": "Globocan 2023: tasa de incidencia de 7,6 por 100.000 habitantes en Chile."},
+            {"value": -2, "rationale": "Prevalencia desconocida, con pocos casos reportados en Chile."}
+          ]
+        }
+      ]
+    },
+    "pathology": {
+      "specimen": "Ganglio linfático, biopsia escisional",
+      "macroscopic": "Se recibe ganglio linfático de aspecto nodular, de consistencia firme, que al corte muestra áreas blanquecino-amarillentas, friables, compatibles con necrosis. Se procesa en su totalidad para estudio histológico.",
+      "microscopic": "Los cortes histológicos muestran tejido ganglionar con arquitectura parcialmente borrada por un proceso inflamatorio crónico granulomatoso. Se identifican múltiples granulomas epitelioides bien formados, algunos confluentes, constituidos por histiocitos epitelioides, linfocitos periféricos y ocasionales células gigantes multinucleadas tipo Langhans. En el centro de varios granulomas se observa necrosis caseosa, de aspecto amorfo, eosinofílico y granular. El parénquima ganglionar residual muestra hiperplasia linfoide reactiva focal. No se identifican signos de malignidad en los cortes examinados.",
+      "diagnosis": "Linfadenitis granulomatosa necrosante con necrosis caseosa, compatible con tuberculosis ganglionar.",
+      "coding": "SNOMED CT 47604008 (tuberculosis miliar)",
+      "concordance": [
+        {
+          "diagnosis": "Tuberculosis diseminada / ganglionar",
+          "new_data": "Ganglio linfático con granulomas epitelioides bien formados, células gigantes tipo Langhans y necrosis caseosa.",
+          "shift": 2,
+          "rationale": "Hallazgo histopatológico clásico y muy sugestivo de tuberculosis."
+        },
+        {
+          "diagnosis": "Neumonía por Pneumocystis jirovecii",
+          "new_data": "Disnea progresiva con CD4 de 98 células/μL y saturación de O₂ de 91 %.",
+          "shift": -1,
+          "rationale": "El contexto de inmunosupresión la hace posible, pero la histología granulomatosa caseificante no la apoya."
+        },
+        {
+          "diagnosis": "Linfoma",
+          "new_data": "No se identifican signos de malignidad en los cortes examinados.",
+          "shift": -2,
+          "rationale": "La biopsia no muestra patrón neoplásico; predomina inflamación granulomatosa."
+        },
+        {
+          "diagnosis": "Neumonía por Coccidioides immitis/posadasii",
+          "new_data": "Granulomas con necrosis caseosa, pero sin evidencia de microorganismos fúngicos en la histología.",
+          "shift": -1,
+          "rationale": "Puede simular tuberculosis, pero la ausencia de hongos y las células tipo Langhans favorecen más TB."
+        },
+        {
+          "diagnosis": "Metástasis miliar por carcinoma renal de células claras",
+          "new_data": "Innumerables nódulos pulmonares bilaterales de distribución aleatoria en la TC.",
+          "shift": -2,
+          "rationale": "La imagen podría sugerir diseminación hematógena, pero la histología ganglionar no muestra malignidad."
+        },
+        {
+          "diagnosis": "Sarcoidosis",
+          "new_data": "Granulomas con necrosis caseosa en el ganglio linfático.",
+          "shift": -2,
+          "rationale": "La sarcoidosis típicamente da granulomas no caseificantes, por lo que este dato la aleja claramente."
+        }
+      ]
+    },
+    "pedagogy": {
+      "objectives": [
+        {
+          "area": "Patología",
+          "text": "Resuelve situaciones relacionadas con daños por inflamación y posterior reparación celular, integrando los distintos procesos patológicos y las principales enfermedades del sistema circulatorio, sus consecuencias en la salud de las personas y su impacto en la salud pública, considerando los conceptos de patología general."
+        },
+        {
+          "area": "Fisiopatología",
+          "text": "Interpreta situaciones clínicas aplicando el conocimiento fisiopatológico de las causas, mecanismos y consecuencias de los procesos generales de inflamación, dolor y estrés, y de las enfermedades respiratorias más frecuentes."
+        },
+        {
+          "area": "Razonamiento clínico",
+          "text": "Integra información relevante obtenida desde el paciente —historia clínica, examen físico, registros médicos y estudios complementarios— y plantea hipótesis diagnósticas principal y diferenciales, analizando las posibles etiologías y la pertinencia de los síntomas y signos asociados."
+        }
+      ],
+      "level": "Pregrado",
+      "prerequisites": "Patología general (inflamación y reparación) y semiología del aparato respiratorio.",
+      "curricular_placement": "Asignaturas de Patología, Fisiopatología y Razonamiento Clínico.",
+      "reveal_key": false
+    },
+    "assessment": {
+      "multiple_choice": [],
+      "open_questions": [
+        {
+          "question": "Redacte el resumen clínico del paciente identificando el síntoma pivote y los calificadores semánticos presentes en el relato.",
+          "rubric": "Se evalúa con el Script de evaluación para informe clínico: lenguaje médico, síntoma pivote, temporalidad, evolución, intensidad/cuantificación, características semánticas y coherencia clínica (3/2/1 puntos por criterio, total 21)."
+        }
+      ]
+    }
+  }
+}
