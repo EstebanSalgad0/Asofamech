@@ -30,7 +30,7 @@ services:
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
       - LLM_API_BASE_URL=${LLM_API_BASE_URL:-https://api.groq.com/openai/v1}
       - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_API_MODEL=${LLM_API_MODEL:-llama-3.3-70b-versatile}
+      - LLM_API_MODEL=${LLM_API_MODEL:-openai/gpt-oss-20b}
       - LLM_REQUEST_TIMEOUT=${LLM_REQUEST_TIMEOUT:-120}
       - HISTO_CLASSIFIER_CHECKPOINT=${HISTO_CLASSIFIER_CHECKPOINT:-/app/artifacts/histopathology/checkpoints/tri_head_camelyon17_stage16_sane_tuned_v1.pt}
       - HISTO_CONCH_CHECKPOINT_REF=${HISTO_CONCH_CHECKPOINT_REF:-hf_hub:MahmoodLab/conch}

@@ -298,7 +298,7 @@ modelo generativo** se elige donde se ejecuta el modelo:
 2. En el panel, elegir proveedor **Groq**.
 3. Dejar `LLM_API_BASE_URL` en `https://api.groq.com/openai/v1`.
 4. Pegar la clave en `LLM_API_KEY`.
-5. Elegir el modelo en `LLM_API_MODEL` (p. ej. `llama-3.3-70b-versatile`).
+5. Elegir el modelo en `LLM_API_MODEL` (p. ej. `openai/gpt-oss-20b`).
 6. **Guardar configuracion** y luego **Probar conexion**.
 
 La prueba usa la configuracion ya guardada e informa latencia real, credencial

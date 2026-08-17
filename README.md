@@ -1,6 +1,6 @@
 # ASOFAMECH — Plataforma Educativa Médica con Inteligencia Artificial
 
-ASOFAMECH es un prototipo de plataforma educativa de medicina desarrollado como proyecto de tesis. Integra un asistente conversacional con RAG, evaluación de razonamiento clínico mediante SCT, análisis histopatológico asistido por IA y un módulo de gestión de casos clínicos, todo bajo control de acceso basado en roles.
+ASOFAMECH es un prototipo de plataforma educativa de medicina desarrollado como proyecto de tesis. Integra un asistente conversacional con RAG, evaluación de razonamiento clínico mediante SCT, análisis histopatológico asistido por IA, un módulo de casos clínicos en el formato PA-ASO-001 y un revisor automático de informes clínicos por rúbrica, todo bajo control de acceso basado en roles.
 
 > **Advertencia:** Esta plataforma es exclusivamente educativa. Los análisis de imágenes, respuestas del chatbot y evaluaciones no constituyen diagnóstico médico ni reemplazan el juicio clínico profesional.
 
@@ -232,18 +232,22 @@ Ver [docs/PERFORMANCE_TESTS.md](docs/PERFORMANCE_TESTS.md).
 Asofamech/
 ├── backend/
 │   ├── app/                  # Codigo FastAPI
-│   │   ├── routers/          # 11 modulos de endpoints
+│   │   ├── routers/          # 12 modulos de endpoints
+│   │   ├── seeds/            # Casos, rubricas y encuestas base
+│   │   ├── case_structure.py # Formato PA-ASO-001 de los casos clinicos
+│   │   ├── rubric_review.py  # Revision de informes contra una rubrica
+│   │   ├── text_analysis.py  # Frecuencia de terminos (nube de palabras)
 │   │   ├── models.py         # Modelos ORM SQLAlchemy
 │   │   ├── schemas.py        # Esquemas Pydantic
 │   │   ├── auth.py           # RBAC y JWT
 │   │   └── main.py           # Punto de entrada
 │   ├── alembic/              # Migraciones de BD
-│   ├── tests/                # 27 archivos de pruebas
+│   ├── tests/                # 29 archivos de pruebas
 │   ├── requirements*.txt     # Dependencias
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/            # 11 paginas React
+│   │   ├── pages/            # 12 paginas React
 │   │   ├── components/       # Componentes reutilizables
 │   │   ├── api.js            # Funciones de llamada a API
 │   │   └── authClient.js     # Gestion de sesion JWT

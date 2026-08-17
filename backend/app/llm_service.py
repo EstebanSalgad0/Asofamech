@@ -44,7 +44,10 @@ GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 DEFAULT_OLLAMA_URL = os.getenv("OLLAMA_URL", os.getenv("OLLAMA_HOST", "http://ollama:11434"))
 DEFAULT_OLLAMA_MODEL = os.getenv("LLM_MODEL", "llama3.1:8b")
-DEFAULT_API_MODEL = os.getenv("LLM_API_MODEL", "llama-3.3-70b-versatile")
+# Groq apago llama-3.3-70b-versatile y llama-3.1-8b-instant el 16/08/2026 y
+# senala gpt-oss-20b como su reemplazo. Es ademas el modelo mas barato de su
+# catalogo de produccion.
+DEFAULT_API_MODEL = os.getenv("LLM_API_MODEL", "openai/gpt-oss-20b")
 DEFAULT_TIMEOUT = 120.0
 
 #: Valor que se devuelve en lugar de un secreto ya almacenado. El formulario lo

@@ -34,6 +34,10 @@ _INTEGRATIONS_TTL = 45.0  # segundos
 
 
 DEFAULT_AI_CONFIG = {
+    # El valor inicial sigue siendo ollama a proposito: es el unico proveedor
+    # que funciona sin credenciales, y un despliegue nuevo apuntando a Groq sin
+    # API key deja el chatbot muerto desde el primer arranque. El proveedor
+    # real se elige desde el panel y se guarda en base de datos.
     "llm_provider": {
         "value": os.getenv("LLM_PROVIDER", "ollama"),
         "value_type": "string",
@@ -57,9 +61,12 @@ DEFAULT_AI_CONFIG = {
         "description": "Clave de API del proveedor externo. Se guarda cifrada en transito y nunca se devuelve en claro.",
     },
     "llm_api_model": {
-        "value": os.getenv("LLM_API_MODEL", "llama-3.3-70b-versatile"),
+        "value": os.getenv("LLM_API_MODEL", "openai/gpt-oss-20b"),
         "value_type": "string",
-        "description": "Modelo del proveedor externo (ej. llama-3.3-70b-versatile en Groq).",
+        "description": (
+            "Modelo del proveedor externo. En Groq el identificador lleva el prefijo del "
+            "proveedor original (ej. openai/gpt-oss-20b)."
+        ),
     },
     "llm_request_timeout": {
         "value": os.getenv("LLM_REQUEST_TIMEOUT", "120"),
@@ -105,9 +112,13 @@ DEFAULT_AI_CONFIG = {
         "description": "Cantidad maxima de documentos RAG enviados al prompt.",
     },
     "chat_max_tokens": {
-        "value": "800",
+        "value": "1600",
         "value_type": "integer",
-        "description": "Tokens maximos por respuesta del chatbot (num_predict). Menos tokens = respuesta mas rapida.",
+        "description": (
+            "Tokens maximos por respuesta del chatbot (num_predict). Los modelos de "
+            "razonamiento como gpt-oss gastan parte de este presupuesto en razonar antes "
+            "de responder, asi que un valor bajo trunca la respuesta a media frase."
+        ),
     },
     "chat_num_ctx": {
         "value": "4096",
