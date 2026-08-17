@@ -412,7 +412,7 @@ export function ImagesPage() {
           <div className="images-v2-viewer">
             {selectedImage ? (
               selectedImage.has_dzi
-                ? <OpenSeadragonViewer imageData={selectedImage} initialSession={initialSession} />
+                ? <OpenSeadragonViewer imageData={selectedImage} initialSession={initialSession} canAnnotate={canUploadImages} />
                 : <MedicalImageViewer imageData={selectedImage} />
             ) : (
               <div className="images-v2-empty-viewer roi-hist-wrapper" data-testid="histopathology-empty-viewer">

@@ -3,11 +3,18 @@ import OpenSeadragon from 'openseadragon';
 import { heatmapMaxTilesForCurrentRole, histopathologyHeaders, isPrivilegedRole } from '../histopathologyAccess';
 import { API_BASE, authFetch } from '../authClient';
 import { formatImageDisplayName } from '../displayText';
+import {
+  createImageAnnotation,
+  deleteImageAnnotation,
+  listImageAnnotations,
+  updateImageAnnotation,
+} from '../api';
 
 const ROI_COLORS = {
   roi1: '#38bdf8',
   roi2: '#f97316',
   draft: '#facc15',
+  annotation: '#a78bfa',
 };
 
 const ROI2_MIN_SIZE = 32;
@@ -170,7 +177,7 @@ function describeApiError(payload, fallback) {
   return fallback;
 }
 
-export function OpenSeadragonViewer({ imageData, initialSession = null }) {
+export function OpenSeadragonViewer({ imageData, initialSession = null, canAnnotate = false }) {
   const viewerRef = useRef(null);
   const overlayRef = useRef(null);
   const osdRef = useRef(null);
@@ -209,6 +216,20 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
   const [historialOpen, setHistorialOpen] = useState(false);
   const [correctionDraft, setCorrectionDraft] = useState({});
   // correctionDraft[sessionId] = { open, label, note, includeInDataset, saving }
+
+  // Anotaciones docentes: independientes del clasificador, nunca disparan IA.
+  const [annotations, setAnnotations] = useState([]);
+  const [annotationsLoading, setAnnotationsLoading] = useState(false);
+  const [annotationDraftRoi, setAnnotationDraftRoi] = useState(null);
+  // Forma elegida ANTES de dibujar: se aplica al rectangulo delimitador que
+  // resulte del arrastre, y se puede seguir cambiando en el formulario.
+  const [annotationShapeTool, setAnnotationShapeTool] = useState('rect');
+  const [annotationForm, setAnnotationForm] = useState({ label: '', note: '', shape: 'rect' });
+  const [savingAnnotation, setSavingAnnotation] = useState(false);
+  const [editingAnnotationId, setEditingAnnotationId] = useState(null);
+  const [annotationError, setAnnotationError] = useState(null);
+  const [openAnnotationPopover, setOpenAnnotationPopover] = useState(null);
+  const [deletingAnnotationId, setDeletingAnnotationId] = useState(null);
   const heatmapMaxTiles = heatmapMaxTilesForCurrentRole();
   const privilegedHeatmaps = isPrivilegedRole();
   const estimatedHeatmapTiles = useMemo(
@@ -308,6 +329,99 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
     }
   };
 
+  const loadAnnotations = async (imageId) => {
+    if (!imageId) return;
+    setAnnotationsLoading(true);
+    try {
+      const data = await listImageAnnotations(imageId);
+      setAnnotations(data || []);
+    } catch {
+      // no critico: el visor sigue funcionando sin anotaciones
+    } finally {
+      setAnnotationsLoading(false);
+    }
+  };
+
+  const cancelAnnotationDraft = () => {
+    setAnnotationDraftRoi(null);
+    setAnnotationForm({ label: '', note: '', shape: annotationShapeTool });
+    setEditingAnnotationId(null);
+    setAnnotationError(null);
+  };
+
+  const startEditAnnotation = (annotation) => {
+    setEditingAnnotationId(annotation.id);
+    setAnnotationDraftRoi(annotation.roi);
+    setAnnotationForm({
+      label: annotation.label,
+      note: annotation.note || '',
+      shape: annotation.shape || 'rect',
+    });
+    setAnnotationError(null);
+    setOpenAnnotationPopover(null);
+    setActiveTool('annotate');
+  };
+
+  const saveAnnotation = async () => {
+    if (!annotationDraftRoi || !annotationForm.label.trim()) {
+      setAnnotationError('Escribe una etiqueta para la anotación.');
+      return;
+    }
+    setSavingAnnotation(true);
+    setAnnotationError(null);
+    try {
+      if (editingAnnotationId) {
+        const updated = await updateImageAnnotation(editingAnnotationId, {
+          label: annotationForm.label.trim(),
+          note: annotationForm.note.trim() || null,
+          shape: annotationForm.shape,
+        });
+        setAnnotations((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      } else {
+        const created = await createImageAnnotation(imageData.id, {
+          roi: annotationDraftRoi,
+          shape: annotationForm.shape,
+          label: annotationForm.label.trim(),
+          note: annotationForm.note.trim() || null,
+        });
+        setAnnotations((prev) => [...prev, created]);
+      }
+      cancelAnnotationDraft();
+    } catch (err) {
+      setAnnotationError(err.message);
+    } finally {
+      setSavingAnnotation(false);
+    }
+  };
+
+  const handleDeleteAnnotation = async (annotationId) => {
+    setDeletingAnnotationId(annotationId);
+    try {
+      await deleteImageAnnotation(annotationId);
+      setAnnotations((prev) => prev.filter((a) => a.id !== annotationId));
+      setOpenAnnotationPopover(null);
+      if (editingAnnotationId === annotationId) cancelAnnotationDraft();
+    } catch (err) {
+      setAnnotationError(err.message);
+    } finally {
+      setDeletingAnnotationId(null);
+    }
+  };
+
+  const focusAnnotation = (annotation) => {
+    const viewer = osdRef.current;
+    if (!annotation?.roi || !viewer) return;
+    const imageRect = new OpenSeadragon.Rect(
+      annotation.roi.x, annotation.roi.y, annotation.roi.width, annotation.roi.height
+    );
+    const tiledImage = viewer.world.getItemAt(0);
+    const viewportRect = tiledImage
+      ? tiledImage.imageToViewportRectangle(imageRect)
+      : viewer.viewport.imageToViewportRectangle(imageRect);
+    viewer.viewport.fitBounds(viewportRect, true);
+    setViewportVersion((v) => v + 1);
+  };
+
   useEffect(() => {
     fetchModelStatus();
   }, []);
@@ -334,6 +448,10 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
     setHistorialOpen(false);
     setRoi1(null);
     setRoi2(null);
+    setAnnotations([]);
+    setAnnotationShapeTool('rect');
+    cancelAnnotationDraft();
+    setOpenAnnotationPopover(null);
     setLoading(true);
 
     let cancelled = false;
@@ -418,6 +536,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
         loadLatestHeatmap(imageData.id);
         loadPreparedHeatmaps(imageData.id);
         loadSessions(imageData.id);
+        loadAnnotations(imageData.id);
         refreshOverlay();
         if (initialSession) {
           restoreSession(initialSession);
@@ -493,6 +612,19 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
 
   const roi1ViewerRect = useMemo(() => imageRectToViewerRect(roi1), [roi1, viewportVersion]);
   const roi2ViewerRect = useMemo(() => imageRectToViewerRect(roi2), [roi2, viewportVersion]);
+  const annotationDraftViewerRect = useMemo(
+    () => imageRectToViewerRect(annotationDraftRoi),
+    [annotationDraftRoi, viewportVersion]
+  );
+  // Se muestran siempre, sin importar el modo activo: son contenido del curso,
+  // no un dato de trabajo transitorio como ROI1/ROI2.
+  const annotationViewerRects = useMemo(
+    () =>
+      annotations
+        .map((annotation) => ({ ...annotation, viewerRect: imageRectToViewerRect(annotation.roi) }))
+        .filter((annotation) => annotation.viewerRect),
+    [annotations, viewportVersion]
+  );
 
   const getElementPoint = (event, element) => {
     const bounds = element.getBoundingClientRect();
@@ -505,7 +637,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
   };
 
   const handlePointerDown = (event) => {
-    if (activeTool !== 'roi1' && activeTool !== 'roi2') return;
+    if (activeTool !== 'roi1' && activeTool !== 'roi2' && activeTool !== 'annotate') return;
     event.preventDefault();
 
     const point = getElementPoint(event, viewerRef.current || overlayRef.current);
@@ -550,6 +682,13 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
         setPrediction(null);
         setRoiError(null);
       }
+    }
+
+    if (imageRect && activeTool === 'annotate') {
+      setEditingAnnotationId(null);
+      setAnnotationDraftRoi(imageRect);
+      setAnnotationForm({ label: '', note: '', shape: annotationShapeTool });
+      setAnnotationError(null);
     }
 
     setDraftStart(null);
@@ -929,8 +1068,8 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
     );
   }
 
-  const modeLabel = activeTool === 'navigate' ? 'NAVEGAR' : activeTool === 'roi1' ? 'ROI 1 · MAPA' : 'ROI 2 · CLASIFICACIÓN';
-  const modeBg = activeTool === 'roi2' ? 'rgba(234,88,12,0.9)' : activeTool === 'roi1' ? 'rgba(2,132,199,0.9)' : 'rgba(30,41,59,0.9)';
+  const modeLabel = activeTool === 'navigate' ? 'NAVEGAR' : activeTool === 'roi1' ? 'ROI 1 · MAPA' : activeTool === 'roi2' ? 'ROI 2 · CLASIFICACIÓN' : 'ANOTAR';
+  const modeBg = activeTool === 'roi2' ? 'rgba(234,88,12,0.9)' : activeTool === 'roi1' ? 'rgba(2,132,199,0.9)' : activeTool === 'annotate' ? 'rgba(124,58,237,0.9)' : 'rgba(30,41,59,0.9)';
 
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }} data-testid="osd-viewer-root">
@@ -983,8 +1122,8 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
             data-testid="osd-overlay"
             style={{
               position: 'absolute', inset: 0, zIndex: 12,
-              cursor: activeTool === 'roi1' || activeTool === 'roi2' ? 'crosshair' : 'default',
-              pointerEvents: activeTool === 'roi1' || activeTool === 'roi2' ? 'auto' : 'none',
+              cursor: activeTool === 'roi1' || activeTool === 'roi2' || activeTool === 'annotate' ? 'crosshair' : 'default',
+              pointerEvents: activeTool === 'roi1' || activeTool === 'roi2' || activeTool === 'annotate' ? 'auto' : 'none',
             }}
           >
             {/* Heatmap tiles */}
@@ -1024,9 +1163,91 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
               </>
             )}
 
+            {/* Anotaciones docentes: siempre visibles, sin importar el modo activo */}
+            {annotationViewerRects.map((annotation) => {
+              const isEditing = editingAnnotationId === annotation.id;
+              return (
+                <React.Fragment key={annotation.id}>
+                  <div
+                    style={{
+                      position: 'absolute', left: annotation.viewerRect.left, top: annotation.viewerRect.top,
+                      width: annotation.viewerRect.width, height: annotation.viewerRect.height,
+                      border: `2px solid ${ROI_COLORS.annotation}`,
+                      borderRadius: annotation.shape === 'ellipse' ? '50%' : 0,
+                      background: isEditing ? 'rgba(167,139,250,0.20)' : 'rgba(167,139,250,0.10)',
+                      boxShadow: '0 0 0 1px rgba(15,23,42,0.4)', pointerEvents: 'none',
+                    }}
+                    data-testid={`annotation-overlay-${annotation.id}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenAnnotationPopover((prev) => (prev === annotation.id ? null : annotation.id));
+                    }}
+                    data-testid={`annotation-label-${annotation.id}`}
+                    style={{
+                      position: 'absolute', left: annotation.viewerRect.left,
+                      top: Math.max(0, annotation.viewerRect.top - 22),
+                      background: 'rgba(124,58,237,0.92)', color: '#fff', fontSize: 10, fontWeight: 800,
+                      padding: '2px 8px', borderRadius: '4px 4px 4px 0', border: 'none', cursor: 'pointer',
+                      pointerEvents: 'auto', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    📌 {annotation.label}
+                  </button>
+                  {openAnnotationPopover === annotation.id && (
+                    <div
+                      data-testid={`annotation-popover-${annotation.id}`}
+                      style={{
+                        position: 'absolute', left: annotation.viewerRect.left,
+                        top: annotation.viewerRect.top + annotation.viewerRect.height + 4,
+                        zIndex: 30, width: 230, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+                        padding: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', pointerEvents: 'auto',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 12, color: '#1e293b', marginBottom: 4 }}>{annotation.label}</div>
+                      {annotation.note && (
+                        <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.5, marginBottom: 8, whiteSpace: 'pre-wrap' }}>
+                          {annotation.note}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: canAnnotate ? 8 : 0 }}>
+                        {annotation.creator_name || 'Docente'}
+                      </div>
+                      {canAnnotate && (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => startEditAnnotation(annotation)}
+                            style={{ flex: 1, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#374151', borderRadius: 6, padding: '4px 0', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAnnotation(annotation.id)}
+                            disabled={deletingAnnotationId === annotation.id}
+                            style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }}
+                          >
+                            {deletingAnnotationId === annotation.id ? '...' : '✕'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+
+            {/* Anotación recién dibujada, en espera de texto */}
+            {annotationDraftViewerRect && !draftRect && (
+              <div style={{ position: 'absolute', left: annotationDraftViewerRect.left, top: annotationDraftViewerRect.top, width: annotationDraftViewerRect.width, height: annotationDraftViewerRect.height, border: `2px dashed ${ROI_COLORS.annotation}`, borderRadius: annotationForm.shape === 'ellipse' ? '50%' : 0, background: 'rgba(167,139,250,0.14)', pointerEvents: 'none' }} />
+            )}
+
             {/* Draft rect */}
             {draftRect && (
-              <div style={{ position: 'absolute', left: draftRect.x, top: draftRect.y, width: draftRect.width, height: draftRect.height, border: `2px dashed ${ROI_COLORS.draft}`, background: 'rgba(250,204,21,0.10)', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', left: draftRect.x, top: draftRect.y, width: draftRect.width, height: draftRect.height, border: `2px dashed ${activeTool === 'annotate' ? ROI_COLORS.annotation : ROI_COLORS.draft}`, borderRadius: activeTool === 'annotate' && annotationShapeTool === 'ellipse' ? '50%' : 0, background: activeTool === 'annotate' ? 'rgba(167,139,250,0.14)' : 'rgba(250,204,21,0.10)', pointerEvents: 'none' }} />
             )}
           </div>
         )}
@@ -1059,13 +1280,14 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
         {/* MODO */}
         <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid #e8edf2' }}>
           <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>MODO</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: canAnnotate ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr', gap: 5 }}>
             {[
               { id: 'navigate', label: 'Navegar', sub: null },
               { id: 'roi1', label: 'ROI 1', sub: 'mapa' },
               { id: 'roi2', label: 'ROI 2', sub: 'clasificar' },
+              ...(canAnnotate ? [{ id: 'annotate', label: 'Anotar', sub: 'marcar' }] : []),
             ].map((tool) => (
-              <button key={tool.id} onClick={() => setActiveTool(tool.id)} aria-pressed={activeTool === tool.id} data-testid={`osd-mode-${tool.id}`} style={{ border: activeTool === tool.id ? 'none' : '1px solid #e2e8f0', background: activeTool === tool.id ? (tool.id === 'roi2' ? '#ea580c' : tool.id === 'roi1' ? '#0284c7' : '#1e293b') : '#f8fafc', color: activeTool === tool.id ? '#fff' : '#64748b', borderRadius: 8, padding: '7px 4px', cursor: 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1.3, textAlign: 'center' }}>
+              <button key={tool.id} onClick={() => setActiveTool(tool.id)} aria-pressed={activeTool === tool.id} data-testid={`osd-mode-${tool.id}`} style={{ border: activeTool === tool.id ? 'none' : '1px solid #e2e8f0', background: activeTool === tool.id ? (tool.id === 'roi2' ? '#ea580c' : tool.id === 'roi1' ? '#0284c7' : tool.id === 'annotate' ? '#7c3aed' : '#1e293b') : '#f8fafc', color: activeTool === tool.id ? '#fff' : '#64748b', borderRadius: 8, padding: '7px 4px', cursor: 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1.3, textAlign: 'center' }}>
                 {tool.label}
                 {tool.sub && <div style={{ fontSize: 9, fontWeight: 400, opacity: 0.85 }}>{tool.sub}</div>}
               </button>
@@ -1091,7 +1313,13 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
           {activeTool === 'navigate' && (
             <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12, color: '#6b7280' }}>
               <div style={{ fontWeight: 600, color: '#374151', marginBottom: 4 }}>Cómo usar el visor</div>
-              {[['🖱️', 'Arrastra para navegar'], ['🔍', 'Scroll para zoom'], ['📍', 'ROI 1: dibuja para el mapa de calor'], ['🎯', 'ROI 2: dibuja para clasificar']].map(([icon, text]) => (
+              {[
+                ['🖱️', 'Arrastra para navegar'],
+                ['🔍', 'Scroll para zoom'],
+                ['📍', 'ROI 1: dibuja para el mapa de calor'],
+                ['🎯', 'ROI 2: dibuja para clasificar'],
+                ...(canAnnotate ? [['📌', 'Anotar: marca una región con texto, sin IA']] : []),
+              ].map(([icon, text]) => (
                 <div key={text} style={{ display: 'flex', gap: 8 }}><span>{icon}</span><span>{text}</span></div>
               ))}
               {modelStatus && (
@@ -1435,6 +1663,126 @@ export function OpenSeadragonViewer({ imageData, initialSession = null }) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── ANOTAR MODE (solo docente/administrador) ── */}
+          {activeTool === 'annotate' && canAnnotate && (
+            <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+              {annotationError && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 10, color: '#dc2626', fontSize: 12 }}>
+                  {annotationError}
+                </div>
+              )}
+
+              {/* Forma: se aplica al próximo trazo, y se puede seguir ajustando en el formulario de abajo. */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Forma</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                  {[{ id: 'rect', label: '▭ Rectángulo' }, { id: 'ellipse', label: '⬭ Óvalo' }].map((option) => {
+                    const isActive = (annotationDraftRoi ? annotationForm.shape : annotationShapeTool) === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        data-testid={`annotation-shape-${option.id}`}
+                        onClick={() => {
+                          setAnnotationShapeTool(option.id);
+                          if (annotationDraftRoi) setAnnotationForm((f) => ({ ...f, shape: option.id }));
+                        }}
+                        style={{
+                          border: isActive ? 'none' : '1px solid #ddd6fe', background: isActive ? '#7c3aed' : '#fff',
+                          color: isActive ? '#fff' : '#6d28d9', borderRadius: 7, padding: '6px 0', cursor: 'pointer',
+                          fontSize: 11, fontWeight: 700,
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {annotationDraftRoi ? (
+                <div style={{ border: '1px solid #ddd6fe', borderRadius: 10, padding: 12, background: '#faf5ff' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#6d28d9', marginBottom: 8 }}>
+                    {editingAnnotationId ? 'Editar anotación' : 'Nueva anotación'}
+                  </div>
+                  <input
+                    type="text"
+                    value={annotationForm.label}
+                    onChange={(e) => setAnnotationForm((f) => ({ ...f, label: e.target.value }))}
+                    placeholder="Ej: Linfocito, necrosis caseosa..."
+                    maxLength={200}
+                    data-testid="annotation-label-input"
+                    style={{ width: '100%', border: '1px solid #ddd6fe', borderRadius: 6, padding: '6px 8px', fontSize: 12, marginBottom: 8, boxSizing: 'border-box' }}
+                  />
+                  <textarea
+                    value={annotationForm.note}
+                    onChange={(e) => setAnnotationForm((f) => ({ ...f, note: e.target.value }))}
+                    placeholder="Nota para el estudiante (opcional)"
+                    maxLength={2000}
+                    rows={4}
+                    data-testid="annotation-note-input"
+                    style={{ width: '100%', border: '1px solid #ddd6fe', borderRadius: 6, padding: '6px 8px', fontSize: 12, resize: 'vertical', marginBottom: 8, boxSizing: 'border-box' }}
+                  />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={cancelAnnotationDraft} style={{ flex: 1, border: '1px solid #e2e8f0', background: '#fff', color: '#6b7280', borderRadius: 7, padding: '7px 0', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={saveAnnotation}
+                      disabled={savingAnnotation || !annotationForm.label.trim()}
+                      data-testid="annotation-save-button"
+                      style={{ flex: 2, border: 'none', background: annotationForm.label.trim() ? '#7c3aed' : '#e2e8f0', color: annotationForm.label.trim() ? '#fff' : '#94a3b8', borderRadius: 7, padding: '7px 0', cursor: annotationForm.label.trim() ? 'pointer' : 'not-allowed', fontSize: 11, fontWeight: 700 }}
+                    >
+                      {savingAnnotation ? 'Guardando...' : editingAnnotationId ? 'Guardar cambios' : 'Guardar anotación'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span style={{ color: '#94a3b8', fontSize: 11, fontWeight: 700 }}>✎</span>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>Dibuja el área a marcar</div>
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                      No dispara ningún análisis de IA: queda visible solo como marcador con texto.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 8 }}>
+                  Anotaciones ({annotationsLoading ? '…' : annotations.length})
+                </div>
+                {!annotationsLoading && annotations.length === 0 && (
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Sin anotaciones todavía.</div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {annotations.map((annotation) => (
+                    <div key={annotation.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 9px', background: '#f8fafc' }} data-testid={`annotation-list-item-${annotation.id}`}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3, gap: 6 }}>
+                        <button onClick={() => focusAnnotation(annotation)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#6d28d9', textAlign: 'left', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          📌 {annotation.label}
+                        </button>
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <button onClick={() => startEditAnnotation(annotation)} style={{ border: '1px solid #e2e8f0', background: '#fff', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', fontSize: 10 }} title="Editar" aria-label={`Editar ${annotation.label}`}>
+                            ✎
+                          </button>
+                          <button onClick={() => handleDeleteAnnotation(annotation.id)} disabled={deletingAnnotationId === annotation.id} style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', fontSize: 10 }} title="Eliminar" aria-label={`Eliminar ${annotation.label}`}>
+                            {deletingAnnotationId === annotation.id ? '...' : '✕'}
+                          </button>
+                        </div>
+                      </div>
+                      {annotation.note && <div style={{ fontSize: 11, color: '#6b7280' }}>{annotation.note}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
