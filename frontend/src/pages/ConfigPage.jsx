@@ -29,6 +29,7 @@ import {
   listAllSurveysAdmin,
   getSurveySummary,
   getSurveyOpenAnswers,
+  getSurveyWordCloud,
   downloadSurveyCsv,
   updateSurveyStatus,
   getLlmUsageSummary,
@@ -36,6 +37,7 @@ import {
   downloadLlmUsageCsv,
 } from "../api";
 import { AppSidebar } from "../components/AppSidebar";
+import { WordCloud } from "../components/WordCloud";
 import {
   API_BASE,
   authFetch,
@@ -122,6 +124,9 @@ export function ConfigPage() {
   const [selectedSurveyCode, setSelectedSurveyCode] = useState(null);
   const [surveySummary, setSurveySummary] = useState(null);
   const [surveyOpen, setSurveyOpen] = useState([]);
+  const [surveyWordCloud, setSurveyWordCloud] = useState([]);
+  // Por pregunta abierta: "cloud" resume, "list" muestra las respuestas crudas.
+  const [openAnswerView, setOpenAnswerView] = useState({});
   const [loadingSurveyDetail, setLoadingSurveyDetail] = useState(false);
   const [togglingSurveyStatus, setTogglingSurveyStatus] = useState(false);
 
@@ -682,12 +687,14 @@ export function ConfigPage() {
     if (!code) return;
     setLoadingSurveyDetail(true);
     try {
-      const [summary, openAns] = await Promise.all([
+      const [summary, openAns, cloud] = await Promise.all([
         getSurveySummary(code),
         getSurveyOpenAnswers(code),
+        getSurveyWordCloud(code),
       ]);
       setSurveySummary(summary);
       setSurveyOpen(openAns || []);
+      setSurveyWordCloud(cloud || []);
     } catch (error) {
       showToast(error.message || "No se pudo cargar el detalle.", "error");
     } finally {
@@ -699,6 +706,7 @@ export function ConfigPage() {
     setSelectedSurveyCode(code);
     setSurveySummary(null);
     setSurveyOpen([]);
+    setSurveyWordCloud([]);
     await loadSurveyDetail(code);
   };
 
@@ -1208,23 +1216,19 @@ export function ConfigPage() {
     && heatmapMaxTiles > 0
     && !generatingHeatmap;
 
-  const TABS = [
-    { id: "images", label: "Gestión de Imágenes", icon: "🖼️" },
-    { id: "ai",     label: "Configuración IA",    icon: "🤖" },
-    { id: "sct",    label: "Tests SCT",            icon: "📋" },
-  ];
-
+  // Pestañas del panel. Las de administración solo existen para ese rol: no se
+  // renderizan deshabilitadas, sencillamente no están.
   const visibleTabs = [
-    { id: "images", label: "Gestión de imágenes", icon: "IMG" },
-    { id: "rag", label: "Documentos RAG", icon: "RAG" },
-    { id: "sct", label: "Tests SCT", icon: "SCT" },
+    { id: "images", label: "Gestión de imágenes", icon: "🖼️" },
+    { id: "rag", label: "Documentos RAG", icon: "📚" },
+    { id: "sct", label: "Tests SCT", icon: "📋" },
     { id: "analytics", label: "Análisis", icon: "📊" },
     ...(canManageAdminSettings(role) ? [
-      { id: "users", label: "Usuarios", icon: "USR" },
-      { id: "ai", label: "Configuración IA", icon: "IA" },
+      { id: "users", label: "Usuarios", icon: "👥" },
+      { id: "ai", label: "Configuración IA", icon: "🤖" },
       { id: "tokens", label: "Tokens", icon: "💰" },
-      { id: "correo", label: "Gestión de Correo", icon: "✉" },
-      { id: "audit", label: "Auditoria", icon: "LOG" },
+      { id: "correo", label: "Gestión de correo", icon: "✉️" },
+      { id: "audit", label: "Auditoría", icon: "📜" },
     ] : []),
   ];
 
@@ -1257,8 +1261,8 @@ export function ConfigPage() {
                 className={`cfg-tab ${activeTab === tab.id ? "active" : ""}`}
                 onClick={() => setActiveTab(tab.id)}
               >
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
+                <span className="cfg-tab-icon" aria-hidden="true">{tab.icon}</span>
+                <span className="cfg-tab-label">{tab.label}</span>
               </button>
             ))}
           </div>
@@ -2232,11 +2236,13 @@ export function ConfigPage() {
             const SLIDER_KEYS = ["temperature", "top_p"];
             const MODEL_OPTS = {
               llm_model: ["llama3.1:8b", "llama3:8b", "llama3:70b", "mistral:7b", "phi3:mini", "qwen2:7b", "gemma2:9b"],
+              // Groq exige el identificador completo, con el prefijo del
+              // proveedor original: "gpt-oss-20b" a secas devuelve HTTP 404.
               llm_api_model: [
                 "llama-3.3-70b-versatile",
                 "llama-3.1-8b-instant",
-                "llama3-70b-8192",
-                "llama3-8b-8192",
+                "openai/gpt-oss-20b",
+                "openai/gpt-oss-120b",
               ],
               embedding_model: [
                 "sentence-transformers/all-MiniLM-L6-v2",
@@ -3243,23 +3249,56 @@ export function ConfigPage() {
 
                     {surveyOpen.length > 0 && (
                       <>
-                        <h3 style={{ margin: "16px 0 10px", fontSize: 16 }}>Respuestas abiertas</h3>
+                        <h3 style={{ margin: "16px 0 4px", fontSize: 16 }}>Respuestas abiertas</h3>
+                        <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--muted)", maxWidth: 640, lineHeight: 1.5 }}>
+                          La nube resume los términos más repetidos por el curso. El tamaño indica
+                          cuántas veces se mencionó cada palabra; haz clic en una para ver el detalle.
+                        </p>
                         <div style={{ display: "grid", gap: 16 }}>
-                          {surveyOpen.map((oa) => (
-                            <div key={oa.item_id} style={{ background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
-                              <div style={{ color: "var(--muted)", fontSize: 11, marginBottom: 4 }}>{oa.section}</div>
-                              <div style={{ fontWeight: 600, marginBottom: 10 }}>{oa.item_text}</div>
-                              {oa.answers.length === 0 ? (
-                                <div style={{ color: "var(--muted)", fontSize: 13, fontStyle: "italic" }}>Sin respuestas todavía.</div>
-                              ) : (
-                                <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
-                                  {oa.answers.map((ans, idx) => (
-                                    <li key={idx} style={{ fontSize: 14, lineHeight: 1.5 }}>{ans}</li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          ))}
+                          {surveyOpen.map((oa) => {
+                            // Por defecto se muestra la nube: con muchas respuestas, la
+                            // lista cruda obliga a leerlas todas para sacar una conclusion.
+                            const view = openAnswerView[oa.item_id] || "cloud";
+                            const cloud = surveyWordCloud.find((w) => w.item_id === oa.item_id);
+                            return (
+                              <div key={oa.item_id} style={{ background: "var(--bg-1)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ color: "var(--muted)", fontSize: 11, marginBottom: 4 }}>{oa.section}</div>
+                                    <div style={{ fontWeight: 600, marginBottom: 10 }}>{oa.item_text}</div>
+                                  </div>
+                                  <div className="wc-toggle" role="group" aria-label="Vista de las respuestas">
+                                    <button
+                                      type="button"
+                                      className={view === "cloud" ? "active" : ""}
+                                      onClick={() => setOpenAnswerView((prev) => ({ ...prev, [oa.item_id]: "cloud" }))}
+                                    >
+                                      Nube de palabras
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={view === "list" ? "active" : ""}
+                                      onClick={() => setOpenAnswerView((prev) => ({ ...prev, [oa.item_id]: "list" }))}
+                                    >
+                                      Respuestas ({oa.answers.length})
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {oa.answers.length === 0 ? (
+                                  <div style={{ color: "var(--muted)", fontSize: 13, fontStyle: "italic" }}>Sin respuestas todavía.</div>
+                                ) : view === "cloud" ? (
+                                  <WordCloud words={cloud?.words || []} />
+                                ) : (
+                                  <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
+                                    {oa.answers.map((ans, idx) => (
+                                      <li key={idx} style={{ fontSize: 14, lineHeight: 1.5 }}>{ans}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </>
                     )}

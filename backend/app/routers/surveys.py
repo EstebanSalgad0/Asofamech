@@ -40,9 +40,11 @@ from ..models import (
     SurveyResponse,
     User,
 )
+from ..text_analysis import word_frequencies
 from ..schemas import (
     ItemStat,
     OpenAnswerOut,
+    WordCloudOut,
     SectionStat,
     SurveyDetailOut,
     SurveyItemOut,
@@ -381,6 +383,55 @@ def get_open_answers(
             "answers": by_item.get(i.id, []),
         }
         for i in open_items
+    ]
+
+
+@router.get("/{code}/word-cloud", response_model=list[WordCloudOut])
+def get_word_cloud(
+    code: str,
+    limit: int = 60,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_permission(PERM_VIEW_SURVEYS)),
+):
+    """Terminos mas frecuentes por pregunta abierta.
+
+    Mismo origen que `/open-answers` y las mismas garantias: agrega sobre
+    respuestas anonimas y no expone quien escribio que. Se calcula en el
+    servidor para que el navegador no tenga que descargar todas las respuestas
+    solo para contarlas.
+    """
+    limit = max(10, min(limit, 200))
+    survey = _get_survey_or_404(db, code)
+    open_items = [i for i in survey.items if i.item_type == "open_text"]
+    if not open_items:
+        return []
+
+    ids = [i.id for i in open_items]
+    rows = (
+        db.query(SurveyAnswer.item_id, SurveyAnswer.value_text)
+        .join(SurveyResponse, SurveyAnswer.response_id == SurveyResponse.id)
+        .filter(
+            SurveyResponse.survey_id == survey.id,
+            SurveyAnswer.item_id.in_(ids),
+            SurveyAnswer.value_text.isnot(None),
+        )
+        .all()
+    )
+
+    by_item: dict[int, list[str]] = defaultdict(list)
+    for item_id, text in rows:
+        if text and text.strip():
+            by_item[item_id].append(text)
+
+    return [
+        {
+            "item_id": item.id,
+            "item_text": item.text,
+            "section": item.section,
+            "total_answers": len(by_item.get(item.id, [])),
+            "words": word_frequencies(by_item.get(item.id, []), limit=limit),
+        }
+        for item in open_items
     ]
 
 

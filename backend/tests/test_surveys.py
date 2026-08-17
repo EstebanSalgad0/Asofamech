@@ -270,3 +270,61 @@ def test_csv_export_excludes_user_id(surveys_client):
     body = resp.text
     assert "user_id" not in body.lower().splitlines()[0]
     assert "Muy bueno" in body
+
+
+# ---------- Nube de palabras de las respuestas abiertas ----------
+
+def _submit_open_answer(client, SessionLocal, current, user_id, text):
+    ids = _item_ids(SessionLocal)
+    current["user_id"] = user_id
+    current["role"] = "estudiante"
+    return client.post(
+        "/api/surveys/demo/responses",
+        json={
+            "answers": [
+                {"item_id": ids[0], "value_int": 4},
+                {"item_id": ids[1], "value_int": 5},
+                {"item_id": ids[2], "value_text": text},
+            ]
+        },
+    )
+
+
+def test_word_cloud_ranks_terms_and_drops_stopwords(surveys_client):
+    client, SessionLocal, current = surveys_client
+    _submit_open_answer(client, SessionLocal, current, 1, "El razonamiento clinico mejoro mucho con los casos")
+    _submit_open_answer(client, SessionLocal, current, 3, "Muy util el razonamiento clinico de los casos")
+
+    current["user_id"] = 2
+    current["role"] = "docente"
+    resp = client.get("/api/surveys/demo/word-cloud")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+
+    cloud = data[0]
+    assert cloud["total_answers"] == 2
+    words = {w["text"]: w for w in cloud["words"]}
+    assert "razonamiento" in words
+    assert words["razonamiento"]["responses"] == 2
+    # Palabras vacías del español fuera de la nube.
+    assert not ({"con", "los", "muy"} & set(words))
+
+
+def test_word_cloud_groups_accents_and_casing(surveys_client):
+    client, SessionLocal, current = surveys_client
+    _submit_open_answer(client, SessionLocal, current, 1, "clínico Clinico CLÍNICO")
+
+    current["user_id"] = 2
+    current["role"] = "docente"
+    words = client.get("/api/surveys/demo/word-cloud").json()[0]["words"]
+    clinical = [w for w in words if w["text"].startswith("cl")]
+    assert len(clinical) == 1
+    assert clinical[0]["count"] == 3
+
+
+def test_student_cannot_read_the_word_cloud(surveys_client):
+    client, _, current = surveys_client
+    current["user_id"] = 1
+    current["role"] = "estudiante"
+    assert client.get("/api/surveys/demo/word-cloud").status_code == 403
