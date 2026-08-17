@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from enum import Enum
+from datetime import datetime
 
 class CaseLinkIn(BaseModel):
     """Recurso externo del caso: bibliografia, guia, articulo, video o Wooclap."""
@@ -22,6 +23,10 @@ class CaseOut(BaseModel):
     title: str
     description: str
     body: str
+    case_code: Optional[str] = None
+    # Estructura PA-ASO-001. Al estudiante se le entrega sin las secciones
+    # docentes (Practical Script, justificacion, banco de evaluacion).
+    structured: Optional[dict] = None
     clinical_context: Optional[str] = None
     learning_objectives: Optional[str] = None
     difficulty: Optional[str] = None
@@ -44,7 +49,11 @@ class CaseOut(BaseModel):
 class CaseCreate(BaseModel):
     title: str
     description: str
-    body: str
+    # Si se envia `structured`, el cuerpo se regenera desde ella y este campo
+    # pasa a ser opcional.
+    body: Optional[str] = None
+    case_code: Optional[str] = None
+    structured: Optional[dict] = None
     clinical_context: Optional[str] = None
     learning_objectives: Optional[str] = None
     difficulty: Optional[str] = None
@@ -58,6 +67,8 @@ class CaseUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     body: Optional[str] = None
+    case_code: Optional[str] = None
+    structured: Optional[dict] = None
     clinical_context: Optional[str] = None
     learning_objectives: Optional[str] = None
     difficulty: Optional[str] = None
@@ -270,3 +281,200 @@ class OpenAnswerOut(BaseModel):
     item_text: str
     section: str
     answers: List[str] = []
+
+
+class WordFrequency(BaseModel):
+    text: str
+    count: int          # veces que aparece el termino en total
+    responses: int      # respuestas distintas donde aparece
+
+
+class WordCloudOut(BaseModel):
+    item_id: int
+    item_text: str
+    section: str
+    total_answers: int
+    words: List[WordFrequency] = []
+
+
+# ========== Revisor de informes por rúbrica ==========
+
+class RubricLevelIn(BaseModel):
+    label: str
+    score: float
+    descriptor: Optional[str] = None
+
+
+class RubricCriterionIn(BaseModel):
+    name: str
+    description: Optional[str] = None
+    levels: List[RubricLevelIn] = []
+
+
+class RubricBandIn(BaseModel):
+    label: str
+    min: float
+    max: float
+
+
+class RubricCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    criteria: List[RubricCriterionIn] = []
+    bands: List[RubricBandIn] = []
+    guidance: Optional[str] = None
+    case_id: Optional[int] = None
+    source_filename: Optional[str] = None
+    # Pasada esta fecha la rubrica deja de aceptar entregas nuevas. Sin fecha,
+    # queda abierta indefinidamente.
+    due_at: Optional[datetime] = None
+    status: str = "draft"
+
+
+class RubricUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    criteria: Optional[List[RubricCriterionIn]] = None
+    bands: Optional[List[RubricBandIn]] = None
+    guidance: Optional[str] = None
+    case_id: Optional[int] = None
+    due_at: Optional[datetime] = None
+    status: Optional[str] = None
+
+
+class RubricStatusUpdate(BaseModel):
+    status: str
+
+
+class RubricOut(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    criteria: List[dict] = []
+    bands: List[dict] = []
+    guidance: Optional[str] = None
+    max_score: float = 0.0
+    case_id: Optional[int] = None
+    source_filename: Optional[str] = None
+    due_at: Optional[str] = None
+    status: str = "draft"
+    created_by: Optional[int] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class RubricStudentProgress(BaseModel):
+    """Cuanto de sus 3 intentos gasto un estudiante en esta rubrica, y su ultima nota."""
+    user_id: int
+    student_name: Optional[str] = None
+    student_email: Optional[str] = None
+    attempts: int
+    attempts_max: int
+    latest_submission_id: Optional[int] = None
+    latest_status: Optional[str] = None
+    # Puntaje del intento mas reciente, en la escala propia de la rubrica
+    # (ej. 18 de 21) — no convertido a otra escala.
+    latest_score: Optional[float] = None
+    latest_max_score: Optional[float] = None
+    latest_released: bool = False
+
+
+class RubricDraftOut(BaseModel):
+    """Propuesta extraída de un documento; el docente la revisa antes de guardar."""
+    title: str
+    description: Optional[str] = None
+    criteria: List[dict] = []
+    bands: List[dict] = []
+    max_score: float = 0.0
+    source_filename: Optional[str] = None
+
+
+class EvaluationRelease(BaseModel):
+    released: bool
+    teacher_note: Optional[str] = None
+    teacher_score: Optional[float] = None
+
+
+class ReportEvaluationOut(BaseModel):
+    total_score: float
+    max_score: float
+    band: Optional[str] = None
+    criteria: List[dict] = []
+    summary: Optional[str] = None
+    strengths: List[str] = []
+    improvements: List[str] = []
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    evaluated_at: Optional[str] = None
+    released: bool = False
+    released_at: Optional[str] = None
+    teacher_note: Optional[str] = None
+    teacher_score: Optional[float] = None
+    # Puntaje que corresponde mostrar: el del docente si corrigió, si no el del modelo.
+    effective_score: float = 0.0
+
+
+class ReportSubmissionOut(BaseModel):
+    id: int
+    # Agrupa las filas que nacieron del mismo archivo subido contra varias
+    # rubricas a la vez: mismo batch_id = mismo informe, distintos resultados.
+    batch_id: str
+    rubric_id: int
+    rubric_title: Optional[str] = None
+    case_id: Optional[int] = None
+    case_title: Optional[str] = None
+    user_id: Optional[int] = None
+    student_name: Optional[str] = None
+    student_email: Optional[str] = None
+    original_filename: str
+    file_type: str
+    file_size: Optional[int] = None
+    status: str
+    error: Optional[str] = None
+    created_at: Optional[str] = None
+    # Ausente mientras la evaluación no esté liberada al estudiante.
+    evaluation: Optional[ReportEvaluationOut] = None
+    # Para el estudiante: hay resultado, pero el docente aún no lo publica.
+    evaluation_pending_release: bool = False
+
+
+# ========== Anotaciones docentes sobre imagenes ==========
+# Independientes del clasificador: un rectangulo con texto sobre una region de
+# la imagen, sin relacion con HistopathologySession ni con CONCH/CAMELYON.
+
+class AnnotationRoi(BaseModel):
+    """Rectangulo en coordenadas de imagen nivel-0 (los mismos pixeles absolutos
+    que ROIBox), pero definido aqui de forma independiente: una anotacion no
+    debe depender del modulo de histopatologia ni de su pipeline de IA."""
+    x: int = Field(..., ge=0)
+    y: int = Field(..., ge=0)
+    width: int = Field(..., gt=0, le=100000)
+    height: int = Field(..., gt=0, le=100000)
+
+
+class ImageAnnotationCreate(BaseModel):
+    roi: AnnotationRoi
+    # El ovalo es el inscrito en `roi`, no un esquema de coordenadas distinto.
+    shape: str = "rect"  # rect | ellipse
+    label: str = Field(..., min_length=1, max_length=200)
+    note: Optional[str] = Field(None, max_length=2000)
+
+
+class ImageAnnotationUpdate(BaseModel):
+    roi: Optional[AnnotationRoi] = None
+    shape: Optional[str] = None
+    label: Optional[str] = Field(None, min_length=1, max_length=200)
+    note: Optional[str] = Field(None, max_length=2000)
+
+
+class ImageAnnotationOut(BaseModel):
+    id: int
+    image_id: int
+    roi: dict
+    shape: str = "rect"
+    label: str
+    note: Optional[str] = None
+    created_by: Optional[int] = None
+    creator_name: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None

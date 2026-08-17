@@ -1,0 +1,77 @@
+{
+  "title": "Script de evaluación para informe clínico de alumno",
+  "description": "Evalúa si el informe clínico utiliza lenguaje médico adecuado, identifica correctamente el síntoma pivote e incluye los calificadores semánticos relevantes.",
+  "source_filename": "Script de evaluación para informe clínico de alumno.docx",
+  "status": "published",
+  "guidance": "Trabaja sobre el resumen clínico redactado por el estudiante. Los calificadores semánticos esperables incluyen temporalidad (hace 3 meses, últimas semanas, últimos días, diaria, nocturna), evolución (progresiva, empeoramiento, inicialmente, luego), intensidad (10 kg, marcada, profusa, pequeñas gotas de sangre) y características (involuntaria, seca, productiva, constante, en reposo). El síntoma pivote esperado es el más representativo del motivo clínico principal: por ejemplo, disnea progresiva en reposo, tos con hemoptisis o pérdida de peso involuntaria.",
+  "bands": [
+    { "label": "Adecuado", "min": 18, "max": 21 },
+    { "label": "Parcial", "min": 12, "max": 17 },
+    { "label": "Insuficiente", "min": 7, "max": 11 }
+  ],
+  "criteria": [
+    {
+      "name": "Lenguaje médico",
+      "description": "Usa terminología clínica correcta y precisa, y evita el lenguaje coloquial o ambiguo.",
+      "levels": [
+        { "label": "Adecuado", "score": 3, "descriptor": "Usa terminología clínica precisa, formal y coherente en todo el informe." },
+        { "label": "Parcial", "score": 2, "descriptor": "Usa lenguaje médico en general, pero con algunas expresiones imprecisas o coloquiales." },
+        { "label": "Insuficiente", "score": 1, "descriptor": "Predomina lenguaje coloquial, ambiguo o incorrecto." }
+      ]
+    },
+    {
+      "name": "Síntoma pivote",
+      "description": "Identifica un síntoma central que organiza el caso y lo expresa de forma clínicamente pertinente.",
+      "levels": [
+        { "label": "Adecuado", "score": 3, "descriptor": "Identifica claramente el síntoma pivote y lo formula de manera clínica y pertinente." },
+        { "label": "Parcial", "score": 2, "descriptor": "Identifica un síntoma central, pero con formulación incompleta, poco precisa o poco jerarquizada." },
+        { "label": "Insuficiente", "score": 1, "descriptor": "No identifica un síntoma pivote claro, o el elegido no organiza el caso clínicamente." }
+      ]
+    },
+    {
+      "name": "Temporalidad",
+      "description": "Describe el inicio y la evolución temporal del cuadro.",
+      "levels": [
+        { "label": "Adecuado", "score": 3, "descriptor": "Describe de forma clara el inicio y la evolución temporal del cuadro." },
+        { "label": "Parcial", "score": 2, "descriptor": "Menciona temporalidad, pero de forma incompleta o poco específica." },
+        { "label": "Insuficiente", "score": 1, "descriptor": "No describe temporalidad o es confusa." }
+      ]
+    },
+    {
+      "name": "Evolución",
+      "description": "Expresa si el cuadro es progresivo, agudo, crónico, reciente u otra evolución relevante.",
+      "levels": [
+        { "label": "Adecuado", "score": 3, "descriptor": "Expresa con claridad si el cuadro es progresivo, agudo, crónico, reciente u otra evolución relevante." },
+        { "label": "Parcial", "score": 2, "descriptor": "La evolución aparece mencionada, pero de forma parcial o poco consistente." },
+        { "label": "Insuficiente", "score": 1, "descriptor": "No describe evolución o la presenta de manera incorrecta." }
+      ]
+    },
+    {
+      "name": "Intensidad / cuantificación",
+      "description": "Incluye intensidad, magnitud o cantidad cuando corresponde.",
+      "levels": [
+        { "label": "Adecuado", "score": 3, "descriptor": "Incluye intensidad, magnitud o cantidad cuando corresponde." },
+        { "label": "Parcial", "score": 2, "descriptor": "Incluye algún dato de intensidad o cantidad, pero incompleto." },
+        { "label": "Insuficiente", "score": 1, "descriptor": "Omite intensidad o cuantificación relevante." }
+      ]
+    },
+    {
+      "name": "Características semánticas",
+      "description": "Usa calificadores como seco/productivo, constante/intermitente, nocturno/diurno, en reposo, involuntario.",
+      "levels": [
+        { "label": "Adecuado", "score": 3, "descriptor": "Usa calificadores adecuados como seco/productivo, constante/intermitente, nocturno/diurno, en reposo, involuntario." },
+        { "label": "Parcial", "score": 2, "descriptor": "Incluye algunos calificadores, pero no los necesarios o no de forma completa." },
+        { "label": "Insuficiente", "score": 1, "descriptor": "No utiliza calificadores semánticos relevantes." }
+      ]
+    },
+    {
+      "name": "Coherencia clínica",
+      "description": "El relato es ordenado, coherente y clínicamente interpretable.",
+      "levels": [
+        { "label": "Adecuado", "score": 3, "descriptor": "El relato es ordenado, coherente y clínicamente interpretable." },
+        { "label": "Parcial", "score": 2, "descriptor": "Presenta cierta coherencia, pero con saltos, repeticiones o desorden parcial." },
+        { "label": "Insuficiente", "score": 1, "descriptor": "El relato es confuso o difícil de interpretar clínicamente." }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,7 @@ const navItems = [
   { id: "sct", label: "Test SCT", path: "/dashboard/sct", icon: "clipboard", group: "Navegación" },
   { id: "images", label: "Imágenes IA", path: "/dashboard/images", icon: "image", group: "Navegación" },
   { id: "cases", label: "Casos Clínicos", path: "/dashboard/cases", icon: "cases", group: "Navegación" },
+  { id: "reports", label: "Revisión de Informes", path: "/dashboard/reports", icon: "reports", group: "Navegación" },
   { id: "surveys", label: "Encuestas", path: "/dashboard/surveys", icon: "surveys", group: "Navegación" },
   { id: "config", label: "Configuración", path: "/dashboard/config", icon: "settings", group: "Admin", privileged: true },
 ];
@@ -59,6 +60,15 @@ function Icon({ name }) {
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M14 2v6h6M9 13h6M9 17h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === "reports") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M15 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7l-4-4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M15 3v4h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m9 14 2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }

@@ -34,8 +34,14 @@ class MedicalImage(Base):
     uploaded_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
-    
+
     uploader = relationship("User", back_populates="uploaded_images")
+    annotations = relationship(
+        "ImageAnnotation",
+        back_populates="image",
+        cascade="all, delete-orphan",
+        order_by="ImageAnnotation.created_at",
+    )
 
 class Case(Base):
     __tablename__ = "cases"
@@ -43,6 +49,13 @@ class Case(Base):
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=False)
     body = Column(Text, nullable=False)
+    # Codigo editorial del caso (PAC-ASO-001). No es la clave primaria: los
+    # casos importados o en borrador pueden no tenerlo todavia.
+    case_code = Column(String(60), nullable=True, index=True)
+    # Caso completo en el formato PA-ASO-001 (ver app/case_structure.py).
+    # `body` se regenera desde aqui cuando existe, para que la busqueda y el
+    # contexto del chatbot sigan funcionando sin conocer la estructura.
+    structured_json = Column(JSON, nullable=True)
     clinical_context = Column(Text, nullable=True)
     learning_objectives = Column(Text, nullable=True)
     difficulty = Column(String(50), nullable=True)    # pregrado, internado, residente
@@ -244,6 +257,33 @@ class SCTAttempt(Base):
     user = relationship("User")
 
 
+class ImageAnnotation(Base):
+    """Marcador docente sobre una region de una imagen: "aqui hay un linfocito".
+
+    Deliberadamente independiente de HistopathologySession y del clasificador
+    CONCH/CAMELYON: una anotacion nunca dispara IA ni requiere que corriera
+    antes. El docente puede marcar y comentar cualquier imagen subida al visor
+    -incluso una que la coordinacion pidio explicitamente NO analizar- sin que
+    el pipeline de clasificacion se entere de que existe.
+    """
+    __tablename__ = "image_annotations"
+    id = Column(Integer, primary_key=True, index=True)
+    image_id = Column(Integer, ForeignKey("medical_images.id", ondelete="CASCADE"), nullable=False, index=True)
+    roi = Column(JSON, nullable=False)  # {x, y, width, height} en pixeles nivel-0 de la imagen
+    # La forma se dibuja como el óvalo inscrito en `roi`, no con centro+radio: asi
+    # reutiliza integramente el mismo rectangulo delimitador que ROI1/ROI2, y en
+    # el frontend basta un border-radius:50% para pintarla como elipse.
+    shape = Column(String(20), nullable=False, default="rect")  # rect | ellipse
+    label = Column(String(200), nullable=False)
+    note = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    image = relationship("MedicalImage", back_populates="annotations")
+    creator = relationship("User")
+
+
 class HistopathologySession(Base):
     """Registro persistente de cada analisis ROI 2 realizado por un usuario."""
     __tablename__ = "histopathology_sessions"
@@ -403,6 +443,114 @@ class LlmUsageLog(Base):
     success = Column(Boolean, nullable=False, default=True, index=True)
     error_kind = Column(String(60), nullable=True)                # http_401 | http_429 | timeout | ...
     estimated = Column(Boolean, nullable=False, default=False)    # tokens estimados por fallback
+
+
+# ========== Revisor de informes por rubrica ==========
+# El docente carga la rubrica (o la extrae de un .docx con ayuda del LLM), el
+# estudiante sube su informe clinico y el modelo lo puntua criterio por criterio.
+# El resultado nace privado: solo docente y administrador lo ven hasta que
+# alguno lo libera explicitamente.
+
+class Rubric(Base):
+    __tablename__ = "rubrics"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    # Documento del que se extrajo, cuando se genero desde un archivo.
+    source_filename = Column(String(200), nullable=True)
+    # [{name, description, weight, levels: [{label, score, descriptor}]}]
+    criteria_json = Column(JSON, nullable=False, default=list)
+    # [{label, min, max}] para traducir el puntaje total a un dictamen.
+    bands_json = Column(JSON, nullable=True)
+    max_score = Column(Float, nullable=False, default=0.0)
+    # Instrucciones extra que el docente quiere que el modelo tenga en cuenta.
+    guidance = Column(Text, nullable=True)
+    case_id = Column(Integer, ForeignKey("cases.id"), nullable=True, index=True)
+    # Pasada esta fecha, la rubrica deja de aceptar entregas nuevas de
+    # estudiantes (docente/administrador la pueden seguir usando para probar).
+    # Sin fecha, la rubrica queda abierta indefinidamente.
+    due_at = Column(DateTime, nullable=True)
+    status = Column(String(20), nullable=False, default="draft")  # draft | published | archived
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    case = relationship("Case", foreign_keys=[case_id])
+    creator = relationship("User", foreign_keys=[created_by])
+
+
+class ReportSubmission(Base):
+    """Informe que sube un estudiante para ser revisado contra una rubrica.
+
+    Un mismo archivo puede evaluarse contra varias rubricas a la vez: cada
+    combinacion (archivo, rubrica) es una fila propia, con su propia
+    evaluacion, para que el docente pueda corregir y publicar cada una por
+    separado. `batch_id` agrupa las filas que nacieron del mismo envio, para
+    que la interfaz las muestre como un solo informe con varios resultados en
+    vez de entregas sueltas sin relacion aparente entre si.
+    """
+    __tablename__ = "report_submissions"
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(String(36), nullable=False, index=True)
+    rubric_id = Column(Integer, ForeignKey("rubrics.id"), nullable=False, index=True)
+    case_id = Column(Integer, ForeignKey("cases.id"), nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    original_filename = Column(String(200), nullable=False)
+    stored_filename = Column(String(200), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_type = Column(String(20), nullable=False)
+    file_size = Column(BigInteger, nullable=True)
+    # Texto plano extraido del documento: es lo que ve el modelo, y guardarlo
+    # permite reevaluar sin volver a abrir el archivo.
+    extracted_text = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="pending")  # pending | evaluated | failed
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    rubric = relationship("Rubric")
+    case = relationship("Case", foreign_keys=[case_id])
+    student = relationship("User", foreign_keys=[user_id])
+    evaluation = relationship(
+        "ReportEvaluation",
+        back_populates="submission",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class ReportEvaluation(Base):
+    """Resultado de la revision automatica. Privado hasta que se libera."""
+    __tablename__ = "report_evaluations"
+    id = Column(Integer, primary_key=True, index=True)
+    submission_id = Column(
+        Integer, ForeignKey("report_submissions.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True,
+    )
+    total_score = Column(Float, nullable=False, default=0.0)
+    max_score = Column(Float, nullable=False, default=0.0)
+    band = Column(String(80), nullable=True)          # Adecuado | Parcial | Insuficiente
+    # [{criterion, score, max_score, level, justification, evidence}]
+    criteria_json = Column(JSON, nullable=False, default=list)
+    summary = Column(Text, nullable=True)
+    strengths = Column(JSON, nullable=True)           # [str]
+    improvements = Column(JSON, nullable=True)        # [str]
+    provider = Column(String(40), nullable=True)
+    model = Column(String(120), nullable=True)
+    evaluated_at = Column(DateTime, default=datetime.utcnow)
+
+    # Control de visibilidad. Nace en False: la nota no llega al estudiante
+    # hasta que un docente la revisa y decide publicarla.
+    released = Column(Boolean, nullable=False, default=False)
+    released_at = Column(DateTime, nullable=True)
+    released_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    teacher_note = Column(Text, nullable=True)
+    # Puntaje corregido por el docente; si esta presente, manda sobre el del modelo.
+    teacher_score = Column(Float, nullable=True)
+
+    submission = relationship("ReportSubmission", back_populates="evaluation")
+    releaser = relationship("User", foreign_keys=[released_by])
 
 
 class SurveyParticipation(Base):

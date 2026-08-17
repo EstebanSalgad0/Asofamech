@@ -340,6 +340,18 @@ export async function deleteCase(caseId) {
   }
 }
 
+/**
+ * Sube un documento y devuelve la propuesta de caso clínico. No guarda nada:
+ * el docente revisa la estructura en el editor antes de crear el caso.
+ */
+export async function importCaseFromFile(formData) {
+  const res = await authFetch("/api/cases/import", {
+    method: "POST",
+    body: formData,
+  });
+  return parseJsonResponse(res, "No se pudo interpretar el documento del caso clínico");
+}
+
 export async function listCaseImages(caseId) {
   const res = await authFetch(`/api/cases/${caseId}/images`);
   return parseJsonResponse(res, "No se pudieron cargar las imagenes del caso");
@@ -406,6 +418,11 @@ export async function getSurveyOpenAnswers(code) {
   return parseJsonResponse(res, "No se pudieron cargar las respuestas abiertas");
 }
 
+export async function getSurveyWordCloud(code) {
+  const res = await authFetch(`/api/surveys/${encodeURIComponent(code)}/word-cloud`);
+  return parseJsonResponse(res, "No se pudo cargar la nube de palabras");
+}
+
 export async function downloadSurveyCsv(code) {
   const res = await authFetch(`/api/surveys/${encodeURIComponent(code)}/export.csv`);
   if (!res.ok) throw new Error(`Error al exportar CSV (${res.status})`);
@@ -440,4 +457,168 @@ export async function confirmPasswordReset(token, newPassword) {
   const payload = await res.json().catch(() => null);
   if (!res.ok) throw new Error(payload?.detail || "Error al restablecer la contraseña");
   return payload;
+}
+
+// ============ Revisor de informes por rúbrica ============
+
+export async function listRubrics(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.caseId) params.set("case_id", filters.caseId);
+  const query = params.toString();
+  const res = await authFetch(`/api/reports/rubrics${query ? `?${query}` : ""}`);
+  return parseJsonResponse(res, "No se pudieron cargar las rúbricas");
+}
+
+export async function getRubric(rubricId) {
+  const res = await authFetch(`/api/reports/rubrics/${rubricId}`);
+  return parseJsonResponse(res, "No se pudo cargar la rúbrica");
+}
+
+/** Por estudiante: intentos usados de esta rúbrica y su nota más reciente (0-100). */
+export async function getRubricProgress(rubricId) {
+  const res = await authFetch(`/api/reports/rubrics/${rubricId}/progress`);
+  return parseJsonResponse(res, "No se pudo cargar el progreso de la rúbrica");
+}
+
+/** Sube el documento de la rúbrica y devuelve la propuesta extraída por la IA. */
+export async function extractRubricFromFile(formData) {
+  const res = await authFetch("/api/reports/rubrics/extract", {
+    method: "POST",
+    body: formData,
+  });
+  return parseJsonResponse(res, "No se pudo interpretar el documento de la rúbrica");
+}
+
+export async function createRubric(payload) {
+  const res = await authFetch("/api/reports/rubrics", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo crear la rúbrica");
+}
+
+export async function updateRubric(rubricId, payload) {
+  const res = await authFetch(`/api/reports/rubrics/${rubricId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar la rúbrica");
+}
+
+export async function updateRubricStatus(rubricId, status) {
+  const res = await authFetch(`/api/reports/rubrics/${rubricId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return parseJsonResponse(res, "No se pudo cambiar el estado de la rúbrica");
+}
+
+export async function deleteRubric(rubricId) {
+  const res = await authFetch(`/api/reports/rubrics/${rubricId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.detail || `Error al eliminar la rúbrica (${res.status})`);
+  }
+}
+
+export async function submitReport(formData) {
+  const res = await authFetch("/api/reports/submissions", {
+    method: "POST",
+    body: formData,
+  });
+  return parseJsonResponse(res, "No se pudo enviar el informe");
+}
+
+export async function listMyReportSubmissions() {
+  const res = await authFetch("/api/reports/submissions/mine");
+  return parseJsonResponse(res, "No se pudieron cargar tus entregas");
+}
+
+export async function listReportSubmissions(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.rubricId) params.set("rubric_id", filters.rubricId);
+  if (filters.caseId) params.set("case_id", filters.caseId);
+  if (filters.status) params.set("status", filters.status);
+  const query = params.toString();
+  const res = await authFetch(`/api/reports/submissions${query ? `?${query}` : ""}`);
+  return parseJsonResponse(res, "No se pudieron cargar las entregas");
+}
+
+export async function reevaluateReport(submissionId) {
+  const res = await authFetch(`/api/reports/submissions/${submissionId}/evaluate`, {
+    method: "POST",
+  });
+  return parseJsonResponse(res, "No se pudo reevaluar el informe");
+}
+
+export async function releaseReportEvaluation(submissionId, payload) {
+  const res = await authFetch(`/api/reports/submissions/${submissionId}/release`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar la visibilidad de la evaluación");
+}
+
+export async function deleteReportSubmission(submissionId) {
+  const res = await authFetch(`/api/reports/submissions/${submissionId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.detail || `Error al eliminar la entrega (${res.status})`);
+  }
+}
+
+export async function downloadReportFile(submissionId, filename) {
+  const res = await authFetch(`/api/reports/submissions/${submissionId}/file`);
+  if (!res.ok) throw new Error(`Error al descargar el informe (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || `informe_${submissionId}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ============ Anotaciones docentes sobre imágenes ============
+// Independientes del clasificador: un rectángulo con texto sobre una región de
+// la imagen. Nunca disparan ni requieren el pipeline de IA.
+
+export async function listImageAnnotations(imageId) {
+  const res = await authFetch(`/api/medical-images/${imageId}/annotations`);
+  return parseJsonResponse(res, "No se pudieron cargar las anotaciones");
+}
+
+export async function createImageAnnotation(imageId, payload) {
+  const res = await authFetch(`/api/medical-images/${imageId}/annotations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo crear la anotación");
+}
+
+export async function updateImageAnnotation(annotationId, payload) {
+  const res = await authFetch(`/api/medical-images/annotations/${annotationId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar la anotación");
+}
+
+export async function deleteImageAnnotation(annotationId) {
+  const res = await authFetch(`/api/medical-images/annotations/${annotationId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.detail || `Error al eliminar la anotación (${res.status})`);
+  }
 }

@@ -2,7 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from .routers import admin, auth, chat, cases, dashboard, history, rag, sct, medical_images, histopathology, surveys
+from .routers import (
+    admin, auth, chat, cases, dashboard, history, image_annotations, rag,
+    reports, sct, medical_images, histopathology, surveys,
+)
 
 app = FastAPI(title="Backend ASOFAMECH Educativo")
 
@@ -46,14 +49,18 @@ def on_startup():
 
     try:
         from .db import SessionLocal
+        from .seeds.cases_loader import seed_cases
+        from .seeds.rubrics_loader import seed_rubrics
         from .seeds.surveys_loader import seed_surveys
         db = SessionLocal()
         try:
             seed_surveys(db)
+            seed_cases(db)
+            seed_rubrics(db)
         finally:
             db.close()
     except Exception as exc:
-        print(f"[backend] ADVERTENCIA: No se pudieron sembrar las encuestas: {exc}")
+        print(f"[backend] ADVERTENCIA: No se pudieron sembrar los datos iniciales: {exc}")
 
     print("[backend] Servicio FastAPI iniciado correctamente.")
 
@@ -73,8 +80,10 @@ app.include_router(admin.router)
 app.include_router(sct.router)
 app.include_router(auth.router)
 app.include_router(medical_images.router)
+app.include_router(image_annotations.router)
 app.include_router(histopathology.router)
 app.include_router(surveys.router)
+app.include_router(reports.router)
 
 # Las imágenes médicas y tiles DZI se sirven exclusivamente a través de los
 # endpoints autenticados de /api/medical-images/. No se expone el directorio

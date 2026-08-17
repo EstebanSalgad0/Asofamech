@@ -35,6 +35,11 @@ PERM_MANAGE_IMAGES = "manage_images"
 PERM_DELETE_SENSITIVE_RESOURCES = "delete_sensitive_resources"
 PERM_VIEW_SURVEYS = "view_surveys"
 PERM_MANAGE_SURVEYS = "manage_surveys"
+# Revisor de informes por rubrica: el estudiante entrega, el docente gestiona
+# las rubricas y decide cuando su nota se vuelve visible.
+PERM_SUBMIT_REPORTS = "submit_reports"
+PERM_MANAGE_RUBRICS = "manage_rubrics"
+PERM_REVIEW_REPORTS = "review_reports"
 
 ROLE_PERMISSIONS = {
     ROLE_STUDENT: {
@@ -43,6 +48,7 @@ ROLE_PERMISSIONS = {
         PERM_USE_HISTOPATHOLOGY,
         PERM_SOLVE_SCT,
         PERM_VIEW_OWN_HISTORY,
+        PERM_SUBMIT_REPORTS,
     },
     ROLE_TEACHER: {
         PERM_USE_PLATFORM,
@@ -58,6 +64,9 @@ ROLE_PERMISSIONS = {
         PERM_MANAGE_IMAGES,
         PERM_VIEW_SURVEYS,
         PERM_MANAGE_SURVEYS,
+        PERM_SUBMIT_REPORTS,
+        PERM_MANAGE_RUBRICS,
+        PERM_REVIEW_REPORTS,
     },
     ROLE_ADMIN: {
         PERM_USE_PLATFORM,
@@ -76,6 +85,9 @@ ROLE_PERMISSIONS = {
         PERM_DELETE_SENSITIVE_RESOURCES,
         PERM_VIEW_SURVEYS,
         PERM_MANAGE_SURVEYS,
+        PERM_SUBMIT_REPORTS,
+        PERM_MANAGE_RUBRICS,
+        PERM_REVIEW_REPORTS,
     },
 }
 
