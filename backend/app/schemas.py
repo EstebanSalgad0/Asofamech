@@ -33,6 +33,7 @@ class CaseOut(BaseModel):
     topic: Optional[str] = None
     image_id: Optional[int] = None
     sct_test_id: Optional[int] = None
+    mcq_test_id: Optional[int] = None
     # Imagenes ilustrativas del caso (radiografia, TAC...), distintas de la
     # lamina histopatologica referenciada por image_id.
     images: List[dict] = []
@@ -60,6 +61,7 @@ class CaseCreate(BaseModel):
     topic: Optional[str] = None
     image_id: Optional[int] = None
     sct_test_id: Optional[int] = None
+    mcq_test_id: Optional[int] = None
     links: Optional[List[CaseLinkIn]] = None
     status: str = "draft"
 
@@ -75,6 +77,7 @@ class CaseUpdate(BaseModel):
     topic: Optional[str] = None
     image_id: Optional[int] = None
     sct_test_id: Optional[int] = None
+    mcq_test_id: Optional[int] = None
     # Omitirlo deja los enlaces intactos; enviarlo reemplaza el conjunto completo.
     links: Optional[List[CaseLinkIn]] = None
 
@@ -478,3 +481,136 @@ class ImageAnnotationOut(BaseModel):
     creator_name: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class DiseaseCategoryCreate(BaseModel):
+    key: str = Field(..., min_length=1, max_length=60)
+    label: str = Field(..., min_length=1, max_length=100)
+    icon: str = Field("🧫", min_length=1, max_length=16)
+    description: Optional[str] = Field(None, max_length=300)
+    keywords: List[str] = Field(default_factory=list)
+    sort_order: int = 0
+
+
+class DiseaseCategoryUpdate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=100)
+    icon: Optional[str] = Field(None, min_length=1, max_length=16)
+    description: Optional[str] = Field(None, max_length=300)
+    keywords: Optional[List[str]] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class MCQItem(BaseModel):
+    id: int
+    question: str
+    options: List[str] = Field(..., min_length=2, max_length=8)
+    correct_index: int
+    explanation: str = ""
+
+
+class MCQImportResponse(BaseModel):
+    items: List[MCQItem]
+    total: int
+    topic: Optional[str] = None
+    difficulty: Optional[str] = None
+    warnings: List[str] = Field(default_factory=list)
+
+
+class MCQSaveRequest(BaseModel):
+    name: str
+    topic: str
+    difficulty: Optional[str] = None
+    num_items: int
+    items: List[MCQItem]
+    status: str = "published"
+
+
+class MCQTestOut(BaseModel):
+    id: int
+    name: str
+    topic: str
+    difficulty: Optional[str] = None
+    num_items: int
+    created_at: str
+    status: str = "published"
+    created_by: Optional[int] = None
+
+    class Config:
+        orm_mode = True
+
+
+class MCQTestDetail(BaseModel):
+    id: int
+    name: str
+    topic: str
+    difficulty: Optional[str] = None
+    num_items: int
+    items: List[MCQItem]
+    created_at: str
+    status: str = "published"
+
+    class Config:
+        orm_mode = True
+
+
+class MCQTestUpdate(BaseModel):
+    name: Optional[str] = None
+    status: Optional[str] = None
+    topic: Optional[str] = None
+
+
+class MCQAnswerItem(BaseModel):
+    item_id: int
+    selected_index: int
+
+
+class MCQAttemptCreate(BaseModel):
+    answers: List[MCQAnswerItem]
+    started_at: Optional[str] = None
+
+
+class MCQAttemptOut(BaseModel):
+    id: int
+    test_id: int
+    user_id: int
+    score: float
+    correct_count: int
+    total_items: int
+    completed_at: str
+
+    class Config:
+        orm_mode = True
+
+
+class MCQAttemptWithTest(MCQAttemptOut):
+    test_name: str = ""
+    test_topic: str = ""
+    test_difficulty: str = ""
+
+
+class MCQAttemptDetail(MCQAttemptOut):
+    answers_json: List[dict]
+    test_name: str
+    test_topic: str
+    test_difficulty: str
+
+
+class MCQAttemptAdminOut(MCQAttemptWithTest):
+    user_email: str = ""
+    user_name: str = ""
+
+
+class DiseaseCategoryOut(BaseModel):
+    id: int
+    key: str
+    label: str
+    icon: str
+    description: Optional[str] = None
+    keywords: List[str] = Field(default_factory=list)
+    sort_order: int = 0
+    is_active: bool = True
+    created_at: Optional[str] = None
+
+    class Config:
+        orm_mode = True

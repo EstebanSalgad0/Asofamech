@@ -122,12 +122,12 @@ function InternalResource({ testId, icon, label, hint, onClick }) {
   );
 }
 
-export function CaseResources({ caseItem, onOpenImage, onOpenSct }) {
+export function CaseResources({ caseItem, onOpenImage, onOpenSct, onOpenMcq }) {
   const links = (caseItem.links || []).filter((link) => safeExternalUrl(link.url));
   const interactive = links.filter((link) => linkType(link.kind).feedback);
   const reference = links.filter((link) => !linkType(link.kind).feedback);
 
-  const hasFeedback = Boolean(caseItem.sct_test_id || caseItem.image_id || interactive.length);
+  const hasFeedback = Boolean(caseItem.sct_test_id || caseItem.mcq_test_id || caseItem.image_id || interactive.length);
   if (!hasFeedback && reference.length === 0) return null;
 
   return (
@@ -143,6 +143,15 @@ export function CaseResources({ caseItem, onOpenImage, onOpenSct }) {
                 label="Resolver test SCT"
                 hint="Razonamiento clínico paso a paso"
                 onClick={onOpenSct}
+              />
+            )}
+            {caseItem.mcq_test_id && (
+              <InternalResource
+                testId="case-linked-mcq"
+                icon="☑"
+                label="Resolver test de alternativas"
+                hint="Preguntas de opción múltiple"
+                onClick={onOpenMcq}
               />
             )}
             {caseItem.image_id && (

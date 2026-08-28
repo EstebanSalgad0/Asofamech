@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { generateSCT, saveSCTTest, listSCTTests, getSCTTest, submitSCTAttempt, listMyAttempts, listAllAttempts, updateSCTTest } from "../api";
 import { startSession, flushSession, trackTestCompleted, pushActivity } from "../tracker";
 import { AppSidebar } from "../components/AppSidebar";
+import { SCTManualBuilder } from "../components/SCTManualBuilder";
 import { clearAuthSession, getStoredRole, userStorageKey, canManageEducationalContent } from "../authClient";
 import { formatDisplayTitle } from "../displayText";
 
@@ -187,6 +188,7 @@ export function SCTPage() {
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
 
   // Config state
+  const [creationMode, setCreationMode] = useState("ai"); // "ai" | "manual"
   const [configStep, setConfigStep] = useState(1);
   const [numItems, setNumItems] = useState(5);
   const [difficulty, setDifficulty] = useState("Pregrado");
@@ -958,13 +960,47 @@ export function SCTPage() {
           {/* ── 02 — Config (solo docente/admin) ── */}
           {canManage && <>
           <div className="sct3-section-head">
-            <span className="sct3-section-num">/ 02 — Generador IA</span>
+            <span className="sct3-section-num">/ 02 — Crear test</span>
           </div>
           <div className="sct3-section-title-row">
-            <h2 className="sct3-section-title">Configura tu próximo test</h2>
-            <span className="sct3-section-meta">3 pasos · ~30 segundos</span>
+            <h2 className="sct3-section-title">
+              {creationMode === "ai" ? "Configura tu próximo test" : "Escribe tu test a mano"}
+            </h2>
+            <span className="sct3-section-meta">
+              {creationMode === "ai" ? "3 pasos · ~30 segundos" : "Sin IA · tú controlas cada ítem"}
+            </span>
           </div>
 
+          <div className="cases-mode-switch" role="radiogroup" aria-label="Forma de crear el test SCT">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={creationMode === "ai"}
+              className={creationMode === "ai" ? "active" : ""}
+              onClick={() => setCreationMode("ai")}
+            >
+              Generador IA
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={creationMode === "manual"}
+              className={creationMode === "manual" ? "active" : ""}
+              onClick={() => setCreationMode("manual")}
+            >
+              Crear manualmente
+            </button>
+          </div>
+
+          {creationMode === "manual" ? (
+            <SCTManualBuilder
+              onSaved={async (saved) => {
+                showToast(`"${saved.name}" guardado correctamente`, "success");
+                await loadSavedTests();
+                setCreationMode("ai");
+              }}
+            />
+          ) : (
           <div className="sct3-config-grid">
             {/* Left: Step wizard */}
             <div className="sct3-wizard">
@@ -1183,6 +1219,7 @@ export function SCTPage() {
               )}
             </div>
           </div>
+          )}
 
           </>}
 

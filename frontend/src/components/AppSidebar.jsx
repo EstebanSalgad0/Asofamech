@@ -9,6 +9,7 @@ const navItems = [
   { id: "dashboard", label: "Inicio", path: "/dashboard", icon: "home", group: "Navegación" },
   { id: "chat", label: "Asistente IA", path: "/dashboard/chat", icon: "chat", group: "Navegación" },
   { id: "sct", label: "Test SCT", path: "/dashboard/sct", icon: "clipboard", group: "Navegación" },
+  { id: "mcq", label: "Test de alternativas", path: "/dashboard/mcq", icon: "checklist", group: "Navegación" },
   { id: "images", label: "Imágenes IA", path: "/dashboard/images", icon: "image", group: "Navegación" },
   { id: "cases", label: "Casos Clínicos", path: "/dashboard/cases", icon: "cases", group: "Navegación" },
   { id: "reports", label: "Revisión de Informes", path: "/dashboard/reports", icon: "reports", group: "Navegación" },
@@ -36,6 +37,16 @@ function Icon({ name }) {
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M9 4h6M9 3h6a1 1 0 0 1 1 1v2H8V4a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2M8 12h8M8 16h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (name === "checklist") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M9 6h10M9 12h10M9 18h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="m4 6 1.2 1.2L7.5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m4 12 1.2 1.2 2.3-2.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m4 18 1.2 1.2 2.3-2.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }

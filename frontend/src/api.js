@@ -266,6 +266,66 @@ export async function updateSCTTest(testId, updates) {
   return parseJsonResponse(res, "No se pudo actualizar el test");
 }
 
+export async function importMCQFile(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await authFetch("/api/mcq/import", { method: "POST", body: form });
+  return parseJsonResponse(res, "No se pudo importar el archivo de preguntas");
+}
+
+export async function saveMCQTest(name, topic, difficulty, numItems, items, status = "published") {
+  const res = await authFetch("/api/mcq/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, topic, difficulty, num_items: numItems, items, status }),
+  });
+  return parseJsonResponse(res, "No se pudo guardar el test de alternativas");
+}
+
+export async function listMCQTests() {
+  const res = await authFetch("/api/mcq/list");
+  return parseJsonResponse(res, "No se pudieron cargar los tests de alternativas");
+}
+
+export async function getMCQTest(testId) {
+  const res = await authFetch(`/api/mcq/${testId}`);
+  return parseJsonResponse(res, "No se pudo cargar el test de alternativas");
+}
+
+export async function deleteMCQTest(testId) {
+  const res = await authFetch(`/api/mcq/${testId}`, { method: "DELETE" });
+  return parseJsonResponse(res, "No se pudo eliminar el test de alternativas");
+}
+
+export async function submitMCQAttempt(testId, answers, startedAt = null) {
+  const res = await authFetch(`/api/mcq/${testId}/attempt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers, started_at: startedAt }),
+  });
+  if (!res.ok) throw new Error(`Error MCQ Attempt: ${res.status}`);
+  return res.json();
+}
+
+export async function listMyMCQAttempts() {
+  const res = await authFetch("/api/mcq/my-attempts");
+  return parseJsonResponse(res, "No se pudo cargar el historial de intentos");
+}
+
+export async function listAllMCQAttempts() {
+  const res = await authFetch("/api/mcq/admin/attempts");
+  return parseJsonResponse(res, "No se pudieron cargar los intentos de estudiantes");
+}
+
+export async function updateMCQTest(testId, updates) {
+  const res = await authFetch(`/api/mcq/${testId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar el test");
+}
+
 export async function listMyRoiSessions(limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   const res = await authFetch(`/api/history/roi-sessions?${params.toString()}`);
@@ -280,6 +340,34 @@ export async function getRoiSession(sessionId) {
 export async function listMedicalImages() {
   const res = await authFetch("/api/medical-images/list");
   return parseJsonResponse(res, "No se pudieron cargar las imágenes médicas");
+}
+
+export async function listDiseaseCategories() {
+  const res = await authFetch("/api/disease-categories");
+  return parseJsonResponse(res, "No se pudieron cargar las categorías de enfermedades");
+}
+
+export async function createDiseaseCategory(payload) {
+  const res = await authFetch("/api/disease-categories", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse(res, "No se pudo crear la categoría");
+}
+
+export async function updateDiseaseCategory(categoryId, updates) {
+  const res = await authFetch(`/api/disease-categories/${categoryId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  return parseJsonResponse(res, "No se pudo actualizar la categoría");
+}
+
+export async function deleteDiseaseCategory(categoryId) {
+  const res = await authFetch(`/api/disease-categories/${categoryId}`, { method: "DELETE" });
+  return parseJsonResponse(res, "No se pudo eliminar la categoría");
 }
 
 export async function listCases(filters = {}) {

@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   approveAdminUser,
   createAdminUser,
+  createDiseaseCategory,
   createRagDocument,
   deleteAdminUser,
+  deleteDiseaseCategory,
   deleteRagDocument,
   deleteSCTTest,
   generateSCT,
@@ -12,6 +14,7 @@ import {
   getIntegrationStatus,
   getSCTTest,
   listAuditLogs,
+  listDiseaseCategories,
   listRagDocuments,
   listAdminUsers,
   listSCTTests,
@@ -24,6 +27,7 @@ import {
   testLLMProvider,
   updateAIConfig,
   updateAdminUser,
+  updateDiseaseCategory,
   updateRagDocument,
   updateSCTTest,
   listAllSurveysAdmin,
@@ -63,6 +67,14 @@ const DEFAULT_HEATMAP_METADATA = {
   label: "",
   type: "referencia",
   note: "",
+};
+const DEFAULT_DISEASE_CATEGORY_FORM = {
+  key: "",
+  label: "",
+  icon: "🧫",
+  description: "",
+  keywords: "",
+  sort_order: 0,
 };
 const DEFAULT_RAG_DOCUMENT = {
   title: "",
@@ -140,10 +152,33 @@ export function ConfigPage() {
   const [imageLibrary, setImageLibrary] = useState([]);
   const [loadingImages, setLoadingImages] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [localCamelyonSlides, setLocalCamelyonSlides] = useState([]);
-  const [selectedCamelyonSlide, setSelectedCamelyonSlide] = useState("");
-  const [loadingCamelyonSlides, setLoadingCamelyonSlides] = useState(false);
-  const [importingCamelyonSlide, setImportingCamelyonSlide] = useState(false);
+  const [localImportItems, setLocalImportItems] = useState([]);
+  const [loadingLocalImport, setLoadingLocalImport] = useState(false);
+  const [openLocalImportCategory, setOpenLocalImportCategory] = useState(null);
+  const [importingLocalKey, setImportingLocalKey] = useState(null);
+
+  const localImportGroups = useMemo(() => {
+    const byCategory = new Map();
+    localImportItems.forEach((item) => {
+      const key = item.category || "Sin categoría";
+      if (!byCategory.has(key)) byCategory.set(key, []);
+      byCategory.get(key).push(item);
+    });
+    return [...byCategory.entries()]
+      .map(([category, files]) => ({
+        category,
+        files,
+        pendingCount: files.filter((file) => !file.imported).length,
+      }))
+      .sort((a, b) => a.category.localeCompare(b.category, "es"));
+  }, [localImportItems]);
+
+  const [diseaseCategories, setDiseaseCategories] = useState([]);
+  const [loadingDiseaseCategories, setLoadingDiseaseCategories] = useState(false);
+  const [diseaseCategoryForm, setDiseaseCategoryForm] = useState(DEFAULT_DISEASE_CATEGORY_FORM);
+  const [editingDiseaseCategoryId, setEditingDiseaseCategoryId] = useState(null);
+  const [savingDiseaseCategory, setSavingDiseaseCategory] = useState(false);
+
   const [selectedHeatmapImageId, setSelectedHeatmapImageId] = useState("");
   const [heatmapRoi, setHeatmapRoi] = useState({ x: 52781, y: 150360, width: 1536, height: 1536 });
   const [heatmapTileSize, setHeatmapTileSize] = useState(512);
@@ -228,7 +263,8 @@ export function ConfigPage() {
     // Carga diferida: solo el tab activo carga sus datos
     if (activeTab === "images") {
       loadImageLibrary();
-      loadLocalCamelyonSlides();
+      loadLocalImportItems();
+      loadDiseaseCategoriesAdmin();
     } else if (activeTab === "rag") {
       loadRagDocuments();
     } else if (activeTab === "sct") {
@@ -293,47 +329,156 @@ export function ConfigPage() {
     }
   };
 
-  const loadLocalCamelyonSlides = async () => {
+  const loadLocalImportItems = async () => {
     try {
-      setLoadingCamelyonSlides(true);
-      const response = await authFetch("/api/medical-images/local/camelyon17");
+      setLoadingLocalImport(true);
+      const response = await authFetch("/api/medical-images/local-import");
       if (response.ok) {
-        const slides = await response.json();
-        setLocalCamelyonSlides(slides || []);
-        const firstAvailable = (slides || []).find((slide) => !slide.imported) || slides?.[0];
-        if (firstAvailable) setSelectedCamelyonSlide(firstAvailable.filename);
+        const items = await response.json();
+        setLocalImportItems(items || []);
       }
     } catch (error) {
-      console.error("Error cargando láminas CAMELYON17:", error);
+      console.error("Error cargando imágenes locales:", error);
     } finally {
-      setLoadingCamelyonSlides(false);
+      setLoadingLocalImport(false);
     }
   };
 
-  const handleImportCamelyonSlide = async () => {
-    if (!selectedCamelyonSlide) return;
-    setImportingCamelyonSlide(true);
+  const handleImportLocalFile = async (item) => {
+    const key = `file:${item.root}:${item.relative_path}`;
+    setImportingLocalKey(key);
     try {
       const form = new FormData();
-      form.append("filename", selectedCamelyonSlide);
-      form.append("title", selectedCamelyonSlide.replace(/\.[^.]+$/, ""));
-      form.append("pathology_type", "CAMELYON17");
+      form.append("root", item.root);
+      form.append("relative_path", item.relative_path);
+      form.append("title", item.filename.replace(/\.[^.]+$/, ""));
+      form.append("pathology_type", item.category);
 
-      const response = await authFetch("/api/medical-images/import-local/camelyon17", {
+      const response = await authFetch("/api/medical-images/local-import", {
         method: "POST",
         body: form,
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.detail || "No se pudo importar la lámina local");
+        throw new Error(payload?.detail || "No se pudo importar la imagen local");
       }
-      showToast(payload?.message || "Lámina CAMELYON17 importada", "success");
+      showToast(payload?.message || "Imagen importada", "success");
       await loadImageLibrary();
-      await loadLocalCamelyonSlides();
+      await loadLocalImportItems();
     } catch (error) {
       showToast(error.message, "error", 7000);
     } finally {
-      setImportingCamelyonSlide(false);
+      setImportingLocalKey(null);
+    }
+  };
+
+  const handleImportLocalCategoryBulk = async (root, category) => {
+    const key = `bulk:${root}:${category}`;
+    setImportingLocalKey(key);
+    try {
+      const form = new FormData();
+      form.append("root", root);
+      form.append("category", category);
+
+      const response = await authFetch("/api/medical-images/local-import/bulk", {
+        method: "POST",
+        body: form,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.detail || "No se pudo importar el lote");
+      }
+      const importedCount = payload?.imported?.length || 0;
+      const failedCount = payload?.failed?.length || 0;
+      showToast(
+        failedCount > 0
+          ? `${importedCount} imagen(es) importadas, ${failedCount} con error`
+          : `${importedCount} imagen(es) importadas correctamente`,
+        failedCount > 0 ? "warning" : "success",
+        7000,
+      );
+      await loadImageLibrary();
+      await loadLocalImportItems();
+    } catch (error) {
+      showToast(error.message, "error", 7000);
+    } finally {
+      setImportingLocalKey(null);
+    }
+  };
+
+  const loadDiseaseCategoriesAdmin = async () => {
+    setLoadingDiseaseCategories(true);
+    try {
+      setDiseaseCategories(await listDiseaseCategories());
+    } catch (error) {
+      console.error("Error cargando categorías de patología:", error);
+    } finally {
+      setLoadingDiseaseCategories(false);
+    }
+  };
+
+  const updateDiseaseCategoryForm = (field, value) => {
+    setDiseaseCategoryForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const resetDiseaseCategoryForm = () => {
+    setDiseaseCategoryForm(DEFAULT_DISEASE_CATEGORY_FORM);
+    setEditingDiseaseCategoryId(null);
+  };
+
+  const handleEditDiseaseCategory = (category) => {
+    setEditingDiseaseCategoryId(category.id);
+    setDiseaseCategoryForm({
+      key: category.key,
+      label: category.label,
+      icon: category.icon,
+      description: category.description || "",
+      keywords: (category.keywords || []).join(", "),
+      sort_order: category.sort_order,
+    });
+  };
+
+  const handleSaveDiseaseCategory = async (event) => {
+    event.preventDefault();
+    setSavingDiseaseCategory(true);
+    try {
+      const keywords = diseaseCategoryForm.keywords
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean);
+      const payload = {
+        label: diseaseCategoryForm.label.trim(),
+        icon: diseaseCategoryForm.icon.trim() || "🧫",
+        description: diseaseCategoryForm.description.trim(),
+        keywords,
+        sort_order: Number(diseaseCategoryForm.sort_order) || 0,
+      };
+      if (editingDiseaseCategoryId) {
+        await updateDiseaseCategory(editingDiseaseCategoryId, payload);
+      } else {
+        await createDiseaseCategory({ ...payload, key: diseaseCategoryForm.key.trim() });
+      }
+      resetDiseaseCategoryForm();
+      await loadDiseaseCategoriesAdmin();
+      showToast("Categoría guardada correctamente", "success");
+    } catch (error) {
+      showToast(error.message, "error", 7000);
+    } finally {
+      setSavingDiseaseCategory(false);
+    }
+  };
+
+  const handleDeleteDiseaseCategory = async (category) => {
+    if (!confirm(`¿Eliminar la categoría "${category.label}"? Las imágenes ya importadas con esa patología no se modifican, solo dejan de tener un ícono propio y pasan a un grupo genérico.`)) {
+      return;
+    }
+    try {
+      await deleteDiseaseCategory(category.id);
+      await loadDiseaseCategoriesAdmin();
+      if (editingDiseaseCategoryId === category.id) resetDiseaseCategoryForm();
+      showToast("Categoría eliminada", "success");
+    } catch (error) {
+      showToast(error.message, "error", 7000);
     }
   };
 
@@ -1311,41 +1456,230 @@ export function ConfigPage() {
                   </div>
                   <div className="cfg-stat-sub">Almacenamiento del servidor</div>
                 </div>
-                <div className="cfg-stat-card cfg-camelyon-card">
+                <div className="cfg-stat-card cfg-camelyon-card cfg-local-import-card">
                   <div className="cfg-camelyon-inner">
                     <div className="cfg-camelyon-icon">↓</div>
                     <div>
-                      <div className="cfg-camelyon-title">Importar CAMELYON17 local</div>
+                      <div className="cfg-camelyon-title">Importar desde el servidor</div>
                       <div className="cfg-camelyon-desc">
-                        Ruta recomendada para WSI grandes: registra una lámina ya copiada en el servidor sin volver a
-                        subir GB por el navegador. Suele ser mucho más rápida que la carga directa desde Imágenes IA.
+                        Ruta recomendada para WSI grandes: copia tus imágenes a{" "}
+                        <code>backend/data/local_import/&lt;patología&gt;/</code> — una carpeta por patología
+                        (tuberculosis, hepatitis, etc.) — y regístralas aquí sin subir GB por el navegador. Las
+                        láminas CAMELYON17 ya descargadas aparecen en su propia categoría.
                       </div>
                     </div>
                   </div>
-                  <div className="cfg-camelyon-controls">
-                    <select
-                      className="cfg-modal-input"
-                      value={selectedCamelyonSlide}
-                      onChange={(event) => setSelectedCamelyonSlide(event.target.value)}
-                      disabled={loadingCamelyonSlides || importingCamelyonSlide || localCamelyonSlides.length === 0}
-                    >
-                      {localCamelyonSlides.length === 0 && (
-                        <option value="">Sin láminas locales</option>
-                      )}
-                      {localCamelyonSlides.map((slide) => (
-                        <option key={slide.filename} value={slide.filename}>
-                          {slide.filename}{slide.imported ? " – importada" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="cfg-action-btn"
-                      onClick={handleImportCamelyonSlide}
-                      disabled={!selectedCamelyonSlide || importingCamelyonSlide}
-                    >
-                      {importingCamelyonSlide ? "Importando..." : "Importar"}
+
+                  {loadingLocalImport ? (
+                    <div className="cfg-local-import-loading">Buscando imágenes en el servidor…</div>
+                  ) : localImportGroups.length === 0 ? (
+                    <div className="cfg-local-import-empty">No hay imágenes locales pendientes en el servidor.</div>
+                  ) : (
+                    <div className="cfg-local-import-groups">
+                      {localImportGroups.map((group) => {
+                        const isOpen = openLocalImportCategory === group.category;
+                        const root = group.files[0]?.root;
+                        const bulkKey = `bulk:${root}:${group.category}`;
+                        return (
+                          <div key={group.category} className="cfg-local-import-group">
+                            <button
+                              type="button"
+                              className="cfg-local-import-group-head"
+                              onClick={() => setOpenLocalImportCategory(isOpen ? null : group.category)}
+                              aria-expanded={isOpen}
+                            >
+                              <span className="cfg-local-import-group-name">{group.category}</span>
+                              <span className="cfg-local-import-group-count">
+                                {group.pendingCount} de {group.files.length} por importar
+                              </span>
+                              <span className="cfg-local-import-group-chevron">{isOpen ? "▾" : "▸"}</span>
+                            </button>
+                            {isOpen && (
+                              <div className="cfg-local-import-group-body">
+                                <button
+                                  type="button"
+                                  className="cfg-action-btn"
+                                  disabled={group.pendingCount === 0 || importingLocalKey === bulkKey}
+                                  onClick={() => handleImportLocalCategoryBulk(root, group.category)}
+                                >
+                                  {importingLocalKey === bulkKey
+                                    ? "Importando…"
+                                    : `Importar todas (${group.pendingCount})`}
+                                </button>
+                                <ul className="cfg-local-import-file-list">
+                                  {group.files.map((item) => {
+                                    const fileKey = `file:${item.root}:${item.relative_path}`;
+                                    return (
+                                      <li key={fileKey} className="cfg-local-import-file">
+                                        <span className="cfg-local-import-file-name" title={item.relative_path}>
+                                          {item.filename}
+                                        </span>
+                                        <span className="cfg-local-import-file-meta">
+                                          {formatFileSize(item.file_size)}
+                                        </span>
+                                        {item.imported ? (
+                                          <span className="cfg-local-import-file-badge">Importada</span>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            className="cfg-local-import-file-btn"
+                                            disabled={importingLocalKey === fileKey}
+                                            onClick={() => handleImportLocalFile(item)}
+                                          >
+                                            {importingLocalKey === fileKey ? "…" : "Importar"}
+                                          </button>
+                                        )}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Categorías del catálogo de enfermedades (Imágenes IA) */}
+              <div className="cfg-two-col cfg-dc-section">
+                <form className="cfg-admin-panel cfg-dc-form" onSubmit={handleSaveDiseaseCategory}>
+                  <div className="cfg-panel-title">
+                    {editingDiseaseCategoryId ? "Editar categoría" : "Nueva categoría de patología"}
+                  </div>
+                  <div className="cfg-rag-panel-desc">
+                    Ícono, nombre y palabras clave que agrupan las láminas en Imágenes IA. Cuando el
+                    tipo de patología de una imagen contiene alguna palabra clave, cae en esta categoría.
+                  </div>
+
+                  {!editingDiseaseCategoryId && (
+                    <>
+                      <label className="cfg-rag-label">CLAVE ÚNICA</label>
+                      <input
+                        className="cfg-modal-input"
+                        value={diseaseCategoryForm.key}
+                        onChange={(e) => updateDiseaseCategoryForm("key", e.target.value)}
+                        placeholder="Ej: linfoma"
+                        required
+                      />
+                    </>
+                  )}
+
+                  <div className="cfg-rag-chunk-grid">
+                    <div>
+                      <label className="cfg-rag-label">ÍCONO (emoji)</label>
+                      <input
+                        className="cfg-modal-input"
+                        value={diseaseCategoryForm.icon}
+                        onChange={(e) => updateDiseaseCategoryForm("icon", e.target.value)}
+                        placeholder="🧫"
+                        maxLength={4}
+                      />
+                    </div>
+                    <div>
+                      <label className="cfg-rag-label">ORDEN</label>
+                      <input
+                        className="cfg-modal-input"
+                        type="number"
+                        value={diseaseCategoryForm.sort_order}
+                        onChange={(e) => updateDiseaseCategoryForm("sort_order", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <label className="cfg-rag-label">NOMBRE</label>
+                  <input
+                    className="cfg-modal-input"
+                    value={diseaseCategoryForm.label}
+                    onChange={(e) => updateDiseaseCategoryForm("label", e.target.value)}
+                    placeholder="Ej: Linfoma"
+                    required
+                  />
+
+                  <label className="cfg-rag-label">DESCRIPCIÓN</label>
+                  <input
+                    className="cfg-modal-input"
+                    value={diseaseCategoryForm.description}
+                    onChange={(e) => updateDiseaseCategoryForm("description", e.target.value)}
+                    placeholder="Breve descripción histopatológica"
+                  />
+
+                  <label className="cfg-rag-label">PALABRAS CLAVE</label>
+                  <input
+                    className="cfg-modal-input"
+                    value={diseaseCategoryForm.keywords}
+                    onChange={(e) => updateDiseaseCategoryForm("keywords", e.target.value)}
+                    placeholder="linfoma, hodgkin, no hodgkin"
+                  />
+                  <div className="cfg-rag-hint">
+                    Separadas por coma. Se buscan como texto dentro del tipo de patología de cada imagen
+                    (sin distinguir mayúsculas ni tildes).
+                  </div>
+
+                  <div className="cfg-rag-save-row">
+                    <button className="cfg-rag-save-btn" type="submit" disabled={savingDiseaseCategory}>
+                      {savingDiseaseCategory ? "Guardando..." : "✓ Guardar categoría"}
                     </button>
                   </div>
+                  {editingDiseaseCategoryId && (
+                    <button
+                      className="cfg-cancel-btn"
+                      type="button"
+                      onClick={resetDiseaseCategoryForm}
+                      style={{ marginTop: 8, width: "100%" }}
+                    >
+                      Cancelar edición
+                    </button>
+                  )}
+                </form>
+
+                <div className="cfg-admin-panel cfg-rag-right">
+                  <div className="cfg-rag-right-head">
+                    <div className="cfg-panel-title">Categorías activas</div>
+                    <span className="cfg-rag-count-badge">{diseaseCategories.length} categorías</span>
+                  </div>
+
+                  {loadingDiseaseCategories && diseaseCategories.length === 0 ? (
+                    <div className="cfg-loading">Cargando categorías...</div>
+                  ) : diseaseCategories.length === 0 ? (
+                    <div className="cfg-rag-empty">
+                      <div className="cfg-rag-empty-icon">🧫</div>
+                      <div className="cfg-rag-empty-title">Sin categorías aún</div>
+                      <p className="cfg-rag-empty-desc">
+                        Crea la primera para que las imágenes importadas queden agrupadas con su propio ícono.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="cfg-rag-doc-list">
+                      {diseaseCategories.map((category) => (
+                        <div key={category.id} className="cfg-rag-doc-item">
+                          <div className="cfg-rag-doc-info">
+                            <div className="cfg-rag-doc-title">
+                              {category.icon} {category.label}
+                            </div>
+                            <div className="cfg-rag-doc-meta">
+                              {(category.keywords || []).map((kw) => (
+                                <span key={kw} className="cfg-rag-doc-tag">{kw}</span>
+                              ))}
+                            </div>
+                            {category.description && (
+                              <div className="cfg-rag-doc-source">{category.description}</div>
+                            )}
+                          </div>
+                          <div className="cfg-inline-actions">
+                            <button className="cfg-view-btn" type="button" onClick={() => handleEditDiseaseCategory(category)}>
+                              Editar
+                            </button>
+                            <button className="cfg-danger-btn" type="button" onClick={() => handleDeleteDiseaseCategory(category)}>
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -5,6 +5,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ChatbotPage } from "./pages/ChatbotPage";
 import { SCTPage } from "./pages/SCTPage";
+import { MCQPage } from "./pages/MCQPage";
 import { ImagesPage } from "./pages/ImagesPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { CasesPage } from "./pages/CasesPage";
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/dashboard/chat" element={<ChatbotPage />} />
         <Route path="/dashboard/sct" element={<SCTPage />} />
+        <Route path="/dashboard/mcq" element={<MCQPage />} />
         <Route path="/dashboard/images" element={<ImagesPage />} />
         <Route path="/dashboard/cases" element={<CasesPage />} />
         <Route path="/dashboard/surveys" element={<SurveysPage />} />

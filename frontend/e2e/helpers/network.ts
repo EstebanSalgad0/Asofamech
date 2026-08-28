@@ -5,6 +5,7 @@ import {
   clinicalCaseFixture,
   dashboardHistoryFixture,
   dashboardStatsFixture,
+  diseaseCategoriesFixture,
   dziImage,
   dziManifest,
   heatmapFixture,
@@ -67,6 +68,7 @@ export async function mockAuthApi(page: Page) {
 
 export async function mockHistopathologyApi(page: Page) {
   await page.route("**/api/medical-images/list", (route) => json(route, [dziImage]));
+  await page.route("**/api/disease-categories", (route) => json(route, diseaseCategoriesFixture));
   await page.route("**/api/history/roi-sessions?**", (route) =>
     json(route, { count: 1, items: [roiSessionFixture] }),
   );

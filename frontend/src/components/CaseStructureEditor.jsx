@@ -7,6 +7,18 @@ import {
   listToLines,
   setAtPath,
 } from "./caseStructure";
+import { SCTManualBuilder } from "./SCTManualBuilder";
+import { MCQManualBuilder } from "./MCQManualBuilder";
+
+function sctOptionLabel(test) {
+  const title = test.name || test.focus || `Test SCT ${test.id}`;
+  return `#${test.id} - ${title}`;
+}
+
+function mcqOptionLabel(test) {
+  const title = test.name || test.topic || `Test ${test.id}`;
+  return `#${test.id} - ${title}`;
+}
 
 /**
  * Editor del caso clinico en el formato PA-ASO-001.
@@ -363,8 +375,23 @@ function PracticalScript({ script, suggestedColumns, onChange }) {
   );
 }
 
-export function CaseStructureEditor({ value, onChange }) {
+export function CaseStructureEditor({
+  value,
+  onChange,
+  sctTestId = null,
+  onSctTestIdChange = () => {},
+  sctTests = [],
+  onSctTestCreated = () => {},
+  mcqTestId = null,
+  onMcqTestIdChange = () => {},
+  mcqTests = [],
+  onMcqTestCreated = () => {},
+  caseTopic = "",
+  caseDifficulty = "pregrado",
+}) {
   const [openSection, setOpenSection] = useState("identification");
+  const [showSctBuilder, setShowSctBuilder] = useState(false);
+  const [showMcqBuilder, setShowMcqBuilder] = useState(false);
   const structure = value;
 
   const set = (path, next) => onChange(setAtPath(structure, path, next));
@@ -592,11 +619,54 @@ export function CaseStructureEditor({ value, onChange }) {
 
       case "practical_script":
         return (
-          <PracticalScript
-            script={get("practical_script") || {}}
-            suggestedColumns={suggestedColumns}
-            onChange={(next) => set("practical_script", next)}
-          />
+          <>
+            <Field
+              label="Test SCT vinculado"
+              hint="El test interactivo y calificado que resolverán los estudiantes desde este caso (módulo SCT). Distinto de la matriz de referencia de más abajo, que es solo lectura."
+            >
+              <select
+                value={sctTestId ?? ""}
+                onChange={(e) => onSctTestIdChange(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">Sin test vinculado</option>
+                {sctTests.map((test) => (
+                  <option key={test.id} value={test.id}>{sctOptionLabel(test)}</option>
+                ))}
+                {sctTestId && !sctTests.some((test) => test.id === sctTestId) && (
+                  <option value={sctTestId}>ID {sctTestId} no disponible</option>
+                )}
+              </select>
+            </Field>
+
+            {!showSctBuilder ? (
+              <button type="button" className="cse-add-btn" onClick={() => setShowSctBuilder(true)}>
+                + Crear nuevo test SCT manualmente
+              </button>
+            ) : (
+              <SCTManualBuilder
+                defaultName={caseTopic ? `Test SCT - ${caseTopic}` : ""}
+                defaultDifficulty={caseDifficulty || "pregrado"}
+                defaultFocus={caseTopic || ""}
+                onCancel={() => setShowSctBuilder(false)}
+                onSaved={(saved) => {
+                  setShowSctBuilder(false);
+                  onSctTestIdChange(saved.id);
+                  onSctTestCreated(saved);
+                }}
+              />
+            )}
+
+            <Field
+              label="Matriz de referencia (opcional)"
+              hint="Tabla hallazgo × diagnóstico de solo lectura para el estudiante. No reemplaza al test SCT interactivo de arriba."
+            >
+              <PracticalScript
+                script={get("practical_script") || {}}
+                suggestedColumns={suggestedColumns}
+                onChange={(next) => set("practical_script", next)}
+              />
+            </Field>
+          </>
         );
 
       case "pathology":
@@ -677,6 +747,42 @@ export function CaseStructureEditor({ value, onChange }) {
       case "assessment":
         return (
           <>
+            <Field
+              label="Test de alternativas vinculado"
+              hint="El test interactivo y calificado que resolverán los estudiantes desde este caso (módulo Test de alternativas). Distinto de las preguntas de opción múltiple de más abajo, que son solo lectura."
+            >
+              <select
+                value={mcqTestId ?? ""}
+                onChange={(e) => onMcqTestIdChange(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">Sin test vinculado</option>
+                {mcqTests.map((test) => (
+                  <option key={test.id} value={test.id}>{mcqOptionLabel(test)}</option>
+                ))}
+                {mcqTestId && !mcqTests.some((test) => test.id === mcqTestId) && (
+                  <option value={mcqTestId}>ID {mcqTestId} no disponible</option>
+                )}
+              </select>
+            </Field>
+
+            {!showMcqBuilder ? (
+              <button type="button" className="cse-add-btn" onClick={() => setShowMcqBuilder(true)}>
+                + Crear nuevo test de alternativas
+              </button>
+            ) : (
+              <MCQManualBuilder
+                defaultName={caseTopic ? `Test de alternativas - ${caseTopic}` : ""}
+                defaultTopic={caseTopic || ""}
+                defaultDifficulty={caseDifficulty || "pregrado"}
+                onCancel={() => setShowMcqBuilder(false)}
+                onSaved={(saved) => {
+                  setShowMcqBuilder(false);
+                  onMcqTestIdChange(saved.id);
+                  onMcqTestCreated(saved);
+                }}
+              />
+            )}
+
             <MultipleChoice
               questions={get("assessment.multiple_choice")}
               onChange={(next) => set("assessment.multiple_choice", next)}
@@ -733,7 +839,10 @@ function MultipleChoice({ questions, onChange }) {
     onChange(list.map((q, i) => (i === index ? { ...q, ...patch } : q)));
 
   return (
-    <Field label="Preguntas de opción múltiple">
+    <Field
+      label="Preguntas de opción múltiple (referencia)"
+      hint="Lectura de solo texto para el estudiante; no es un test interactivo. Para eso usa el test de alternativas vinculado de arriba."
+    >
       <div className="cse-rows">
         {list.map((question, index) => (
           <div key={index} className="cse-row cse-mcq">

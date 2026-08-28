@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 
 from .routers import (
-    admin, auth, chat, cases, dashboard, history, image_annotations, rag,
+    admin, auth, chat, cases, dashboard, disease_categories, history, image_annotations, mcq, rag,
     reports, sct, medical_images, histopathology, surveys,
 )
 
@@ -50,6 +50,7 @@ def on_startup():
     try:
         from .db import SessionLocal
         from .seeds.cases_loader import seed_cases
+        from .seeds.disease_categories_loader import seed_disease_categories
         from .seeds.rubrics_loader import seed_rubrics
         from .seeds.surveys_loader import seed_surveys
         db = SessionLocal()
@@ -57,6 +58,7 @@ def on_startup():
             seed_surveys(db)
             seed_cases(db)
             seed_rubrics(db)
+            seed_disease_categories(db)
         finally:
             db.close()
     except Exception as exc:
@@ -78,8 +80,10 @@ app.include_router(rag.router)
 app.include_router(history.router)
 app.include_router(admin.router)
 app.include_router(sct.router)
+app.include_router(mcq.router)
 app.include_router(auth.router)
 app.include_router(medical_images.router)
+app.include_router(disease_categories.router)
 app.include_router(image_annotations.router)
 app.include_router(histopathology.router)
 app.include_router(surveys.router)

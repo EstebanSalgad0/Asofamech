@@ -7,6 +7,7 @@ import {
   updateCase,
   updateCaseStatus,
   deleteCase,
+  listMCQTests,
   listMedicalImages,
   listSCTTests,
   uploadCaseImages,
@@ -47,6 +48,7 @@ const EMPTY_FORM = {
   topic: "",
   image_id: "",
   sct_test_id: "",
+  mcq_test_id: "",
   status: "draft",
   image_modality: "",
 };
@@ -108,7 +110,7 @@ function readingMinutes(caseItem) {
 
 function countResources(caseItem) {
   const external = (caseItem.links || []).filter((link) => safeExternalUrl(link.url)).length;
-  return external + (caseItem.sct_test_id ? 1 : 0) + (caseItem.image_id ? 1 : 0);
+  return external + (caseItem.sct_test_id ? 1 : 0) + (caseItem.mcq_test_id ? 1 : 0) + (caseItem.image_id ? 1 : 0);
 }
 
 function StatusBadge({ status }) {
@@ -139,6 +141,11 @@ function imageOptionLabel(image) {
 
 function sctOptionLabel(test) {
   const title = test.name || test.focus || `Test SCT ${test.id}`;
+  return `#${test.id} - ${title}`;
+}
+
+function mcqOptionLabel(test) {
+  const title = test.name || test.topic || `Test ${test.id}`;
   return `#${test.id} - ${title}`;
 }
 
@@ -174,6 +181,7 @@ export function CasesPage() {
   // Qué dedujo la IA y qué faltaba en el documento importado.
   const [importReport, setImportReport] = useState(null);
   const [sctTests, setSctTests] = useState([]);
+  const [mcqTests, setMcqTests] = useState([]);
   const [resourceError, setResourceError] = useState(null);
 
   const [deletingId, setDeletingId] = useState(null);
@@ -218,9 +226,10 @@ export function CasesPage() {
 
     async function loadFormResources() {
       setResourceError(null);
-      const [imagesResult, testsResult] = await Promise.allSettled([
+      const [imagesResult, testsResult, mcqResult] = await Promise.allSettled([
         listMedicalImages(),
         listSCTTests(),
+        listMCQTests(),
       ]);
       if (cancelled) return;
 
@@ -236,7 +245,13 @@ export function CasesPage() {
         setSctTests([]);
       }
 
-      if (imagesResult.status === "rejected" || testsResult.status === "rejected") {
+      if (mcqResult.status === "fulfilled") {
+        setMcqTests(mcqResult.value);
+      } else {
+        setMcqTests([]);
+      }
+
+      if (imagesResult.status === "rejected" || testsResult.status === "rejected" || mcqResult.status === "rejected") {
         setResourceError("No se pudieron cargar todos los recursos asociados.");
       }
     }
@@ -333,6 +348,7 @@ export function CasesPage() {
       topic: c.topic || "",
       image_id: c.image_id != null ? String(c.image_id) : "",
       sct_test_id: c.sct_test_id != null ? String(c.sct_test_id) : "",
+      mcq_test_id: c.mcq_test_id != null ? String(c.mcq_test_id) : "",
       status: c.status || "draft",
       image_modality: "",
     });
@@ -404,6 +420,7 @@ export function CasesPage() {
         topic: form.topic.trim() || null,
         image_id: form.image_id ? parseInt(form.image_id, 10) : null,
         sct_test_id: form.sct_test_id ? parseInt(form.sct_test_id, 10) : null,
+        mcq_test_id: form.mcq_test_id ? parseInt(form.mcq_test_id, 10) : null,
         links,
         status: form.status,
       };
@@ -703,6 +720,10 @@ export function CasesPage() {
                       setShowDetail(false);
                       navigate(`/dashboard/sct?test=${selectedCase.sct_test_id}`);
                     }}
+                    onOpenMcq={() => {
+                      setShowDetail(false);
+                      navigate(`/dashboard/mcq?test=${selectedCase.mcq_test_id}`);
+                    }}
                     onOpenImage={() => {
                       setShowDetail(false);
                       navigate(`/dashboard/images?image=${selectedCase.image_id}`);
@@ -852,7 +873,20 @@ export function CasesPage() {
               {formMode === MODE_STRUCTURED ? (
                 <div className="cases-form-row">
                   <label>Estructura del caso *</label>
-                  <CaseStructureEditor value={formStructure} onChange={setFormStructure} />
+                  <CaseStructureEditor
+                    value={formStructure}
+                    onChange={setFormStructure}
+                    sctTestId={form.sct_test_id ? parseInt(form.sct_test_id, 10) : null}
+                    onSctTestIdChange={(id) => setForm((f) => ({ ...f, sct_test_id: id != null ? String(id) : "" }))}
+                    sctTests={sctTests}
+                    onSctTestCreated={(saved) => setSctTests((prev) => [saved, ...prev])}
+                    mcqTestId={form.mcq_test_id ? parseInt(form.mcq_test_id, 10) : null}
+                    onMcqTestIdChange={(id) => setForm((f) => ({ ...f, mcq_test_id: id != null ? String(id) : "" }))}
+                    mcqTests={mcqTests}
+                    onMcqTestCreated={(saved) => setMcqTests((prev) => [saved, ...prev])}
+                    caseTopic={form.topic}
+                    caseDifficulty={form.difficulty}
+                  />
                 </div>
               ) : (
                 <>
@@ -929,6 +963,27 @@ export function CasesPage() {
                     ))}
                     {form.sct_test_id && !sctTests.some((test) => String(test.id) === form.sct_test_id) && (
                       <option value={form.sct_test_id}>ID {form.sct_test_id} no disponible</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div className="cases-form-row-2col">
+                <div className="cases-form-row">
+                  <label>Test de alternativas asociado</label>
+                  <select
+                    data-testid="case-mcq-select"
+                    value={form.mcq_test_id}
+                    onChange={(e) => setForm((f) => ({ ...f, mcq_test_id: e.target.value }))}
+                  >
+                    <option value="">Sin test asociado</option>
+                    {mcqTests.map((test) => (
+                      <option key={test.id} value={String(test.id)}>
+                        {mcqOptionLabel(test)}
+                      </option>
+                    ))}
+                    {form.mcq_test_id && !mcqTests.some((test) => String(test.id) === form.mcq_test_id) && (
+                      <option value={form.mcq_test_id}>ID {form.mcq_test_id} no disponible</option>
                     )}
                   </select>
                 </div>

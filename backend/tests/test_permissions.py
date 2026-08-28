@@ -16,7 +16,7 @@ from app.auth import (
 )
 from app.db import Base, get_db
 from app.models import User
-from app.routers import admin, cases, medical_images, sct
+from app.routers import admin, cases, mcq, medical_images, sct
 
 
 def _user(user_id: int, role: str) -> User:
@@ -44,6 +44,7 @@ def permission_client():
     app = FastAPI()
     app.include_router(cases.router)
     app.include_router(sct.router)
+    app.include_router(mcq.router)
     app.include_router(admin.router)
     app.include_router(medical_images.router)
 
@@ -100,22 +101,23 @@ def test_student_is_blocked_from_sensitive_routes(permission_client):
     responses = [
         client.post("/api/cases", json={"title": "Caso", "description": "Desc", "body": "Body"}),
         client.delete("/api/sct/1"),
+        client.delete("/api/mcq/1"),
         client.post(
             "/api/medical-images/upload",
             data={"title": "Carga no autorizada"},
             files={"file": ("slide.png", b"not-an-image", "image/png")},
         ),
         client.post(
-            "/api/medical-images/import-local/camelyon17",
-            data={"filename": "patient_001_node_1.tif"},
+            "/api/medical-images/local-import",
+            data={"root": "camelyon17", "relative_path": "patient_001_node_1.tif"},
         ),
         client.delete("/api/medical-images/1"),
-        client.get("/api/medical-images/local/camelyon17"),
+        client.get("/api/medical-images/local-import"),
         client.get("/api/admin/users"),
         client.get("/api/admin/ai-config"),
     ]
 
-    assert [response.status_code for response in responses] == [403, 403, 403, 403, 403, 403, 403, 403]
+    assert [response.status_code for response in responses] == [403, 403, 403, 403, 403, 403, 403, 403, 403]
 
 
 def test_teacher_can_manage_educational_content_but_not_admin_users(permission_client):

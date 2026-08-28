@@ -30,7 +30,7 @@ from ..case_structure import (
     structure_is_empty,
     structure_to_markdown,
 )
-from ..models import Case, CaseImage, CaseLink, MedicalImage, SCTTest, User
+from ..models import Case, CaseImage, CaseLink, MCQTest, MedicalImage, SCTTest, User
 from ..schemas import CaseOut, CaseCreate, CaseUpdate, CaseStatusUpdate
 
 router = APIRouter(prefix="/api", tags=["cases"])
@@ -198,6 +198,19 @@ def _validate_linked_resources(values: dict, db: Session) -> None:
                 detail=f"Test SCT no encontrado: ID {sct_test_id}",
             )
 
+    mcq_test_id = values.get("mcq_test_id")
+    if mcq_test_id is not None:
+        mcq_test = (
+            db.query(MCQTest.id)
+            .filter(MCQTest.id == mcq_test_id, MCQTest.is_active == True)
+            .first()
+        )
+        if not mcq_test:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Test de alternativas no encontrado: ID {mcq_test_id}",
+            )
+
 
 def _serialize_case_image(image: CaseImage) -> dict:
     return {
@@ -261,6 +274,7 @@ def _serialize(case: Case, *, include_answer_key: bool = True) -> dict:
         "topic": case.topic,
         "image_id": case.image_id,
         "sct_test_id": case.sct_test_id,
+        "mcq_test_id": case.mcq_test_id,
         "images": [_serialize_case_image(img) for img in (case.images or [])],
         "links": [_serialize_case_link(link) for link in (case.links or [])],
         "created_by": case.created_by,
@@ -438,6 +452,7 @@ def create_case(
         topic=values.get("topic"),
         image_id=values.get("image_id"),
         sct_test_id=values.get("sct_test_id"),
+        mcq_test_id=values.get("mcq_test_id"),
         created_by=current_user.id,
         status=values["status"],
         is_active=True,

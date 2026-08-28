@@ -62,6 +62,7 @@ class Case(Base):
     topic = Column(String(200), nullable=True)
     image_id = Column(Integer, ForeignKey("medical_images.id"), nullable=True)
     sct_test_id = Column(Integer, ForeignKey("sct_tests.id"), nullable=True)
+    mcq_test_id = Column(Integer, ForeignKey("mcq_tests.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     status = Column(String(20), nullable=False, default="draft")  # draft | published | archived
     is_active = Column(Boolean, default=True)
@@ -71,6 +72,7 @@ class Case(Base):
     creator = relationship("User", foreign_keys=[created_by])
     image = relationship("MedicalImage", foreign_keys=[image_id])
     sct_test = relationship("SCTTest", foreign_keys=[sct_test_id])
+    mcq_test = relationship("MCQTest", foreign_keys=[mcq_test_id])
     images = relationship(
         "CaseImage",
         back_populates="case",
@@ -254,6 +256,42 @@ class SCTAttempt(Base):
     completed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     test = relationship("SCTTest")
+    user = relationship("User")
+
+
+class MCQTest(Base):
+    """Banco de preguntas de alternativa simple (pregunta + opciones + correcta),
+    distinto del SCT: aqui se evalua conocimiento puntual, no razonamiento
+    clinico por escala. Puede crearse a mano o importando un documento con IA
+    (ver app/mcq_import.py)."""
+    __tablename__ = "mcq_tests"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    topic = Column(String(200), nullable=False)
+    difficulty = Column(String(50), nullable=True)
+    num_items = Column(Integer, nullable=False)
+    items_json = Column(JSON, nullable=False)  # [{id, question, options: [...], correct_index, explanation}]
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    status = Column(String(20), nullable=False, default="draft")  # draft | published | archived
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    creator = relationship("User", foreign_keys=[created_by])
+
+
+class MCQAttempt(Base):
+    __tablename__ = "mcq_attempts"
+    id = Column(Integer, primary_key=True, index=True)
+    test_id = Column(Integer, ForeignKey("mcq_tests.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    answers_json = Column(JSON, nullable=False)
+    score = Column(Float, nullable=False, default=0.0)
+    correct_count = Column(Integer, nullable=False, default=0)
+    total_items = Column(Integer, nullable=False, default=0)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    test = relationship("MCQTest")
     user = relationship("User")
 
 
@@ -566,3 +604,25 @@ class SurveyParticipation(Base):
     __table_args__ = (
         UniqueConstraint("survey_id", "user_id", name="uq_survey_participation_survey_user"),
     )
+
+
+class DiseaseCategory(Base):
+    """
+    Categoria visual del catalogo de enfermedades en Imagenes IA (icono,
+    titulo, descripcion y palabras clave). Reemplaza la lista que antes vivia
+    hardcodeada en el frontend: el docente la administra desde Configuracion
+    sin depender de un cambio de codigo cada vez que aparece una patologia
+    nueva (ej. una carpeta de importacion local sin categoria conocida).
+    """
+    __tablename__ = "disease_categories"
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(60), unique=True, nullable=False, index=True)
+    label = Column(String(100), nullable=False)
+    icon = Column(String(16), nullable=False, default="🧫")
+    description = Column(String(300), nullable=True)
+    keywords = Column(JSON, nullable=False, default=list)  # ["tuberculosis", "bacilo de koch"]
+    sort_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

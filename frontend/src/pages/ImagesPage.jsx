@@ -11,7 +11,7 @@ import {
   clearAuthSession,
   getStoredRole,
 } from "../authClient";
-import { listMyRoiSessions } from "../api";
+import { listDiseaseCategories, listMyRoiSessions } from "../api";
 import {
   formatDisplayTag,
   formatFileSizeMB,
@@ -49,54 +49,6 @@ const STATUS_LABELS = {
   ROI_EVALUABLE: "ROI evaluable",
 };
 
-// Catálogo de enfermedades analizables. Cada lámina se asigna a la primera
-// categoría cuyo patrón coincida con su `pathology_type`; las patologías que no
-// coinciden se agregan como categorías propias al vuelo.
-const DISEASE_CATALOG = [
-  {
-    id: "cancer-mama",
-    label: "Cáncer de mama",
-    icon: "🎗️",
-    desc: "Metástasis en ganglio linfático centinela (CAMELYON17 · SLN-Breast)",
-    patterns: [/camelyon/, /\bsln\b/, /breast/, /mama/, /metasta/, /cancer/, /carcinom/, /tumor/, /neoplas/, /malign/],
-  },
-  {
-    id: "necrosis",
-    label: "Necrosis y muerte celular",
-    icon: "🧬",
-    desc: "Necrosis coagulativa y licuefactiva, apoptosis e infarto",
-    patterns: [/necros/, /apopto/, /infarto/, /isquem/, /gangren/],
-  },
-  {
-    id: "inflamacion",
-    label: "Inflamación aguda y crónica",
-    icon: "🔥",
-    desc: "Infiltrado inflamatorio, absceso y granuloma",
-    patterns: [/inflam/, /absces/, /granulom/, /infiltrad/, /itis\b/],
-  },
-  {
-    id: "infecciosa",
-    label: "Patología infecciosa",
-    icon: "🦠",
-    desc: "Agentes bacterianos, micóticos, virales y parasitarios",
-    patterns: [/infecc/, /bacter/, /micos/, /hongo/, /viral/, /virus/, /parasit/, /tuberculos/, /langerhans/, /histiocit/],
-  },
-  {
-    id: "vascular",
-    label: "Trastornos vasculares",
-    icon: "🩸",
-    desc: "Trombosis, hemorragia, congestión y edema",
-    patterns: [/trombo/, /hemorrag/, /congesti/, /edema/, /embol/, /vascular/, /ateroscler/],
-  },
-  {
-    id: "adaptaciones",
-    label: "Adaptaciones y depósitos celulares",
-    icon: "⚗️",
-    desc: "Hiperplasia, hipertrofia, metaplasia, displasia y esteatosis",
-    patterns: [/hiperplas/, /hipertrof/, /metaplas/, /displas/, /atrofi/, /esteatos/, /amiloid/, /deposit/, /acumulac/],
-  },
-];
-
 function normalizePathology(value) {
   return String(value || "")
     .toLowerCase()
@@ -105,14 +57,26 @@ function normalizePathology(value) {
     .trim();
 }
 
-function buildDiseaseGroups(images) {
-  const catalog = DISEASE_CATALOG.map((disease) => ({ ...disease, images: [] }));
+// Cada lámina se asigna a la primera categoría (ordenadas por sort_order)
+// cuya palabra clave aparezca en su `pathology_type`; las patologías que no
+// coinciden con ninguna categoría del catálogo se agregan como categorías
+// propias al vuelo. El catálogo mismo viene del backend (Configuración →
+// Imágenes → Categorías) en vez de estar hardcodeado aquí.
+function buildDiseaseGroups(images, categories) {
+  const catalog = (categories || []).map((category) => ({
+    id: category.key,
+    label: category.label,
+    icon: category.icon,
+    desc: category.description || "",
+    keywords: (category.keywords || []).map(normalizePathology).filter(Boolean),
+    images: [],
+  }));
   const byId = new Map(catalog.map((group) => [group.id, group]));
   const extra = new Map();
 
   (images || []).forEach((img) => {
     const raw = normalizePathology(img.pathology_type);
-    const match = raw ? DISEASE_CATALOG.find((d) => d.patterns.some((rx) => rx.test(raw))) : null;
+    const match = raw ? catalog.find((c) => c.keywords.some((kw) => raw.includes(kw))) : null;
     if (match) {
       byId.get(match.id).images.push(img);
       return;
@@ -161,8 +125,12 @@ export function ImagesPage() {
   const [initialSession, setInitialSession] = useState(null);
   const [deletingSessionId, setDeletingSessionId] = useState(null);
   const [openDiseaseId, setOpenDiseaseId] = useState(null);
+  const [diseaseCategories, setDiseaseCategories] = useState([]);
 
-  const diseaseGroups = useMemo(() => buildDiseaseGroups(imageLibrary), [imageLibrary]);
+  const diseaseGroups = useMemo(
+    () => buildDiseaseGroups(imageLibrary, diseaseCategories),
+    [imageLibrary, diseaseCategories],
+  );
   const availableDiseases = diseaseGroups.filter((group) => group.images.length > 0);
 
   useEffect(() => {
@@ -200,6 +168,12 @@ export function ImagesPage() {
 
   useEffect(() => {
     loadRoiHistory();
+  }, []);
+
+  useEffect(() => {
+    listDiseaseCategories()
+      .then((categories) => setDiseaseCategories(categories || []))
+      .catch(() => setDiseaseCategories([]));
   }, []);
 
   const deleteRoiSession = async (sessionId) => {

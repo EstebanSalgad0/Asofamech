@@ -22,12 +22,17 @@ router = APIRouter(prefix="/api/medical-images", tags=["medical-images"])
 UPLOAD_DIR = "uploads/medical_images"
 DZI_DIR = "uploads/dzi_tiles"
 CAMELYON17_IMAGES_DIR = "data/camelyon17/images"
+# Raiz general donde el docente puede copiar su propio DVD organizado en
+# subcarpetas por patologia (ej. data/local_import/tuberculosis/*.svs).
+LOCAL_IMPORT_DIR = os.environ.get("LOCAL_IMPORT_DIR", "data/local_import")
 
 # Crear directorios si no existen
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(DZI_DIR, exist_ok=True)
 
 WSI_EXTENSIONS = {".svs", ".tif", ".tiff"}
+RASTER_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+IMPORTABLE_EXTENSIONS = WSI_EXTENSIONS | RASTER_EXTENSIONS
 ALLOWED_TILE_FORMATS = {"jpeg", "jpg", "png"}
 MAX_IMAGE_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
@@ -158,82 +163,121 @@ async def upload_medical_image(
         raise HTTPException(status_code=500, detail="Error interno al procesar la imagen subida")
 
 
-@router.get("/local/camelyon17")
-async def list_local_camelyon17_images(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
-):
+def _local_import_roots():
     """
-    Listar laminas CAMELYON17 ya descargadas en el servidor.
+    Raices que recorre el importador local. La de CAMELYON17 es plana (asi
+    quedan las laminas ya descargadas, sin reordenarlas) y usa siempre la
+    categoria fija "CAMELYON17"; LOCAL_IMPORT_DIR es recursiva y usa el
+    nombre de la primera subcarpeta bajo la raiz como patologia sugerida,
+    para que el docente organice su propio DVD en una carpeta por patologia.
     """
-    base_dir = os.path.abspath(CAMELYON17_IMAGES_DIR)
-    if not os.path.isdir(base_dir):
-        return []
+    return [
+        {"key": "camelyon17", "dir": os.path.abspath(CAMELYON17_IMAGES_DIR), "recursive": False, "fixed_category": "CAMELYON17"},
+        {"key": "local_import", "dir": os.path.abspath(LOCAL_IMPORT_DIR), "recursive": True, "fixed_category": None},
+    ]
 
-    imported_paths = {
-        os.path.abspath(row.file_path)
-        for row in db.query(MedicalImage).filter(MedicalImage.is_active == True).all()
-    }
 
-    slides = []
-    for name in sorted(os.listdir(base_dir)):
-        extension = os.path.splitext(name)[1].lower()
-        if extension not in [".svs", ".tif", ".tiff"]:
+def _format_local_category(raw: Optional[str]) -> str:
+    if not raw:
+        return "Sin categoría"
+    return raw.replace("_", " ").replace("-", " ").strip() or "Sin categoría"
+
+
+def _iter_local_import_candidates():
+    """Recorre las raices de importacion y produce un dict por cada archivo
+    de imagen valido encontrado (sin tocar la base de datos)."""
+    for root in _local_import_roots():
+        base_dir = root["dir"]
+        if not os.path.isdir(base_dir):
             continue
-        path = os.path.abspath(os.path.join(base_dir, name))
-        slides.append(
-            {
-                "filename": name,
-                "file_size": os.path.getsize(path),
-                "imported": path in imported_paths,
-            }
-        )
-    return slides
+
+        if root["recursive"]:
+            for dirpath, _dirnames, filenames in os.walk(base_dir):
+                for name in sorted(filenames):
+                    extension = os.path.splitext(name)[1].lower()
+                    if extension not in IMPORTABLE_EXTENSIONS:
+                        continue
+                    abs_path = os.path.join(dirpath, name)
+                    relative_path = os.path.relpath(abs_path, base_dir).replace(os.sep, "/")
+                    segments = relative_path.split("/")
+                    category = segments[0] if len(segments) > 1 else None
+                    yield {
+                        "root": root["key"],
+                        "relative_path": relative_path,
+                        "abs_path": abs_path,
+                        "filename": name,
+                        "extension": extension,
+                        "category": _format_local_category(category),
+                    }
+        else:
+            for name in sorted(os.listdir(base_dir)):
+                abs_path = os.path.join(base_dir, name)
+                extension = os.path.splitext(name)[1].lower()
+                if extension not in IMPORTABLE_EXTENSIONS or not os.path.isfile(abs_path):
+                    continue
+                yield {
+                    "root": root["key"],
+                    "relative_path": name,
+                    "abs_path": abs_path,
+                    "filename": name,
+                    "extension": extension,
+                    "category": _format_local_category(root["fixed_category"]),
+                }
 
 
-@router.post("/import-local/camelyon17")
-async def import_local_camelyon17_image(
-    filename: str = Form(...),
-    title: Optional[str] = Form(None),
-    description: Optional[str] = Form(None),
-    pathology_type: Optional[str] = Form(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
-):
-    """
-    Registrar una lamina CAMELYON17 local sin subirla por HTTP.
-    """
-    safe_name = os.path.basename(filename)
-    if safe_name != filename:
-        raise HTTPException(status_code=400, detail="Nombre de archivo invalido")
+def _resolve_local_import_path(root_key: str, relative_path: str):
+    """Valida `relative_path` contra la raiz `root_key` y devuelve
+    (abs_path, extension, categoria). Lanza HTTPException si es invalida."""
+    roots_by_key = {root["key"]: root for root in _local_import_roots()}
+    root = roots_by_key.get(root_key)
+    if root is None:
+        raise HTTPException(status_code=400, detail="Origen de importación inválido")
 
-    extension = os.path.splitext(safe_name)[1].lower()
-    if extension not in WSI_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Solo se pueden importar laminas WSI locales")
+    base_dir = root["dir"]
+    normalized = os.path.normpath(relative_path).replace("\\", "/")
+    if normalized.startswith("..") or normalized.startswith("/") or ":" in normalized:
+        raise HTTPException(status_code=400, detail="Ruta inválida")
 
-    base_dir = os.path.abspath(CAMELYON17_IMAGES_DIR)
-    file_path = os.path.abspath(os.path.join(base_dir, safe_name))
-    if not file_path.startswith(base_dir + os.sep) or not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Lamina CAMELYON17 local no encontrada")
+    abs_path = os.path.abspath(os.path.join(base_dir, normalized))
+    if abs_path != base_dir and not abs_path.startswith(base_dir + os.sep):
+        raise HTTPException(status_code=400, detail="Ruta inválida")
+    if not os.path.isfile(abs_path):
+        raise HTTPException(status_code=404, detail="Archivo local no encontrado")
 
+    extension = os.path.splitext(abs_path)[1].lower()
+    if extension not in IMPORTABLE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Formato no permitido para importación local")
+
+    segments = normalized.split("/")
+    category_source = root["fixed_category"] or (segments[0] if len(segments) > 1 else None)
+    return abs_path, extension, _format_local_category(category_source)
+
+
+def _register_local_image(abs_path, extension, category, title, description, pathology_type, current_user, db):
+    """Crea (o reutiliza) el registro de MedicalImage para un archivo que ya
+    vive en el servidor. Devuelve (medical_image, created)."""
     existing = db.query(MedicalImage).filter(
-        MedicalImage.file_path == file_path,
+        MedicalImage.file_path == abs_path,
         MedicalImage.is_active == True,
     ).first()
     if existing:
         if existing.dzi_path is None:
-            process_wsi_to_dzi(existing, db)
-        return {**_image_payload(existing), "message": "Lamina ya estaba importada"}
+            if extension in WSI_EXTENSIONS:
+                process_wsi_to_dzi(existing, db)
+            else:
+                process_raster_to_dzi(existing, db)
+        return existing, False
 
+    filename = os.path.basename(abs_path)
     medical_image = MedicalImage(
-        filename=safe_name,
-        original_filename=safe_name,
-        title=title or os.path.splitext(safe_name)[0],
+        filename=filename,
+        original_filename=filename,
+        title=title or os.path.splitext(filename)[0],
         description=description,
-        pathology_type=pathology_type or "CAMELYON17",
+        pathology_type=pathology_type or category,
         file_type=extension[1:],
-        file_size=os.path.getsize(file_path),
-        file_path=file_path,
+        file_size=os.path.getsize(abs_path),
+        file_path=abs_path,
         uploaded_by=current_user.id,
     )
     db.add(medical_image)
@@ -241,19 +285,102 @@ async def import_local_camelyon17_image(
     db.refresh(medical_image)
 
     try:
-        process_wsi_to_dzi(medical_image, db)
+        if extension in WSI_EXTENSIONS:
+            process_wsi_to_dzi(medical_image, db)
+        else:
+            process_raster_to_dzi(medical_image, db)
     except Exception as exc:
         db.delete(medical_image)
         db.commit()
         raise HTTPException(
             status_code=422,
-            detail="No se pudo preparar el visor DZI para la lámina local.",
+            detail=f"No se pudo preparar el visor para '{filename}'.",
         ) from exc
 
-    return {
-        **_image_payload(medical_image),
-        "message": "Lamina CAMELYON17 importada y lista para visor DZI",
+    return medical_image, True
+
+
+@router.get("/local-import")
+async def list_local_import_images(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
+):
+    """
+    Lista las imagenes disponibles en las carpetas locales del servidor
+    (CAMELYON17 y el directorio general de importacion), agrupadas por la
+    subcarpeta que el docente uso para organizarlas por patologia.
+    """
+    imported_paths = {
+        os.path.abspath(row.file_path)
+        for row in db.query(MedicalImage).filter(MedicalImage.is_active == True).all()
     }
+
+    items = []
+    for candidate in _iter_local_import_candidates():
+        abs_path = os.path.abspath(candidate["abs_path"])
+        items.append({
+            "root": candidate["root"],
+            "relative_path": candidate["relative_path"],
+            "filename": candidate["filename"],
+            "category": candidate["category"],
+            "kind": "wsi" if candidate["extension"] in WSI_EXTENSIONS else "raster",
+            "file_size": os.path.getsize(abs_path),
+            "imported": abs_path in imported_paths,
+        })
+    return items
+
+
+@router.post("/local-import")
+async def import_local_image(
+    root: str = Form(...),
+    relative_path: str = Form(...),
+    title: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    pathology_type: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
+):
+    """Registra una imagen puntual que ya vive en el servidor, sin subirla por HTTP."""
+    abs_path, extension, category = _resolve_local_import_path(root, relative_path)
+    medical_image, created = _register_local_image(
+        abs_path, extension, category, title, description, pathology_type, current_user, db,
+    )
+    message = "Imagen importada y lista" if created else "La imagen ya estaba importada"
+    return {**_image_payload(medical_image), "message": message}
+
+
+@router.post("/local-import/bulk")
+async def import_local_images_bulk(
+    root: str = Form(...),
+    category: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
+):
+    """
+    Importa de una vez todas las imagenes locales de una carpeta/patologia
+    (o de toda una raiz si no se indica `category`) que aun no esten en la
+    biblioteca. Los errores de un archivo no interrumpen al resto del lote.
+    """
+    imported, skipped, failed = [], 0, []
+    for candidate in _iter_local_import_candidates():
+        if candidate["root"] != root:
+            continue
+        if category is not None and candidate["category"] != category:
+            continue
+        try:
+            abs_path, extension, resolved_category = _resolve_local_import_path(
+                candidate["root"], candidate["relative_path"]
+            )
+            medical_image, created = _register_local_image(
+                abs_path, extension, resolved_category, None, None, None, current_user, db,
+            )
+            if created:
+                imported.append(_image_payload(medical_image))
+            else:
+                skipped += 1
+        except HTTPException as exc:
+            failed.append({"filename": candidate["filename"], "error": exc.detail})
+    return {"imported": imported, "skipped_already_imported": skipped, "failed": failed}
 
 
 @router.get("/list")

@@ -42,6 +42,29 @@ export const dziImage = {
   uploader_name: "Docente E2E",
 };
 
+export const diseaseCategoriesFixture = [
+  {
+    id: 1,
+    key: "cancer-mama",
+    label: "Cáncer de mama",
+    icon: "🎗️",
+    description: "Metástasis en ganglio linfático centinela (CAMELYON17 · SLN-Breast)",
+    keywords: ["camelyon", "sln", "breast", "mama", "metastasico", "cancer", "carcinoma", "tumor"],
+    sort_order: 10,
+    is_active: true,
+  },
+  {
+    id: 2,
+    key: "necrosis",
+    label: "Necrosis y muerte celular",
+    icon: "🧬",
+    description: "Necrosis coagulativa y licuefactiva, apoptosis e infarto",
+    keywords: ["necrosis", "apoptosis", "infarto", "isquemia", "gangrena"],
+    sort_order: 20,
+    is_active: true,
+  },
+];
+
 export const dziManifest = `<?xml version="1.0" encoding="UTF-8"?>
 <Image xmlns="http://schemas.microsoft.com/deepzoom/2008" TileSize="256" Overlap="0" Format="png">
   <Size Width="1024" Height="1024"/>

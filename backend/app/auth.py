@@ -23,6 +23,8 @@ PERM_USE_PLATFORM = "use_platform"
 PERM_USE_CHAT = "use_chat"
 PERM_USE_HISTOPATHOLOGY = "use_histopathology"
 PERM_SOLVE_SCT = "solve_sct"
+PERM_SOLVE_MCQ = "solve_mcq"
+PERM_MANAGE_MCQ = "manage_mcq"
 PERM_VIEW_OWN_HISTORY = "view_own_history"
 PERM_MANAGE_CASES = "manage_cases"
 PERM_MANAGE_SCT = "manage_sct"
@@ -47,6 +49,7 @@ ROLE_PERMISSIONS = {
         PERM_USE_CHAT,
         PERM_USE_HISTOPATHOLOGY,
         PERM_SOLVE_SCT,
+        PERM_SOLVE_MCQ,
         PERM_VIEW_OWN_HISTORY,
         PERM_SUBMIT_REPORTS,
     },
@@ -55,6 +58,8 @@ ROLE_PERMISSIONS = {
         PERM_USE_CHAT,
         PERM_USE_HISTOPATHOLOGY,
         PERM_SOLVE_SCT,
+        PERM_SOLVE_MCQ,
+        PERM_MANAGE_MCQ,
         PERM_VIEW_OWN_HISTORY,
         PERM_MANAGE_CASES,
         PERM_MANAGE_SCT,
@@ -73,6 +78,8 @@ ROLE_PERMISSIONS = {
         PERM_USE_CHAT,
         PERM_USE_HISTOPATHOLOGY,
         PERM_SOLVE_SCT,
+        PERM_SOLVE_MCQ,
+        PERM_MANAGE_MCQ,
         PERM_VIEW_OWN_HISTORY,
         PERM_MANAGE_CASES,
         PERM_MANAGE_SCT,

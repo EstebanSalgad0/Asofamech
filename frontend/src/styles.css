@@ -4835,6 +4835,41 @@ a { color: inherit; text-decoration: none; }
 .cfg-camelyon-controls .cfg-modal-input { flex: 1; font-size: 12px; padding: 6px 10px; }
 .cfg-camelyon-controls .cfg-action-btn { white-space: nowrap; padding: 7px 14px; font-size: 12px; }
 
+.cfg-local-import-card { grid-column: 1 / -1; }
+.cfg-camelyon-desc code { font-size: 10.5px; background: var(--bg-2); padding: 1px 5px; border-radius: 5px; }
+.cfg-local-import-loading, .cfg-local-import-empty {
+  font-size: 12px; color: var(--muted); padding: 10px 0;
+}
+.cfg-local-import-groups { display: flex; flex-direction: column; gap: 8px; }
+.cfg-local-import-group { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--bg-2); }
+.cfg-local-import-group-head {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  background: transparent; border: none; cursor: pointer; font-family: inherit; text-align: left;
+}
+.cfg-local-import-group-name { font-size: 12.5px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; }
+.cfg-local-import-group-count { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.cfg-local-import-group-chevron { font-size: 13px; color: var(--muted); }
+.cfg-local-import-group-body {
+  padding: 10px 12px 12px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.cfg-local-import-file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cfg-local-import-file {
+  display: flex; align-items: center; gap: 8px; font-size: 11.5px;
+  padding: 6px 8px; border-radius: 7px; background: var(--bg-card);
+}
+.cfg-local-import-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.cfg-local-import-file-meta { color: var(--muted); white-space: nowrap; }
+.cfg-local-import-file-badge {
+  font-size: 10px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 6px; padding: 2px 7px; white-space: nowrap;
+}
+.cfg-local-import-file-btn {
+  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--ink); color: var(--bg-card); font-family: inherit;
+}
+.cfg-local-import-file-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
 /* Heatmap: archivo de mapa display */
 .cfg-heatmap-mapfile { padding: 8px 0; border-top: 1px solid var(--line); }
 .cfg-heatmap-mapfile-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
@@ -8257,6 +8292,31 @@ a { color: inherit; text-decoration: none; }
 .sct-ans-lbl { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .sct-answer-opt.selected .sct-ans-val,
 .sct-answer-opt.selected .sct-ans-lbl { color: white; }
+.mcq-options-list { display: flex; flex-direction: column; gap: 8px; }
+.mcq-option {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 14px;
+  background: var(--bg-2); transition: all 0.15s;
+}
+.mcq-option input { flex-shrink: 0; }
+.mcq-option:hover { border-color: var(--ink); }
+.mcq-option.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg-2)); }
+.mcq-option-letter {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; background: var(--bg-card); color: var(--ink-2); text-transform: uppercase;
+}
+.mcq-option-text { flex: 1; font-size: 13.5px; color: var(--ink); line-height: 1.5; }
+.mcq-option.review { cursor: default; }
+.mcq-option.review:hover { border-color: var(--line); }
+.mcq-option.review.correct { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-2)); }
+.mcq-option.review.wrong { border-color: var(--coral); background: color-mix(in srgb, var(--coral) 10%, var(--bg-2)); }
+.mcq-option-tag {
+  flex-shrink: 0; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
+  background: var(--bg-card); color: var(--muted);
+}
+.mcq-option-tag.correct { background: var(--accent); color: #fff; }
+
 .sct-submit-section { text-align: center; padding: 32px 0; }
 .sct-submit-btn {
   padding: 14px 40px; background: var(--accent);
@@ -10234,6 +10294,66 @@ body { zoom: var(--font-ui-scale); }
 .cse-script-head input { flex: 1; min-width: 0; }
 .cse-script-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
 .cse-script-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.sctmb-panel { border-style: dashed; }
+.sctmb-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.sctmb-cancel-btn, .sctmb-save-btn {
+  padding: 8px 16px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  border-radius: 8px; border: 1px solid var(--line);
+}
+.sctmb-cancel-btn { background: var(--bg-card); color: var(--ink-2); }
+.sctmb-cancel-btn:hover { border-color: var(--accent); color: var(--accent); }
+.sctmb-save-btn { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sctmb-save-btn:hover:not(:disabled) { filter: brightness(1.05); }
+.sctmb-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sctmb-error { color: var(--coral, #ef4444); }
+
+.mcqb-panel { border-style: dashed; }
+.mcqb-import-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px; border: 1px dashed var(--line); border-radius: 9px; background: var(--bg-2);
+}
+.mcqb-import-btn {
+  padding: 7px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit;
+  border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; white-space: nowrap;
+}
+.mcqb-import-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.mcqb-options { display: flex; flex-direction: column; gap: 6px; }
+.mcqb-option-row { display: flex; align-items: center; gap: 8px; }
+/* .cse-row input pone width:100% a *cualquier* input dentro de .cse-row (incluido
+   este radio) y, con flex-basis:auto, ese 100% se convierte en la base flex del
+   radio -se come casi toda la fila y aplasta el input de texto a unos px-. Se
+   neutraliza cada propiedad heredada explicitamente en vez de solo agregar flex. */
+.mcqb-option-row input[type="radio"] {
+  flex: 0 0 auto; width: 16px; height: 16px; min-width: 16px;
+  padding: 0; border: none; background: none; border-radius: 0;
+  accent-color: var(--accent);
+}
+.mcqb-option-row input[type="text"] { flex: 1 1 0%; width: auto; min-width: 0; }
+.mcqb-option-remove {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; font-size: 11px;
+  border: 1px solid var(--line); background: var(--bg-card); color: var(--ink-2);
+}
+.mcqb-option-remove:hover { border-color: var(--accent); color: var(--accent); }
+
+.mcqb-import-progress {
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg-2);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.mcqb-import-progress-head { display: flex; align-items: center; gap: 8px; }
+.mcqb-import-progress-spinner {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border: 2px solid var(--line); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+.mcqb-import-progress-title { font-size: 12.5px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcqb-import-progress-pct { font-size: 12px; font-weight: 700; color: var(--accent); }
+.mcqb-import-progress-track { width: 100%; height: 5px; background: var(--bg-card); border-radius: 999px; overflow: hidden; }
+.mcqb-import-progress-fill {
+  height: 100%; border-radius: 999px; transition: width 0.4s ease;
+  background: linear-gradient(90deg, var(--coral) 0%, var(--indigo) 100%);
+}
+.mcqb-import-progress-step { font-size: 11px; color: var(--muted); line-height: 1.5; }
 
 .cse-mcq { flex-direction: column; }
 .cse-check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--ink); cursor: pointer; }
