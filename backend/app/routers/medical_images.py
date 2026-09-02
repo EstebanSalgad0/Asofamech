@@ -14,7 +14,7 @@ from ..auth import (
     require_permission,
 )
 from ..db import get_db
-from ..models import MedicalImage, User
+from ..models import DiseaseCategory, MedicalImage, User
 
 router = APIRouter(prefix="/api/medical-images", tags=["medical-images"])
 
@@ -253,6 +253,28 @@ def _resolve_local_import_path(root_key: str, relative_path: str):
     return abs_path, extension, _format_local_category(category_source)
 
 
+def _resolve_disease_category_key(disease_category_key: Optional[str], db: Session) -> Optional[str]:
+    """Devuelve el `key` normalizado de la categoria si existe y esta activa.
+
+    Se usa para vincular explicitamente una carpeta de importacion a una
+    enfermedad del catalogo, de modo que la agrupacion en Imagenes IA sea un
+    match exacto y no dependa del heuristico de keywords (que confunde por
+    ejemplo hepatitis con inflamacion por el sufijo -itis)."""
+    if not disease_category_key:
+        return None
+    key = disease_category_key.strip().lower()
+    if not key:
+        return None
+    category = (
+        db.query(DiseaseCategory)
+        .filter(DiseaseCategory.key == key, DiseaseCategory.is_active == True)
+        .first()
+    )
+    if not category:
+        raise HTTPException(status_code=404, detail=f"Categoría '{key}' no encontrada")
+    return category.key
+
+
 def _register_local_image(abs_path, extension, category, title, description, pathology_type, current_user, db):
     """Crea (o reutiliza) el registro de MedicalImage para un archivo que ya
     vive en el servidor. Devuelve (medical_image, created)."""
@@ -337,13 +359,21 @@ async def import_local_image(
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     pathology_type: Optional[str] = Form(None),
+    disease_category_key: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
 ):
-    """Registra una imagen puntual que ya vive en el servidor, sin subirla por HTTP."""
+    """Registra una imagen puntual que ya vive en el servidor, sin subirla por HTTP.
+
+    Si `disease_category_key` viene, sobrescribe `pathology_type` con la clave
+    normalizada de la enfermedad del catalogo, para que Imagenes IA la agrupe
+    por match exacto y no por el heuristico de keywords.
+    """
     abs_path, extension, category = _resolve_local_import_path(root, relative_path)
+    resolved_key = _resolve_disease_category_key(disease_category_key, db)
+    effective_pathology = resolved_key or pathology_type
     medical_image, created = _register_local_image(
-        abs_path, extension, category, title, description, pathology_type, current_user, db,
+        abs_path, extension, category, title, description, effective_pathology, current_user, db,
     )
     message = "Imagen importada y lista" if created else "La imagen ya estaba importada"
     return {**_image_payload(medical_image), "message": message}
@@ -353,6 +383,7 @@ async def import_local_image(
 async def import_local_images_bulk(
     root: str = Form(...),
     category: Optional[str] = Form(None),
+    disease_category_key: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_MANAGE_IMAGES))
 ):
@@ -360,7 +391,13 @@ async def import_local_images_bulk(
     Importa de una vez todas las imagenes locales de una carpeta/patologia
     (o de toda una raiz si no se indica `category`) que aun no esten en la
     biblioteca. Los errores de un archivo no interrumpen al resto del lote.
+
+    `disease_category_key` (opcional) vincula todo el lote a una enfermedad del
+    catalogo: cada imagen queda con `pathology_type = category.key`, lo que
+    garantiza que en Imagenes IA caigan en la carpeta correcta por match
+    exacto (ver bug del sufijo -itis).
     """
+    resolved_key = _resolve_disease_category_key(disease_category_key, db)
     imported, skipped, failed = [], 0, []
     for candidate in _iter_local_import_candidates():
         if candidate["root"] != root:
@@ -371,8 +408,9 @@ async def import_local_images_bulk(
             abs_path, extension, resolved_category = _resolve_local_import_path(
                 candidate["root"], candidate["relative_path"]
             )
+            effective_pathology = resolved_key  # None si el docente no eligio
             medical_image, created = _register_local_image(
-                abs_path, extension, resolved_category, None, None, None, current_user, db,
+                abs_path, extension, resolved_category, None, None, effective_pathology, current_user, db,
             )
             if created:
                 imported.append(_image_payload(medical_image))

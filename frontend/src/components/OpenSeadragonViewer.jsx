@@ -14,8 +14,28 @@ const ROI_COLORS = {
   roi1: '#38bdf8',
   roi2: '#f97316',
   draft: '#facc15',
+  // Anotaciones docentes: referencia curricular ("aqui hay necrosis caseosa").
   annotation: '#a78bfa',
+  // Anotaciones del propio estudiante: su ejercicio de identificacion. Se
+  // distinguen por color para que al abrir la lamina sepa cual es cual sin
+  // tener que leer el nombre del autor.
+  annotation_student: '#22c55e',
 };
+
+const TEACHER_ROLES = new Set(['docente', 'administrador']);
+
+function annotationColor(annotation) {
+  const role = (annotation?.creator_role || '').toLowerCase();
+  return TEACHER_ROLES.has(role) ? ROI_COLORS.annotation : ROI_COLORS.annotation_student;
+}
+
+function annotationFillRgba(annotation, alpha) {
+  const role = (annotation?.creator_role || '').toLowerCase();
+  if (TEACHER_ROLES.has(role)) {
+    return `rgba(167,139,250,${alpha})`;
+  }
+  return `rgba(34,197,94,${alpha})`;
+}
 
 const ROI2_MIN_SIZE = 32;
 const ROI2_MAX_SIZE = 4096;
@@ -177,7 +197,19 @@ function describeApiError(payload, fallback) {
   return fallback;
 }
 
-export function OpenSeadragonViewer({ imageData, initialSession = null, canAnnotate = false }) {
+export function OpenSeadragonViewer({
+  imageData,
+  initialSession = null,
+  // Puede crear sus propias anotaciones (por defecto cualquier autenticado que
+  // el llamador considere valido; el backend hace la verificacion real).
+  canAnnotate = false,
+  // Puede editar/borrar anotaciones de cualquiera (docente/administrador).
+  // Los estudiantes solo pueden tocar las suyas — se decide por creator_id.
+  canCurateAnnotations = false,
+  // Id del usuario actual; se usa para saber cuales anotaciones son propias
+  // (y por tanto editables/eliminables por un estudiante).
+  currentUserId = null,
+}) {
   const viewerRef = useRef(null);
   const overlayRef = useRef(null);
   const osdRef = useRef(null);
@@ -1163,18 +1195,24 @@ export function OpenSeadragonViewer({ imageData, initialSession = null, canAnnot
               </>
             )}
 
-            {/* Anotaciones docentes: siempre visibles, sin importar el modo activo */}
+            {/* Anotaciones: docentes en purpura, del propio estudiante en verde.
+                Siempre visibles, sin importar el modo activo. */}
             {annotationViewerRects.map((annotation) => {
               const isEditing = editingAnnotationId === annotation.id;
+              const color = annotationColor(annotation);
+              const isTeacher = TEACHER_ROLES.has((annotation.creator_role || '').toLowerCase());
+              const labelBg = isTeacher ? 'rgba(124,58,237,0.92)' : 'rgba(22,163,74,0.92)';
+              const isOwner = currentUserId != null && annotation.created_by === currentUserId;
+              const canModifyThis = canCurateAnnotations || isOwner;
               return (
                 <React.Fragment key={annotation.id}>
                   <div
                     style={{
                       position: 'absolute', left: annotation.viewerRect.left, top: annotation.viewerRect.top,
                       width: annotation.viewerRect.width, height: annotation.viewerRect.height,
-                      border: `2px solid ${ROI_COLORS.annotation}`,
+                      border: `2px solid ${color}`,
                       borderRadius: annotation.shape === 'ellipse' ? '50%' : 0,
-                      background: isEditing ? 'rgba(167,139,250,0.20)' : 'rgba(167,139,250,0.10)',
+                      background: annotationFillRgba(annotation, isEditing ? 0.2 : 0.1),
                       boxShadow: '0 0 0 1px rgba(15,23,42,0.4)', pointerEvents: 'none',
                     }}
                     data-testid={`annotation-overlay-${annotation.id}`}
@@ -1189,7 +1227,7 @@ export function OpenSeadragonViewer({ imageData, initialSession = null, canAnnot
                     style={{
                       position: 'absolute', left: annotation.viewerRect.left,
                       top: Math.max(0, annotation.viewerRect.top - 22),
-                      background: 'rgba(124,58,237,0.92)', color: '#fff', fontSize: 10, fontWeight: 800,
+                      background: labelBg, color: '#fff', fontSize: 10, fontWeight: 800,
                       padding: '2px 8px', borderRadius: '4px 4px 4px 0', border: 'none', cursor: 'pointer',
                       pointerEvents: 'auto', whiteSpace: 'nowrap',
                     }}
@@ -1212,10 +1250,11 @@ export function OpenSeadragonViewer({ imageData, initialSession = null, canAnnot
                           {annotation.note}
                         </div>
                       )}
-                      <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: canAnnotate ? 8 : 0 }}>
-                        {annotation.creator_name || 'Docente'}
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: canModifyThis ? 8 : 0 }}>
+                        {annotation.creator_name || (isTeacher ? 'Docente' : 'Estudiante')}
+                        {isTeacher ? ' · docente' : ' · estudiante'}
                       </div>
-                      {canAnnotate && (
+                      {canModifyThis && (
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button
                             type="button"

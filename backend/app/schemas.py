@@ -479,6 +479,10 @@ class ImageAnnotationOut(BaseModel):
     note: Optional[str] = None
     created_by: Optional[int] = None
     creator_name: Optional[str] = None
+    # Rol del autor al momento de crear la anotación. Sirve para que el visor
+    # pinte con color distinto las marcas del docente (referencia curricular)
+    # de las del estudiante (su propio ejercicio).
+    creator_role: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

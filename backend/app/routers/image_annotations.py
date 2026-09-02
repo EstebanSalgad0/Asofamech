@@ -1,17 +1,18 @@
-"""Anotaciones docentes sobre una region de una imagen del visor.
+"""Anotaciones sobre una region de una imagen del visor.
 
-No tiene relacion alguna con el pipeline de clasificacion (CONCH/CAMELYON):
-una anotacion es un rectangulo con texto que el docente deja sobre la imagen
-para que el estudiante vea "esto es un linfocito" o "aqui hay necrosis
-caseosa", sin que en ningun momento se invoque al modelo de IA. Existe
-precisamente para las imagenes que la coordinacion academica pidio no
-analizar, y para complementar las que si se analizan con contexto que el
+No tiene relacion con el pipeline de clasificacion (CONCH/CAMELYON): una
+anotacion es un rectangulo/ovalo con texto que se deja sobre la imagen; nunca
+dispara IA. Existe para las imagenes que la coordinacion academica pidio no
+analizar y para complementar las que si se analizan con contexto que el
 clasificador no puede dar.
 
-Lectura: cualquier usuario autenticado (igual que el resto del visor).
-Escritura: solo quien gestiona contenido educativo (docente/administrador),
-y cualquiera de ellos puede editar o borrar la anotacion de otro colega -
-es contenido institucional del curso, no propiedad personal de quien la creo.
+Autoria y visibilidad:
+- Lectura: cualquier usuario autenticado ve todas las anotaciones. Las del
+  docente/administrador son referencia curricular; las del estudiante son
+  su propio ejercicio de identificacion.
+- Escritura: cualquier usuario autenticado crea sus propias anotaciones. El
+  estudiante solo puede editar/borrar las suyas; docente/administrador
+  pueden curar las de cualquiera (incluidas las de estudiantes).
 """
 from datetime import datetime
 from typing import Optional
@@ -22,7 +23,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..auth import (
     PERM_MANAGE_EDUCATIONAL_CONTENT,
     get_current_user,
-    require_permission,
+    user_has_permission,
 )
 from ..db import get_db
 from ..models import ImageAnnotation, MedicalImage, User
@@ -34,6 +35,7 @@ VALID_SHAPES = {"rect", "ellipse"}
 
 
 def _serialize(annotation: ImageAnnotation) -> dict:
+    creator = annotation.creator
     return {
         "id": annotation.id,
         "image_id": annotation.image_id,
@@ -42,7 +44,8 @@ def _serialize(annotation: ImageAnnotation) -> dict:
         "label": annotation.label,
         "note": annotation.note,
         "created_by": annotation.created_by,
-        "creator_name": annotation.creator.name if annotation.creator else None,
+        "creator_name": creator.name if creator else None,
+        "creator_role": creator.role if creator else None,
         "created_at": annotation.created_at.isoformat() if annotation.created_at else None,
         "updated_at": annotation.updated_at.isoformat() if annotation.updated_at else None,
     }
@@ -71,6 +74,18 @@ def _get_annotation_or_404(annotation_id: int, db: Session) -> ImageAnnotation:
     return annotation
 
 
+def _ensure_can_modify(annotation: ImageAnnotation, user: User) -> None:
+    """El estudiante solo toca sus propias anotaciones; docente/admin las de cualquiera."""
+    if user_has_permission(user, PERM_MANAGE_EDUCATIONAL_CONTENT):
+        return
+    if annotation.created_by == user.id:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Solo puedes modificar tus propias anotaciones",
+    )
+
+
 @router.get("/{image_id}/annotations", response_model=list[ImageAnnotationOut])
 def list_annotations(
     image_id: int,
@@ -97,7 +112,7 @@ def create_annotation(
     image_id: int,
     payload: ImageAnnotationCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission(PERM_MANAGE_EDUCATIONAL_CONTENT)),
+    current_user: User = Depends(get_current_user),
 ):
     _get_image_or_404(image_id, db)
 
@@ -116,6 +131,8 @@ def create_annotation(
     db.add(annotation)
     db.commit()
     db.refresh(annotation)
+    # Cargar creator para que _serialize devuelva creator_name/role sin otra query.
+    db.refresh(annotation, attribute_names=["creator"])
     return _serialize(annotation)
 
 
@@ -124,9 +141,10 @@ def update_annotation(
     annotation_id: int,
     payload: ImageAnnotationUpdate,
     db: Session = Depends(get_db),
-    _current_user: User = Depends(require_permission(PERM_MANAGE_EDUCATIONAL_CONTENT)),
+    current_user: User = Depends(get_current_user),
 ):
     annotation = _get_annotation_or_404(annotation_id, db)
+    _ensure_can_modify(annotation, current_user)
 
     if payload.roi is not None:
         annotation.roi = payload.roi.model_dump() if hasattr(payload.roi, "model_dump") else payload.roi.dict()
@@ -150,8 +168,9 @@ def update_annotation(
 def delete_annotation(
     annotation_id: int,
     db: Session = Depends(get_db),
-    _current_user: User = Depends(require_permission(PERM_MANAGE_EDUCATIONAL_CONTENT)),
+    current_user: User = Depends(get_current_user),
 ):
     annotation = _get_annotation_or_404(annotation_id, db)
+    _ensure_can_modify(annotation, current_user)
     db.delete(annotation)
     db.commit()

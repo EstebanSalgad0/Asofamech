@@ -1,9 +1,12 @@
-"""Anotaciones docentes sobre una region de una imagen.
+"""Anotaciones sobre una region de una imagen.
 
-El requisito central del pedido: estas anotaciones deben poder existir sobre
-cualquier imagen del visor SIN que eso implique correr el clasificador de IA.
-Se verifica explícitamente que crear/leer/editar una anotación no toca
-`HistopathologySession` ni ninguna tabla del pipeline de clasificación.
+Dos requisitos clave del pedido docente:
+- estas anotaciones deben poder existir sobre cualquier imagen del visor SIN
+  que eso implique correr el clasificador de IA. Se verifica explícitamente
+  que crear/leer/editar no toca `HistopathologySession`.
+- el estudiante puede dejar sus propias anotaciones (para su ejercicio de
+  identificación) y sólo gestiona las suyas; docente/administrador siguen
+  pudiendo curar todo.
 """
 import pytest
 from fastapi import FastAPI
@@ -94,6 +97,8 @@ def test_teacher_can_create_an_annotation(annotations_client):
     assert body["label"] == "Linfocito"
     assert body["roi"] == {"x": 100, "y": 200, "width": 300, "height": 250}
     assert body["creator_name"] == "Usuario docente"
+    # El rol viaja en el payload para que el visor pinte distinto docente vs estudiante.
+    assert body["creator_role"] == "docente"
     assert body["shape"] == "rect"  # valor por defecto cuando no se envia
 
 
@@ -124,9 +129,11 @@ def test_shape_can_be_changed_on_update(annotations_client):
     assert updated.json()["label"] == "Linfocito"
 
 
-def test_student_can_read_but_not_write(annotations_client):
+def test_student_can_read_and_create_annotations(annotations_client):
+    """El estudiante deja sus propias marcas de estudio ("aquí creo que hay
+    necrosis") y las ve junto con las del docente."""
     client, _, current = annotations_client
-    _create(client)
+    _create(client)  # anotacion del docente
 
     current["role"] = "estudiante"
     current["id"] = 2
@@ -135,8 +142,68 @@ def test_student_can_read_but_not_write(annotations_client):
     assert listed.status_code == 200
     assert len(listed.json()) == 1
 
-    forbidden = _create(client)
-    assert forbidden.status_code == 403
+    created = _create(client, label="Mi hipótesis: necrosis")
+    assert created.status_code == 201, created.text
+    assert created.json()["creator_role"] == "estudiante"
+    assert created.json()["created_by"] == 2
+
+
+def test_student_cannot_edit_or_delete_a_teacher_annotation(annotations_client):
+    client, _, current = annotations_client
+    teacher_annotation_id = _create(client).json()["id"]
+
+    current["role"] = "estudiante"
+    current["id"] = 2
+
+    forbidden_edit = client.put(
+        f"/api/medical-images/annotations/{teacher_annotation_id}",
+        json={"label": "no debería poder"},
+    )
+    assert forbidden_edit.status_code == 403
+
+    forbidden_delete = client.delete(f"/api/medical-images/annotations/{teacher_annotation_id}")
+    assert forbidden_delete.status_code == 403
+
+
+def test_student_can_edit_and_delete_own_annotation(annotations_client):
+    client, _, current = annotations_client
+
+    current["role"] = "estudiante"
+    current["id"] = 2
+
+    own_id = _create(client, label="Mi marca").json()["id"]
+
+    updated = client.put(
+        f"/api/medical-images/annotations/{own_id}",
+        json={"label": "Mi marca (corregida)"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["label"] == "Mi marca (corregida)"
+
+    deleted = client.delete(f"/api/medical-images/annotations/{own_id}")
+    assert deleted.status_code == 204
+
+
+def test_teacher_can_curate_a_students_annotation(annotations_client):
+    """Docente/admin siguen pudiendo editar/borrar lo que sea, incluida una
+    anotación de un estudiante (para corregir errores didácticos)."""
+    client, _, current = annotations_client
+
+    current["role"] = "estudiante"
+    current["id"] = 2
+    student_annotation_id = _create(client, label="Creo que es necrosis").json()["id"]
+
+    current["role"] = "docente"
+    current["id"] = 1
+
+    updated = client.put(
+        f"/api/medical-images/annotations/{student_annotation_id}",
+        json={"label": "Necrosis coagulativa (confirmada)"},
+    )
+    assert updated.status_code == 200
+
+    deleted = client.delete(f"/api/medical-images/annotations/{student_annotation_id}")
+    assert deleted.status_code == 204
 
 
 def test_teacher_can_edit_and_delete(annotations_client):

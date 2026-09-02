@@ -156,6 +156,13 @@ export function ConfigPage() {
   const [loadingLocalImport, setLoadingLocalImport] = useState(false);
   const [openLocalImportCategory, setOpenLocalImportCategory] = useState(null);
   const [importingLocalKey, setImportingLocalKey] = useState(null);
+  // Vinculo docente entre carpeta de importacion y enfermedad del catalogo.
+  // Clave: nombre de la carpeta (item.category tal como viene del backend).
+  // Valor: `key` de la DiseaseCategory elegida. Sin valor => el docente aun
+  // no elige y el boton "Importar todas" queda deshabilitado, para forzar la
+  // decision explicita en vez del heuristico de keywords (que confundia p.ej.
+  // hepatitis con inflamacion por el sufijo -itis).
+  const [linkedCategoryByGroup, setLinkedCategoryByGroup] = useState({});
 
   const localImportGroups = useMemo(() => {
     const byCategory = new Map();
@@ -172,6 +179,18 @@ export function ConfigPage() {
       }))
       .sort((a, b) => a.category.localeCompare(b.category, "es"));
   }, [localImportItems]);
+
+  // Normalizacion tolerante para intentar preseleccionar la enfermedad cuando
+  // el nombre de la carpeta coincide con el key o label de una categoria
+  // existente ("hepatitis" -> "hepatitis"; "cancer_de_mama" -> "cancer de mama").
+  const normalizeForMatch = (raw) =>
+    (raw || "")
+      .toString()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[_-]+/g, " ")
+      .trim();
 
   const [diseaseCategories, setDiseaseCategories] = useState([]);
   const [loadingDiseaseCategories, setLoadingDiseaseCategories] = useState(false);
@@ -286,6 +305,29 @@ export function ConfigPage() {
     }
   }, [activeTab, role]);
 
+  // Auto-detectar enfermedad del catalogo para cada carpeta pendiente. Solo
+  // rellena sugerencias: si el docente ya eligio (o des-eligio) manualmente,
+  // no lo sobrescribe.
+  useEffect(() => {
+    if (!localImportGroups.length || !diseaseCategories.length) return;
+    setLinkedCategoryByGroup((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      localImportGroups.forEach((group) => {
+        if (Object.prototype.hasOwnProperty.call(next, group.category)) return;
+        const folderNorm = normalizeForMatch(group.category);
+        const guess = diseaseCategories.find(
+          (c) =>
+            normalizeForMatch(c.key) === folderNorm ||
+            normalizeForMatch(c.label) === folderNorm,
+        );
+        next[group.category] = guess ? guess.key : "";
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [localImportGroups, diseaseCategories]);
+
   useEffect(() => {
     const firstDzi = imageLibrary.find((image) => image.has_dzi);
     const selectedStillExists = imageLibrary.some((image) => image.has_dzi && String(image.id) === selectedHeatmapImageId);
@@ -353,6 +395,10 @@ export function ConfigPage() {
       form.append("relative_path", item.relative_path);
       form.append("title", item.filename.replace(/\.[^.]+$/, ""));
       form.append("pathology_type", item.category);
+      const linkedKey = linkedCategoryByGroup[item.category];
+      if (linkedKey) {
+        form.append("disease_category_key", linkedKey);
+      }
 
       const response = await authFetch("/api/medical-images/local-import", {
         method: "POST",
@@ -373,12 +419,18 @@ export function ConfigPage() {
   };
 
   const handleImportLocalCategoryBulk = async (root, category) => {
+    const linkedKey = linkedCategoryByGroup[category];
+    if (!linkedKey) {
+      showToast("Elige una enfermedad antes de importar la carpeta", "warning", 5000);
+      return;
+    }
     const key = `bulk:${root}:${category}`;
     setImportingLocalKey(key);
     try {
       const form = new FormData();
       form.append("root", root);
       form.append("category", category);
+      form.append("disease_category_key", linkedKey);
 
       const response = await authFetch("/api/medical-images/local-import/bulk", {
         method: "POST",
@@ -1480,6 +1532,8 @@ export function ConfigPage() {
                         const isOpen = openLocalImportCategory === group.category;
                         const root = group.files[0]?.root;
                         const bulkKey = `bulk:${root}:${group.category}`;
+                        const linkedKey = linkedCategoryByGroup[group.category] || "";
+                        const linkedCategory = diseaseCategories.find((c) => c.key === linkedKey);
                         return (
                           <div key={group.category} className="cfg-local-import-group">
                             <button
@@ -1488,7 +1542,17 @@ export function ConfigPage() {
                               onClick={() => setOpenLocalImportCategory(isOpen ? null : group.category)}
                               aria-expanded={isOpen}
                             >
-                              <span className="cfg-local-import-group-name">{group.category}</span>
+                              <span className="cfg-local-import-group-name">
+                                {group.category}
+                                {linkedCategory && (
+                                  <span
+                                    style={{ marginLeft: 8, fontSize: 12, color: "#6d28d9" }}
+                                    title={`Se importarán como "${linkedCategory.label}"`}
+                                  >
+                                    → {linkedCategory.icon} {linkedCategory.label}
+                                  </span>
+                                )}
+                              </span>
                               <span className="cfg-local-import-group-count">
                                 {group.pendingCount} de {group.files.length} por importar
                               </span>
@@ -1496,10 +1560,53 @@ export function ConfigPage() {
                             </button>
                             {isOpen && (
                               <div className="cfg-local-import-group-body">
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    fontSize: 13,
+                                    marginBottom: 10,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <span style={{ fontWeight: 600 }}>Vincular a enfermedad:</span>
+                                  <select
+                                    value={linkedKey}
+                                    onChange={(e) =>
+                                      setLinkedCategoryByGroup((prev) => ({
+                                        ...prev,
+                                        [group.category]: e.target.value,
+                                      }))
+                                    }
+                                    style={{
+                                      padding: "4px 8px",
+                                      borderRadius: 6,
+                                      border: "1px solid #d1d5db",
+                                      background: linkedKey ? "#ecfdf5" : "#fff7ed",
+                                    }}
+                                  >
+                                    <option value="">— Elige una enfermedad —</option>
+                                    {diseaseCategories.map((c) => (
+                                      <option key={c.key} value={c.key}>
+                                        {c.icon} {c.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {!linkedKey && (
+                                    <span style={{ fontSize: 11, color: "#b45309" }}>
+                                      Necesario para importar la carpeta.
+                                    </span>
+                                  )}
+                                </label>
                                 <button
                                   type="button"
                                   className="cfg-action-btn"
-                                  disabled={group.pendingCount === 0 || importingLocalKey === bulkKey}
+                                  disabled={
+                                    group.pendingCount === 0 ||
+                                    importingLocalKey === bulkKey ||
+                                    !linkedKey
+                                  }
                                   onClick={() => handleImportLocalCategoryBulk(root, group.category)}
                                 >
                                   {importingLocalKey === bulkKey
@@ -1523,7 +1630,8 @@ export function ConfigPage() {
                                           <button
                                             type="button"
                                             className="cfg-local-import-file-btn"
-                                            disabled={importingLocalKey === fileKey}
+                                            disabled={importingLocalKey === fileKey || !linkedKey}
+                                            title={!linkedKey ? "Elige una enfermedad arriba antes de importar" : undefined}
                                             onClick={() => handleImportLocalFile(item)}
                                           >
                                             {importingLocalKey === fileKey ? "…" : "Importar"}

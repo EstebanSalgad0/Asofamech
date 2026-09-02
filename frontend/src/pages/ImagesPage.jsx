@@ -76,7 +76,16 @@ function buildDiseaseGroups(images, categories) {
 
   (images || []).forEach((img) => {
     const raw = normalizePathology(img.pathology_type);
-    const match = raw ? catalog.find((c) => c.keywords.some((kw) => raw.includes(kw))) : null;
+    // 1) Match exacto contra el key de la categoria (nuevo flujo de import
+    //    con vinculo directo). Evita colisiones como "hepatitis" cayendo en
+    //    "inflamacion" por la keyword substring "itis".
+    // 2) Fallback: substring de keywords (compatibilidad con imagenes
+    //    importadas antes del cambio o con pathology_type escrito a mano).
+    let match = null;
+    if (raw) {
+      match = catalog.find((c) => normalizePathology(c.id) === raw)
+        || catalog.find((c) => c.keywords.some((kw) => raw.includes(kw)));
+    }
     if (match) {
       byId.get(match.id).images.push(img);
       return;
@@ -386,7 +395,13 @@ export function ImagesPage() {
           <div className="images-v2-viewer">
             {selectedImage ? (
               selectedImage.has_dzi
-                ? <OpenSeadragonViewer imageData={selectedImage} initialSession={initialSession} canAnnotate={canUploadImages} />
+                ? <OpenSeadragonViewer
+                    imageData={selectedImage}
+                    initialSession={initialSession}
+                    canAnnotate={true}
+                    canCurateAnnotations={canUploadImages}
+                    currentUserId={user?.id ?? null}
+                  />
                 : <MedicalImageViewer imageData={selectedImage} />
             ) : (
               <div className="images-v2-empty-viewer roi-hist-wrapper" data-testid="histopathology-empty-viewer">
